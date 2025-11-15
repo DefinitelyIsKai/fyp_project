@@ -129,9 +129,15 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               child: ListTile(
                                 leading: CircleAvatar(
-                                  child: Text(result.name[0].toUpperCase()),
+                                  child: Text(
+                                    result.fullName.isNotEmpty 
+                                        ? result.fullName[0].toUpperCase() 
+                                        : result.email.isNotEmpty 
+                                            ? result.email[0].toUpperCase() 
+                                            : '?',
+                                  ),
                                 ),
-                                title: Text(result.name),
+                                title: Text(result.fullName),
                                 subtitle: Text('${result.email} • ${result.role}'),
                               ),
                             );

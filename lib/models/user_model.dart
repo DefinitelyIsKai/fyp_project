@@ -1,10 +1,12 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class UserModel {
   final String id;
 
   // Basic info
   final String email;
   final String fullName;
-  final String phoneNumber;
+  final String? phoneNumber;
   final String location;
   final String role;
 
@@ -24,11 +26,16 @@ class UserModel {
   final Map<String, dynamic>? image;
   final Map<String, dynamic>? resume;
 
+  final int reportCount;
+  final bool isActive;
+  final bool isSuspended;
+  final DateTime createdAt;
+
   UserModel({
     required this.id,
     required this.email,
     required this.fullName,
-    required this.phoneNumber,
+    this.phoneNumber,
     required this.location,
     required this.role,
     required this.profileCompleted,
@@ -37,19 +44,36 @@ class UserModel {
     required this.professionalProfile,
     required this.workExperience,
     required this.seeking,
+    required this.reportCount,
+    required this.isActive,
+    required this.isSuspended,
+    required this.createdAt,
     this.photoUrl,
     this.cvUrl,
     this.image,
     this.resume,
+
   });
 
   // Convert Firestore → Dart model
   factory UserModel.fromJson(Map<String, dynamic> json, String docId) {
+    DateTime parseCreatedAt(dynamic value) {
+      if (value is Timestamp) return value.toDate();
+      if (value is DateTime) return value;
+      if (value is int) {
+        return DateTime.fromMillisecondsSinceEpoch(value);
+      }
+      if (value is String) {
+        return DateTime.tryParse(value) ?? DateTime.now();
+      }
+      return DateTime.now();
+    }
+
     return UserModel(
       id: docId,
       email: json['email'] ?? '',
       fullName: json['fullName'] ?? '',
-      phoneNumber: json['phoneNumber'] ?? '',
+      phoneNumber: json['phoneNumber'] as String?,
       location: json['location'] ?? '',
       role: json['role'] ?? 'employee',
 
@@ -63,6 +87,10 @@ class UserModel {
       professionalProfile: json['professionalProfile'] ?? '',
       workExperience: json['workExperience'] ?? '',
       seeking: json['seeking'] ?? '',
+      reportCount: (json['reportCount'] is num) ? (json['reportCount'] as num).toInt() : 0,
+      isActive: json['isActive'] ?? true,
+      isSuspended: json['isSuspended'] ?? false,
+      createdAt: parseCreatedAt(json['createdAt']),
 
       image: json['image'] as Map<String, dynamic>?,
       resume: json['resume'] as Map<String, dynamic>?,
@@ -77,6 +105,10 @@ class UserModel {
       'phoneNumber': phoneNumber,
       'location': location,
       'role': role,
+      'reportCount': reportCount,
+      'isActive': isActive,
+      'isSuspended': isSuspended,
+      'createdAt': createdAt,
 
       'profileCompleted': profileCompleted,
       'acceptedTerms': acceptedTerms,

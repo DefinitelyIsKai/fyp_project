@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:fyp_project/pages/post_moderation/post_moderation_page.dart';
 import 'package:fyp_project/pages/user_management/user_management_page.dart';
 import 'package:fyp_project/pages/monitoring/monitoring_page.dart';
@@ -6,20 +7,69 @@ import 'package:fyp_project/pages/system_config/system_config_page.dart';
 import 'package:fyp_project/pages/message_oversight/message_oversight_page.dart';
 import 'package:fyp_project/pages/analytics/analytics_page.dart';
 import 'package:fyp_project/services/auth_service.dart';
+import 'package:fyp_project/services/dashboard_service.dart';
 import 'package:fyp_project/routes/app_routes.dart';
-import 'package:provider/provider.dart';
 
-class DashboardPage extends StatelessWidget {
+class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
+
+  @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> {
+  final DashboardService _dashboardService = DashboardService();
+
+  int _pendingPosts = 0;
+  int _activeUsers = 0;
+  int _messages = 0;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDashboardData();
+  }
+
+  Future<void> _loadDashboardData() async {
+    setState(() => _isLoading = true);
+    try {
+      final posts = await _dashboardService.getPendingPostsCount();
+      final users = await _dashboardService.getActiveUsersCount();
+      final messages = await _dashboardService.getMessagesCount();
+
+      setState(() {
+        _pendingPosts = posts;
+        _activeUsers = users;
+        _messages = messages;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error loading dashboard: $e')));
+      }
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('JobSeek Admin Dashboard'),
+        title: const Text('JobSeek Admin Dashboard',
+            style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
+        backgroundColor: Colors.blue[700],
+        elevation: 0,
+        automaticallyImplyLeading: false,
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
+            icon: const Icon(Icons.notifications, color: Colors.white),
+            onPressed: () {},
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () async {
               await Provider.of<AuthService>(context, listen: false).logout();
               if (context.mounted) {
@@ -29,16 +79,96 @@ class DashboardPage extends StatelessWidget {
           ),
         ],
       ),
-      body: GridView.count(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeaderSection(),
+                _buildStatsSection(),
+                Expanded(child: _buildDashboardGrid()),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildHeaderSection() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.blue[700],
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(20),
+          bottomRight: Radius.circular(20),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Welcome back, Admin!',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+          const SizedBox(height: 8),
+          Text('Here\'s what\'s happening today',
+              style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.9))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      child: Row(
+        children: [
+          Expanded(
+            child: _StatCard(
+              title: 'Pending Posts',
+              value: _pendingPosts.toString(),
+              change: '+2 today',
+              color: Colors.orange,
+              icon: Icons.article,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _StatCard(
+              title: 'Active Users',
+              value: _activeUsers.toString(),
+              change: '+5 this week',
+              color: Colors.green,
+              icon: Icons.people,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _StatCard(
+              title: 'Messages',
+              value: _messages.toString(),
+              change: 'Need review',
+              color: Colors.purple,
+              icon: Icons.message,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDashboardGrid() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: GridView.count(
         crossAxisCount: 2,
-        padding: const EdgeInsets.all(16),
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
+        childAspectRatio: 1.2,
         children: [
           _DashboardCard(
             title: 'Post Moderation',
             icon: Icons.article,
-            color: Colors.blue,
+            color: Colors.blue[700]!,
+            subtitle: '$_pendingPosts pending reviews',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const PostModerationPage()),
@@ -46,8 +176,9 @@ class DashboardPage extends StatelessWidget {
           ),
           _DashboardCard(
             title: 'User Management',
-            icon: Icons.people,
-            color: Colors.green,
+            icon: Icons.people_alt,
+            color: Colors.green[700]!,
+            subtitle: '$_activeUsers active users',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const UserManagementPage()),
@@ -56,7 +187,8 @@ class DashboardPage extends StatelessWidget {
           _DashboardCard(
             title: 'Monitoring & Search',
             icon: Icons.search,
-            color: Colors.orange,
+            color: Colors.orange[700]!,
+            subtitle: 'Monitor activities',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const MonitoringPage()),
@@ -65,7 +197,8 @@ class DashboardPage extends StatelessWidget {
           _DashboardCard(
             title: 'System Configuration',
             icon: Icons.settings,
-            color: Colors.purple,
+            color: Colors.purple[700]!,
+            subtitle: 'System settings',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const SystemConfigPage()),
@@ -73,8 +206,9 @@ class DashboardPage extends StatelessWidget {
           ),
           _DashboardCard(
             title: 'Message Oversight',
-            icon: Icons.message,
-            color: Colors.red,
+            icon: Icons.chat_bubble,
+            color: Colors.red[700]!,
+            subtitle: '$_messages messages',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const MessageOversightPage()),
@@ -83,7 +217,8 @@ class DashboardPage extends StatelessWidget {
           _DashboardCard(
             title: 'Analytics & Reporting',
             icon: Icons.analytics,
-            color: Colors.teal,
+            color: Colors.teal[700]!,
+            subtitle: 'View reports',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const AnalyticsPage()),
@@ -97,12 +232,14 @@ class DashboardPage extends StatelessWidget {
 
 class _DashboardCard extends StatelessWidget {
   final String title;
+  final String subtitle;
   final IconData icon;
   final Color color;
   final VoidCallback onTap;
 
   const _DashboardCard({
     required this.title,
+    required this.subtitle,
     required this.icon,
     required this.color,
     required this.onTap,
@@ -111,23 +248,83 @@ class _DashboardCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: 4,
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: onTap,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 64, color: color),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-          ],
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: 28, color: color),
+              ),
+              const SizedBox(height: 12),
+              Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
+class _StatCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final String change;
+  final Color color;
+  final IconData icon;
+
+  const _StatCard({
+    required this.title,
+    required this.value,
+    required this.change,
+    required this.color,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(icon, size: 20, color: color),
+                ),
+                Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(title, style: TextStyle(fontSize: 14, color: Colors.grey[600], fontWeight: FontWeight.w500)),
+            const SizedBox(height: 4),
+            Text(change, style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+          ],
+        ),
+      ),
+    );
+  }
+}

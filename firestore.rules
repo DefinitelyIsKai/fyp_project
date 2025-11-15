@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if authenticated user has HR or manager role stored in admins collection
+    // This requires Firebase Authentication and an admins collection in Firestore
+    function hasHRorManagerRole() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+             (get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'HR' ||
+              get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'manager');
+    }
+    
+    // Users collection - Only HR and Manager roles can access
+    match /users/{userId} {
+      // Allow read and write only if user has HR or manager role
+      allow read, write: if hasHRorManagerRole();
+    }
+    
+    // Allow HR and Manager to list all users (for queries)
+    match /users/{document=**} {
+      allow read: if hasHRorManagerRole();
+    }
+    
+    // Admins collection - Allow admins to read their own data
+    match /admins/{adminId} {
+      allow read: if isAuthenticated() && request.auth.uid == adminId;
+      // Only allow writes by authenticated users (you may want to restrict this further)
+      allow write: if isAuthenticated();
+    }
+    
+    // Default: Deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
