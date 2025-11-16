@@ -45,7 +45,7 @@ class UserService {
   }
 
   Future<List<UserModel>> getSuspendedUsers() async {
-    final snapshot = await _usersRef.where('status', isEqualTo: 'Suspend').get();
+    final snapshot = await _usersRef.where('status', isEqualTo: 'Suspended').get();
     final users = _mapUsers(snapshot);
     users.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return users;
@@ -61,7 +61,7 @@ class UserService {
   Future<void> suspendUser(String userId) async {
     try {
       await _usersRef.doc(userId).update({
-        'status': 'Suspend',
+        'status': 'Suspended',
       });
     } catch (e) {
       throw Exception('Failed to suspend user: $e');

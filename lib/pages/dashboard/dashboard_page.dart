@@ -125,7 +125,6 @@ class _DashboardPageState extends State<DashboardPage> {
             child: _StatCard(
               title: 'Pending Posts',
               value: _pendingPosts.toString(),
-              change: '+2 today',
               color: Colors.orange,
               icon: Icons.article,
             ),
@@ -135,7 +134,6 @@ class _DashboardPageState extends State<DashboardPage> {
             child: _StatCard(
               title: 'Active Users',
               value: _activeUsers.toString(),
-              change: '+5 this week',
               color: Colors.green,
               icon: Icons.people,
             ),
@@ -145,7 +143,6 @@ class _DashboardPageState extends State<DashboardPage> {
             child: _StatCard(
               title: 'Messages',
               value: _messages.toString(),
-              change: 'Need review',
               color: Colors.purple,
               icon: Icons.message,
             ),
@@ -282,14 +279,12 @@ class _DashboardCard extends StatelessWidget {
 class _StatCard extends StatelessWidget {
   final String title;
   final String value;
-  final String change;
   final Color color;
   final IconData icon;
 
   const _StatCard({
     required this.title,
     required this.value,
-    required this.change,
     required this.color,
     required this.icon,
   });
@@ -320,8 +315,6 @@ class _StatCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(title, style: TextStyle(fontSize: 14, color: Colors.grey[600], fontWeight: FontWeight.w500)),
-            const SizedBox(height: 4),
-            Text(change, style: TextStyle(fontSize: 12, color: Colors.grey[500])),
           ],
         ),
       ),

@@ -12,77 +12,52 @@ class ApproveRejectPostsPage extends StatefulWidget {
 
 class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   final PostService _postService = PostService();
+  final TextEditingController _searchController = TextEditingController();
+  bool _isStatsExpanded = true;
+  final PageController _tabPageController = PageController();
+  int _currentTabIndex = 0;
+
+  // Store posts data
+  List<JobPostModel> _allPosts = [];
   List<JobPostModel> _pendingPosts = [];
   List<JobPostModel> _approvedPosts = [];
   List<JobPostModel> _rejectedPosts = [];
-  List<JobPostModel> _filteredPosts = [];
   bool _isLoading = true;
-  int _selectedTab = 0;
-  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _loadPosts();
-    _searchController.addListener(_filterPosts);
+    _searchController.addListener(() {
+      setState(() {}); // Trigger rebuild for search
+    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _tabPageController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadPosts() async {
-    setState(() => _isLoading = true);
-    try {
-      final pending = await _postService.getPendingPosts();
-      final approved = await _postService.getApprovedPosts();
-      final rejected = await _postService.getRejectedPosts();
-      setState(() {
-        _pendingPosts = pending;
-        _approvedPosts = approved;
-        _rejectedPosts = rejected;
-        _filteredPosts = pending;
-      });
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-      );
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  void _filterPosts() {
-    List<JobPostModel> currentList;
-    switch (_selectedTab) {
-      case 0:
-        currentList = _pendingPosts;
-        break;
-      case 1:
-        currentList = _approvedPosts;
-        break;
-      case 2:
-        currentList = _rejectedPosts;
-        break;
-      default:
-        currentList = _pendingPosts;
-    }
-
-    final query = _searchController.text.toLowerCase();
-    setState(() {
-      _filteredPosts = currentList.where((post) {
-        return query.isEmpty ||
-            post.title.toLowerCase().contains(query) ||
-            post.description.toLowerCase().contains(query);
-      }).toList();
-    });
-  }
-
   void _switchTab(int index) {
-    setState(() => _selectedTab = index);
-    _filterPosts();
+    setState(() => _currentTabIndex = index);
+    if (_tabPageController.hasClients) {
+      _tabPageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  void _onPageChanged(int index) {
+    setState(() => _currentTabIndex = index);
+  }
+
+  void _toggleStatsExpansion() {
+    setState(() {
+      _isStatsExpanded = !_isStatsExpanded;
+    });
   }
 
   Future<void> _approvePost(JobPostModel post) async {
@@ -91,7 +66,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Post approved'), backgroundColor: Colors.green),
       );
-      _loadPosts();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
@@ -106,10 +80,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
         title: const Text('Reject Post'),
         content: const Text('Are you sure you want to reject this post?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(context, 'Rejected by admin'),
             child: const Text('Reject', style: TextStyle(color: Colors.red)),
@@ -124,7 +95,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Post rejected'), backgroundColor: Colors.orange),
         );
-        _loadPosts();
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
@@ -133,64 +103,120 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
     }
   }
 
-  Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return Colors.orange;
-      case 'approved':
-        return Colors.green;
-      case 'rejected':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
+  void _viewPost(JobPostModel post) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => PostDetailPage(post: post)),
+    );
+  }
+
+  List<JobPostModel> _filterPosts(List<JobPostModel> posts) {
+    final query = _searchController.text.toLowerCase();
+    if (query.isEmpty) return posts;
+    
+    return posts.where((post) =>
+      post.title.toLowerCase().contains(query) ||
+      post.description.toLowerCase().contains(query)
+    ).toList();
+  }
+
+  void _handlePostsUpdate(List<JobPostModel> posts) {
+    // Use WidgetsBinding to schedule the state update after the build phase
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      setState(() {
+        _allPosts = posts;
+        _pendingPosts = _allPosts.where((p) => p.status == 'pending').toList();
+        _approvedPosts = _allPosts.where((p) => p.status == 'approved').toList();
+        _rejectedPosts = _allPosts.where((p) => p.status == 'rejected').toList();
+        _isLoading = false;
+      });
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Post Moderation'),
+        title: const Text(
+          'Post Moderation',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
         backgroundColor: Colors.blue[700],
+        elevation: 0,
       ),
       body: Column(
         children: [
-          // Search Bar
-          Padding(
-            padding: const EdgeInsets.all(16),
+          // Search bar
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search job posts...',
-                prefixIcon: const Icon(Icons.search),
+                hintText: 'Search job posts by title or description...',
+                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                filled: true,
+                fillColor: Colors.grey[50],
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
                 ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               ),
             ),
           ),
 
-          // Stats Cards
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
+          // Stats Section with Expand/Collapse
+          Container(
+            color: Colors.grey[50],
+            child: Column(
               children: [
-                _StatCard(
-                  count: _pendingPosts.length,
-                  label: 'Pending',
-                  color: Colors.orange,
+                // Expand/Collapse Header
+                GestureDetector(
+                  onTap: _toggleStatsExpansion,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Post Statistics',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        Icon(
+                          _isStatsExpanded ? Icons.expand_less : Icons.expand_more,
+                          color: Colors.grey[500],
+                          size: 20,
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-                const SizedBox(width: 8),
-                _StatCard(
-                  count: _approvedPosts.length,
-                  label: 'Approved',
-                  color: Colors.green,
-                ),
-                const SizedBox(width: 8),
-                _StatCard(
-                  count: _rejectedPosts.length,
-                  label: 'Rejected',
-                  color: Colors.red,
+                
+                // Stats Cards
+                AnimatedCrossFade(
+                  duration: const Duration(milliseconds: 300),
+                  crossFadeState: _isStatsExpanded 
+                      ? CrossFadeState.showFirst 
+                      : CrossFadeState.showSecond,
+                  firstChild: _buildStatsSection(),
+                  secondChild: const SizedBox.shrink(),
                 ),
               ],
             ),
@@ -198,28 +224,29 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
 
           // Tabs
           Container(
-            margin: const EdgeInsets.all(16),
+            margin: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(12),
+              color: Colors.grey[50],
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey[200]!),
             ),
             child: Row(
               children: [
                 _TabButton(
                   label: 'Pending',
-                  isSelected: _selectedTab == 0,
+                  isSelected: _currentTabIndex == 0,
                   count: _pendingPosts.length,
                   onTap: () => _switchTab(0),
                 ),
                 _TabButton(
                   label: 'Approved',
-                  isSelected: _selectedTab == 1,
+                  isSelected: _currentTabIndex == 1,
                   count: _approvedPosts.length,
                   onTap: () => _switchTab(1),
                 ),
                 _TabButton(
                   label: 'Rejected',
-                  isSelected: _selectedTab == 2,
+                  isSelected: _currentTabIndex == 2,
                   count: _rejectedPosts.length,
                   onTap: () => _switchTab(2),
                 ),
@@ -227,39 +254,135 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
             ),
           ),
 
-          // Posts List
+          // Swipe indicator
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.swipe, size: 16, color: Colors.grey[500]),
+                const SizedBox(width: 8),
+                Text(
+                  'Swipe to switch between tabs',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Stream posts and swipable content area
           Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _filteredPosts.isEmpty
-                    ? const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.article, size: 64, color: Colors.grey),
-                            SizedBox(height: 16),
-                            Text('No posts found', style: TextStyle(color: Colors.grey)),
-                          ],
+            child: StreamBuilder<List<JobPostModel>>(
+              stream: _postService.streamAllPosts(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting && _isLoading) {
+                  return const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
+                        Text(
+                          'Loading posts...',
+                          style: TextStyle(color: Colors.grey),
                         ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: _filteredPosts.length,
-                        itemBuilder: (context, index) {
-                          return _PostCard(
-                            post: _filteredPosts[index],
-                            showActions: _selectedTab == 0,
-                            onApprove: _approvePost,
-                            onReject: _rejectPost,
-                            onView: (post) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => PostDetailPage(post: post)),
-                              );
-                            },
-                          );
-                        },
-                      ),
+                      ],
+                    ),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Error loading posts',
+                          style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                // Handle data when it arrives
+                if (snapshot.hasData) {
+                  final posts = snapshot.data!;
+                  _handlePostsUpdate(posts);
+                }
+
+                return PageView(
+                  controller: _tabPageController,
+                  onPageChanged: _onPageChanged,
+                  children: [
+                    // Pending Tab
+                    _PostsList(
+                      posts: _filterPosts(_pendingPosts),
+                      status: 'pending',
+                      onApprove: _approvePost,
+                      onReject: _rejectPost,
+                      onView: _viewPost,
+                    ),
+                    // Approved Tab
+                    _PostsList(
+                      posts: _filterPosts(_approvedPosts),
+                      status: 'approved',
+                      onApprove: _approvePost,
+                      onReject: _rejectPost,
+                      onView: _viewPost,
+                    ),
+                    // Rejected Tab
+                    _PostsList(
+                      posts: _filterPosts(_rejectedPosts),
+                      status: 'rejected',
+                      onApprove: _approvePost,
+                      onReject: _rejectPost,
+                      onView: _viewPost,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsSection() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      child: Row(
+        children: [
+          Expanded(
+            child: _StatCard(
+              count: _pendingPosts.length,
+              label: 'Pending Review',
+              color: Colors.orange,
+              icon: Icons.pending_actions,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _StatCard(
+              count: _approvedPosts.length,
+              label: 'Approved',
+              color: Colors.green,
+              icon: Icons.check_circle,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _StatCard(
+              count: _rejectedPosts.length,
+              label: 'Rejected',
+              color: Colors.red,
+              icon: Icons.cancel,
+            ),
           ),
         ],
       ),
@@ -267,42 +390,176 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   }
 }
 
+// Posts List for each tab
+class _PostsList extends StatelessWidget {
+  final List<JobPostModel> posts;
+  final String status;
+  final Function(JobPostModel) onApprove;
+  final Function(JobPostModel) onReject;
+  final Function(JobPostModel) onView;
+
+  const _PostsList({
+    required this.posts,
+    required this.status,
+    required this.onApprove,
+    required this.onReject,
+    required this.onView,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Results count
+        if (posts.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Row(
+              children: [
+                Text(
+                  '${posts.length} post${posts.length == 1 ? '' : 's'} found',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        
+        // Posts list or empty state
+        Expanded(
+          child: posts.isNotEmpty
+              ? ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  itemCount: posts.length,
+                  itemBuilder: (context, index) {
+                    final post = posts[index];
+                    return _PostCard(
+                      post: post,
+                      onApprove: onApprove,
+                      onReject: onReject,
+                      onView: onView,
+                    );
+                  },
+                )
+              : _buildEmptyState(status),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(String status) {
+    final emptyMessages = {
+      'pending': 'No pending posts to review',
+      'approved': 'No approved posts yet',
+      'rejected': 'No rejected posts'
+    };
+    final emptyIcons = {
+      'pending': Icons.pending_actions,
+      'approved': Icons.check_circle,
+      'rejected': Icons.cancel
+    };
+
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            emptyIcons[status] ?? Icons.article,
+            size: 80,
+            color: Colors.grey[300],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            emptyMessages[status] ?? 'No posts found',
+            style: TextStyle(
+              fontSize: 18,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Posts will appear here once available',
+            style: TextStyle(
+              color: Colors.grey[500],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------- Widgets ----------------
+
 class _StatCard extends StatelessWidget {
   final int count;
   final String label;
   final Color color;
+  final IconData icon;
 
   const _StatCard({
     required this.count,
     required this.label,
     required this.color,
+    required this.icon,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Card(
-        elevation: 2,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
+    return Container(
+      height: 80, // Fixed height for same size
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
             children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: 18, color: color),
+              ),
+              const Spacer(),
               Text(
                 count.toString(),
                 style: TextStyle(
-                  fontSize: 24,
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
                   color: color,
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
             ],
           ),
-        ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
@@ -321,38 +578,52 @@ class _TabButton extends StatelessWidget {
     required this.onTap,
   });
 
+  Color getTabColor() {
+    switch (label) {
+      case 'Pending':
+        return Colors.orange;
+      case 'Approved':
+        return Colors.green;
+      case 'Rejected':
+        return Colors.red;
+      default:
+        return Colors.blue;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Expanded(
       child: Material(
-        color: isSelected ? Colors.blue[700] : Colors.transparent,
+        color: isSelected ? getTabColor() : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 16),
             child: Column(
               children: [
                 Text(
                   label,
                   style: TextStyle(
                     color: isSelected ? Colors.white : Colors.grey[600],
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: isSelected ? Colors.white : Colors.grey[300],
-                    borderRadius: BorderRadius.circular(10),
+                    color: isSelected ? Colors.white : Colors.grey[200],
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     count.toString(),
                     style: TextStyle(
-                      color: isSelected ? Colors.blue[700]! : Colors.grey[700],
-                      fontSize: 10,
+                      color: isSelected ? getTabColor() : Colors.grey[700],
+                      fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -368,126 +639,202 @@ class _TabButton extends StatelessWidget {
 
 class _PostCard extends StatelessWidget {
   final JobPostModel post;
-  final bool showActions;
   final Function(JobPostModel) onApprove;
   final Function(JobPostModel) onReject;
   final Function(JobPostModel) onView;
 
   const _PostCard({
     required this.post,
-    required this.showActions,
     required this.onApprove,
     required this.onReject,
     required this.onView,
   });
 
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'pending':
+        return Colors.orange;
+      case 'approved':
+        return Colors.green;
+      case 'rejected':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _getStatusText(String status) {
+    switch (status) {
+      case 'pending':
+        return 'Pending Review';
+      case 'approved':
+        return 'Approved';
+      case 'rejected':
+        return 'Rejected';
+      default:
+        return status;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
+    List<Widget> actionButtons = [];
+
+    if (post.status == 'pending') {
+      actionButtons = [
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: () => onApprove(post),
+            icon: const Icon(Icons.check, size: 18),
+            label: const Text('Approve'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: () => onReject(post),
+            icon: const Icon(Icons.close, size: 18),
+            label: const Text('Reject'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ),
+      ];
+    } else if (post.status == 'approved') {
+      actionButtons = [
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: () => onReject(post),
+            icon: const Icon(Icons.close, size: 18),
+            label: const Text('Reject'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        const Expanded(child: SizedBox()), // Spacer for alignment
+      ];
+    } else {
+      actionButtons = [
+        const Expanded(child: SizedBox()),
+        const SizedBox(width: 8),
+        const Expanded(child: SizedBox()),
+      ];
+    }
+
+    // Always add view button
+    actionButtons.add(const SizedBox(width: 8));
+    actionButtons.add(
+      Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: Colors.grey[100],
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: IconButton(
+          onPressed: () => onView(post),
+          icon: Icon(Icons.visibility, color: Colors.grey[600]),
+        ),
+      ),
+    );
+
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header with status
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    post.title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.orange[50],
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    post.status.toString().split('.').last.toUpperCase(),
-                    style: TextStyle(
-                      color: Colors.orange[800],
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Category & Location
-            Text(
-              '${post.category} • ${post.location}',
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 12),
-
-            // Author & Date
-            Row(
-              children: [
-                const Icon(Icons.person, size: 16, color: Colors.grey),
-                const SizedBox(width: 4),
-                Text(
-                  post.submitterName ?? 'Unknown',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                const Spacer(),
-                const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
-                const SizedBox(width: 4),
-                Text(
-                  '${post.postedAt.day}/${post.postedAt.month}/${post.postedAt.year}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Actions
-            if (showActions)
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header with status
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => onApprove(post),
-                      icon: const Icon(Icons.check, size: 18),
-                      label: const Text('Approve'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          post.title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${post.category} • ${post.location}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => onReject(post),
-                      icon: const Icon(Icons.close, size: 18),
-                      label: const Text('Reject'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                      ),
+                  const SizedBox(width: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _getStatusColor(post.status).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: _getStatusColor(post.status).withOpacity(0.3)),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    onPressed: () => onView(post),
-                    icon: const Icon(Icons.visibility),
-                    style: IconButton.styleFrom(
-                      backgroundColor: Colors.grey[200],
+                    child: Text(
+                      _getStatusText(post.status),
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: _getStatusColor(post.status),
+                      ),
                     ),
                   ),
                 ],
               ),
-          ],
+              const SizedBox(height: 16),
+              // Author and date
+              Row(
+                children: [
+                  Icon(Icons.person_outline, size: 16, color: Colors.grey[500]),
+                  const SizedBox(width: 6),
+                  Text(
+                    post.submitterName ?? 'Unknown',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                  const Spacer(),
+                  Icon(Icons.calendar_today, size: 14, color: Colors.grey[500]),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${post.createdAt.day}/${post.createdAt.month}/${post.createdAt.year}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // Action buttons
+              Row(children: actionButtons),
+            ],
+          ),
         ),
       ),
     );

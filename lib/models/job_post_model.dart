@@ -1,105 +1,67 @@
-enum JobPostStatus {
-  pending,
-  approved,
-  rejected,
-  flagged,
-  expired,
-}
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class JobPostModel {
   final String id;
-  final String employerId;
   final String title;
   final String description;
+  final String status;
   final String category;
-  final List<String> tags;
   final String location;
-  final double? salary;
-  final String salaryType; // 'hourly', 'daily', 'weekly', 'monthly'
-  final DateTime postedAt;
-  final DateTime? expiresAt;
-  final JobPostStatus status;
-  final String? rejectionReason;
-  final int applicationCount;
-  final int viewCount;
-  final int flagCount;
+  final String industry;
+  final String jobType;
+  final double? budgetMin;
+  final double? budgetMax;
+  final DateTime createdAt;
   final String? submitterName;
-  final String? submitterId;
-  final Map<String, dynamic>? additionalInfo;
+  final List<String> tags;
+  final List<String> requiredSkills;
+  final String? rejectionReason;
 
   JobPostModel({
     required this.id,
-    required this.employerId,
     required this.title,
     required this.description,
-    required this.category,
-    required this.tags,
-    required this.location,
-    this.salary,
-    required this.salaryType,
-    required this.postedAt,
-    this.expiresAt,
     required this.status,
-    this.rejectionReason,
-    this.applicationCount = 0,
-    this.viewCount = 0,
-    this.flagCount = 0,
+    required this.category,
+    required this.location,
+    required this.industry,
+    required this.jobType,
+    this.budgetMin,
+    this.budgetMax,
+    required this.createdAt,
     this.submitterName,
-    this.submitterId,
-    this.additionalInfo,
+    required this.tags,
+    required this.requiredSkills,
+    this.rejectionReason,
   });
 
-  factory JobPostModel.fromJson(Map<String, dynamic> json) {
+  factory JobPostModel.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
     return JobPostModel(
-      id: json['id'] as String,
-      employerId: json['employerId'] as String,
-      title: json['title'] as String,
-      description: json['description'] as String,
-      category: json['category'] as String,
-      tags: List<String>.from(json['tags'] as List),
-      location: json['location'] as String,
-      salary: json['salary'] as double?,
-      salaryType: json['salaryType'] as String,
-      postedAt: DateTime.parse(json['postedAt'] as String),
-      expiresAt: json['expiresAt'] != null
-          ? DateTime.parse(json['expiresAt'] as String)
+      id: doc.id,
+      title: data['title'] ?? '',
+      description: data['description'] ?? '',
+      status: data['status'] ?? 'pending',
+      category: data['category'] ?? '',
+      location: data['location'] ?? '',
+      industry: data['industry'] ?? '',
+      jobType: data['jobType'] ?? '',
+      budgetMin: data['budgetMin'] != null
+          ? (data['budgetMin'] as num).toDouble()
           : null,
-      status: JobPostStatus.values.firstWhere(
-        (e) => e.toString().split('.').last == json['status'],
-        orElse: () => JobPostStatus.pending,
-      ),
-      rejectionReason: json['rejectionReason'] as String?,
-      applicationCount: json['applicationCount'] as int? ?? 0,
-      viewCount: json['viewCount'] as int? ?? 0,
-      flagCount: json['flagCount'] as int? ?? 0,
-      submitterName: json['submitterName'] as String?,
-      submitterId: json['submitterId'] as String?,
-      additionalInfo: json['additionalInfo'] as Map<String, dynamic>?,
+      budgetMax: data['budgetMax'] != null
+          ? (data['budgetMax'] as num).toDouble()
+          : null,
+      createdAt: (data['createdAt'] as Timestamp).toDate(),
+
+      /// 🔥 Correct field (Firestore uses ownerId)
+      submitterName: data['ownerId'],
+
+      tags: List<String>.from(data['tags'] ?? []),
+      requiredSkills: List<String>.from(data['requiredSkills'] ?? []),
+
+      /// 🔥 Show rejection reason (can be null)
+      rejectionReason: data['rejectionReason'],
     );
   }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'employerId': employerId,
-      'title': title,
-      'description': description,
-      'category': category,
-      'tags': tags,
-      'location': location,
-      'salary': salary,
-      'salaryType': salaryType,
-      'postedAt': postedAt.toIso8601String(),
-      'expiresAt': expiresAt?.toIso8601String(),
-      'status': status.toString().split('.').last,
-      'rejectionReason': rejectionReason,
-      'applicationCount': applicationCount,
-      'viewCount': viewCount,
-      'flagCount': flagCount,
-      'submitterName': submitterName,
-      'submitterId': submitterId,
-      'additionalInfo': additionalInfo,
-    };
-  }
 }
-

@@ -1,92 +1,65 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/models/job_post_model.dart';
 
 class PostService {
-  Future<List<JobPostModel>> getPendingPosts() async {
-    // TODO: Implement actual API call
-    await Future.delayed(const Duration(seconds: 1));
-    
-    // Mock data
-    return [
-      JobPostModel(
-        id: '1',
-        employerId: 'emp1',
-        title: 'Senior React Developer',
-        description: 'Looking for an experienced React developer...',
-        category: 'Technology',
-        tags: ['react', 'javascript', 'frontend'],
-        location: 'San Francisco',
-        salary: 120000.0,
-        salaryType: 'monthly',
-        postedAt: DateTime.now().subtract(const Duration(days: 2)),
-        status: JobPostStatus.pending,
-        applicationCount: 5,
-        viewCount: 20,
-        submitterName: 'John Smith',
-        submitterId: 'user1',
-      ),
-      JobPostModel(
-        id: '2',
-        employerId: 'emp2',
-        title: 'Marketing Manager',
-        description: 'Seeking a creative marketing manager...',
-        category: 'Marketing',
-        tags: ['marketing', 'management'],
-        location: 'New York',
-        salary: 80000.0,
-        salaryType: 'monthly',
-        postedAt: DateTime.now().subtract(const Duration(days: 1)),
-        status: JobPostStatus.pending,
-        applicationCount: 3,
-        viewCount: 15,
-        submitterName: 'Sarah Johnson',
-        submitterId: 'user2',
-      ),
-      JobPostModel(
-        id: '3',
-        employerId: 'emp3',
-        title: 'Data Scientist',
-        description: 'Join our data science team...',
-        category: 'Technology',
-        tags: ['data', 'python', 'ml'],
-        location: 'Seattle',
-        salary: 130000.0,
-        salaryType: 'monthly',
-        postedAt: DateTime.now().subtract(const Duration(days: 3)),
-        status: JobPostStatus.pending,
-        applicationCount: 8,
-        viewCount: 30,
-        submitterName: 'Mike Chen',
-        submitterId: 'user3',
-      ),
-    ];
+  final CollectionReference _postsCollection =
+      FirebaseFirestore.instance.collection('posts');
+
+  /// Stream all posts in real-time
+  Stream<List<JobPostModel>> streamAllPosts() {
+    return _postsCollection.snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        return JobPostModel.fromFirestore(doc);
+      }).toList();
+    });
   }
 
-  Future<List<JobPostModel>> getApprovedPosts() async {
-    // TODO: Implement actual API call
-    await Future.delayed(const Duration(seconds: 1));
-    return [];
+  /// Stream posts filtered by status: 'pending', 'approved', 'rejected'
+  Stream<List<JobPostModel>> streamPostsByStatus(String status) {
+    return _postsCollection
+        .where('status', isEqualTo: status)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) => JobPostModel.fromFirestore(doc)).toList();
+    });
   }
 
-  Future<List<JobPostModel>> getRejectedPosts() async {
-    // TODO: Implement actual API call
-    await Future.delayed(const Duration(seconds: 1));
-    return [];
-  }
-
-  Future<List<JobPostModel>> searchPosts(String query) async {
-    // TODO: Implement actual API call
-    await Future.delayed(const Duration(seconds: 1));
-    return [];
-  }
-
+  /// Approve a post
   Future<void> approvePost(String postId) async {
-    // TODO: Implement actual API call
-    await Future.delayed(const Duration(seconds: 1));
+    await _postsCollection.doc(postId).update({'status': 'approved'});
   }
 
+  /// Reject a post with reason
   Future<void> rejectPost(String postId, String reason) async {
-    // TODO: Implement actual API call
-    await Future.delayed(const Duration(seconds: 1));
+    await _postsCollection.doc(postId).update({
+      'status': 'rejected',
+      'rejectionReason': reason,
+    });
+  }
+
+  /// Optional: search posts by title or description
+  Future<List<JobPostModel>> searchPosts(String query) async {
+    final snapshot = await _postsCollection
+        .where('title', isGreaterThanOrEqualTo: query)
+        .where('title', isLessThanOrEqualTo: query + '\uf8ff')
+        .get();
+
+    return snapshot.docs.map((doc) => JobPostModel.fromFirestore(doc)).toList();
+  }
+
+  /// Update status dynamically (approved, rejected, pending)
+  Future<void> updateStatus(String postId, String status, {String? reason}) async {
+    final validStatuses = ['pending', 'approved', 'rejected'];
+    if (!validStatuses.contains(status)) {
+      throw Exception('Invalid status: $status');
+    }
+
+    final data = <String, dynamic>{'status': status};
+
+    if (status == 'rejected' && reason != null) {
+      data['rejectionReason'] = reason;
+    }
+
+    await _postsCollection.doc(postId).update(data);
   }
 }
-

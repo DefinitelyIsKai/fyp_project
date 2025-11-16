@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/pages/user_management/view_users_page.dart';
 import 'package:fyp_project/pages/user_management/user_actions_page.dart';
 
@@ -23,21 +24,17 @@ class UserManagementPage extends StatelessWidget {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header Section
           _buildHeaderSection(),
-          
-          // Quick Stats
           _buildStatsSection(),
-          
-          // Management Options
-          Expanded(
-            child: _buildOptionsGrid(context),
-          ),
+          Expanded(child: _buildOptionsGrid(context)),
         ],
       ),
     );
   }
 
+  // -------------------------------------------------------
+  // Header
+  // -------------------------------------------------------
   Widget _buildHeaderSection() {
     return Container(
       width: double.infinity,
@@ -52,7 +49,7 @@ class UserManagementPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          const Text(
             'User Management',
             style: TextStyle(
               fontSize: 28,
@@ -73,35 +70,74 @@ class UserManagementPage extends StatelessWidget {
     );
   }
 
+  // -------------------------------------------------------
+  // REAL-TIME STATS
+  // -------------------------------------------------------
   Widget _buildStatsSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       child: Row(
         children: [
+          // Total Users
           Expanded(
-            child: _StatCard(
-              title: 'Total Users',
-              value: '1,247',
-              icon: Icons.people_outline,
-              color: Colors.blue,
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .snapshots(),
+              builder: (context, snapshot) {
+                int count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+                return _StatCard(
+                  title: 'Total Users',
+                  value: count.toString(),
+                  icon: Icons.people_outline,
+                  color: Colors.blue,
+                );
+              },
             ),
           ),
+
           const SizedBox(width: 12),
+
+          // Active Today
           Expanded(
-            child: _StatCard(
-              title: 'Active Today',
-              value: '89',
-              icon: Icons.online_prediction,
-              color: Colors.green,
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .where(
+                    'status',
+                    isEqualTo: 'Active',
+                  )
+                  .snapshots(),
+              builder: (context, snapshot) {
+                int count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+                return _StatCard(
+                  title: 'Active Today',
+                  value: count.toString(),
+                  icon: Icons.online_prediction,
+                  color: Colors.green,
+                );
+              },
             ),
           ),
+
           const SizedBox(width: 12),
+
+          // Suspended
           Expanded(
-            child: _StatCard(
-              title: 'Suspended',
-              value: '12',
-              icon: Icons.block,
-              color: Colors.orange,
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .where('status', isEqualTo: 'Suspended')
+                  .snapshots(),
+              builder: (context, snapshot) {
+                int count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+                return _StatCard(
+                  title: 'Suspended',
+                  value: count.toString(),
+                  icon: Icons.block,
+                  color: Colors.orange,
+                );
+              },
             ),
           ),
         ],
@@ -109,6 +145,9 @@ class UserManagementPage extends StatelessWidget {
     );
   }
 
+  // -------------------------------------------------------
+  // Grid options
+  // -------------------------------------------------------
   Widget _buildOptionsGrid(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -122,48 +161,44 @@ class UserManagementPage extends StatelessWidget {
         children: [
           _ManagementCard(
             title: 'View User Profiles',
-            description: 'Access account information for job seekers and employers',
+            description: 'Access account information',
             icon: Icons.people_alt,
             iconColor: Colors.blue[700]!,
             backgroundColor: Colors.blue[50]!,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ViewUsersPage()),
-            ),
-            stats: '1,247 users',
+            onTap: () {
+              Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const ViewUsersPage()));
+            },
+            stats: 'View all',
           ),
           _ManagementCard(
             title: 'Account Actions',
-            description: 'Suspend, delete, or modify user accounts and permissions',
+            description: 'Suspend, delete, modify accounts',
             icon: Icons.admin_panel_settings,
             iconColor: Colors.red[700]!,
             backgroundColor: Colors.red[50]!,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const UserActionsPage()),
-            ),
-            stats: '12 suspended',
+            onTap: () {
+              Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const UserActionsPage()));
+            },
+            stats: 'Manage',
           ),
           _ManagementCard(
             title: 'User Analytics',
-            description: 'View user growth, activity trends, and engagement metrics',
+            description: 'Growth & engagement stats',
             icon: Icons.analytics,
             iconColor: Colors.purple[700]!,
             backgroundColor: Colors.purple[50]!,
-            onTap: () {
-              // Navigate to analytics page
-            },
-            stats: '89% active',
+            onTap: () {},
+            stats: 'Analytics',
           ),
           _ManagementCard(
             title: 'Bulk Operations',
-            description: 'Perform batch actions and manage multiple users at once',
+            description: 'Batch update multiple users',
             icon: Icons.playlist_add_check,
             iconColor: Colors.green[700]!,
             backgroundColor: Colors.green[50]!,
-            onTap: () {
-              // Navigate to bulk operations page
-            },
+            onTap: () {},
             stats: 'Tools',
           ),
         ],
@@ -172,6 +207,9 @@ class UserManagementPage extends StatelessWidget {
   }
 }
 
+// -------------------------------------------------------
+// Reusable Management Card
+// -------------------------------------------------------
 class _ManagementCard extends StatelessWidget {
   final String title;
   final String description;
@@ -195,9 +233,7 @@ class _ManagementCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
@@ -206,74 +242,37 @@ class _ManagementCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Icon Container
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: backgroundColor,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  icon,
-                  size: 28,
-                  color: iconColor,
-                ),
+                child: Icon(icon, size: 28, color: iconColor),
               ),
-              
               const SizedBox(height: 16),
-              
-              // Title
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  height: 1.3,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              
+              Text(title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
-              
-              // Description
               Text(
                 description,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                  height: 1.4,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 maxLines: 3,
-                overflow: TextOverflow.ellipsis,
               ),
-              
               const Spacer(),
-              
-              // Footer with stats and arrow
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    stats,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey[700],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.arrow_forward_ios,
-                      size: 14,
-                      color: Colors.grey[600],
-                    ),
-                  ),
+                  Text(stats,
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500)),
+                  Icon(Icons.arrow_forward_ios,
+                      size: 14, color: Colors.grey[600]),
                 ],
               ),
             ],
@@ -284,6 +283,9 @@ class _ManagementCard extends StatelessWidget {
   }
 }
 
+// -------------------------------------------------------
+// Reusable Stat Card (Top Dashboard Stats)
+// -------------------------------------------------------
 class _StatCard extends StatelessWidget {
   final String title;
   final String value;
@@ -301,9 +303,7 @@ class _StatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -318,19 +318,14 @@ class _StatCard extends StatelessWidget {
                     color: color.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(
-                    icon,
-                    size: 20,
-                    color: color,
-                  ),
+                  child: Icon(icon, size: 20, color: color),
                 ),
                 Text(
                   value,
                   style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87),
                 ),
               ],
             ),
@@ -338,10 +333,9 @@ class _StatCard extends StatelessWidget {
             Text(
               title,
               style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
-              ),
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500),
             ),
           ],
         ),
