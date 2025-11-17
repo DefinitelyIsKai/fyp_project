@@ -18,6 +18,15 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   String _selectedRole = 'all';
   final TextEditingController _searchController = TextEditingController();
 
+  // Role hierarchy for filtering
+  final Map<String, List<String>> _roleGroups = {
+    'staff': ['staff'], 
+    'HR': ['HR'],
+    'manager': ['manager'],
+    'job_seeker': ['job_seeker'],
+    'employer': ['employer'],
+  };
+
   @override
   void initState() {
     super.initState();
@@ -59,7 +68,13 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
       _filteredUsers = _users.where((user) {
         final matchesSearch = user.fullName.toLowerCase().contains(query) ||
             user.email.toLowerCase().contains(query);
-        final matchesRole = _selectedRole == 'all' || user.role == _selectedRole;
+
+        // Role filtering with hierarchy
+        final rolesToShow =
+            _selectedRole == 'all' ? null : _roleGroups[_selectedRole];
+        final matchesRole =
+            _selectedRole == 'all' || (rolesToShow?.contains(user.role) ?? false);
+
         return matchesSearch && matchesRole;
       }).toList();
     });
@@ -73,6 +88,10 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
         return Colors.green;
       case 'staff':
         return Colors.purple;
+      case 'HR':
+        return Colors.orange;
+      case 'manager':
+        return Colors.red;
       default:
         return Colors.grey;
     }
@@ -86,6 +105,10 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
         return 'Employer';
       case 'staff':
         return 'Staff';
+      case 'HR':
+        return 'HR';
+      case 'manager':
+        return 'Manager';
       default:
         return role;
     }
@@ -97,10 +120,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
       appBar: AppBar(
         title: const Text(
           'View Users',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
+          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
         backgroundColor: Colors.blue[700],
         elevation: 0,
@@ -138,12 +158,13 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                       hintText: 'Search users by name or email...',
                       prefixIcon: const Icon(Icons.search, color: Colors.grey),
                       border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 16),
                     ),
                   ),
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Filter Row
                 Row(
                   children: [
@@ -166,12 +187,21 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                             child: DropdownButton<String>(
                               value: _selectedRole,
                               isExpanded: true,
-                              icon: const Icon(Icons.filter_list, color: Colors.grey),
+                              icon:
+                                  const Icon(Icons.filter_list, color: Colors.grey),
                               items: const [
-                                DropdownMenuItem(value: 'all', child: Text('All Roles')),
-                                DropdownMenuItem(value: 'job_seeker', child: Text('Job Seekers')),
-                                DropdownMenuItem(value: 'employer', child: Text('Employers')),
-                                DropdownMenuItem(value: 'staff', child: Text('Staff')),
+                                DropdownMenuItem(
+                                    value: 'all', child: Text('All Roles')),
+                                DropdownMenuItem(
+                                    value: 'job_seeker', child: Text('Job Seekers')),
+                                DropdownMenuItem(
+                                    value: 'employer', child: Text('Employers')),
+                                DropdownMenuItem(
+                                    value: 'staff', child: Text('Staff')),
+                                DropdownMenuItem(
+                                    value: 'HR', child: Text('HR')),
+                                DropdownMenuItem(
+                                    value: 'manager', child: Text('Manager')),
                               ],
                               onChanged: (value) {
                                 setState(() => _selectedRole = value ?? 'all');
@@ -226,7 +256,8 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                     Chip(
                       label: Text(
                         _getRoleDisplayName(_selectedRole),
-                        style: const TextStyle(fontSize: 12, color: Colors.white),
+                        style:
+                            const TextStyle(fontSize: 12, color: Colors.white),
                       ),
                       backgroundColor: _getRoleColor(_selectedRole),
                     ),
@@ -261,7 +292,8 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            _searchController.text.isEmpty && _selectedRole == 'all'
+                            _searchController.text.isEmpty &&
+                                    _selectedRole == 'all'
                                 ? 'No users found'
                                 : 'No users match your search',
                             style: TextStyle(
@@ -284,7 +316,8 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                         itemBuilder: (context, index) {
                           final user = _filteredUsers[index];
                           return Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                            margin: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 6),
                             child: Card(
                               elevation: 2,
                               shape: RoundedRectangleBorder(
@@ -321,7 +354,9 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        user.fullName.isNotEmpty ? user.fullName : 'Unnamed User',
+                                        user.fullName.isNotEmpty
+                                            ? user.fullName
+                                            : 'Unnamed User',
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w600,
                                           fontSize: 16,
@@ -372,7 +407,8 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                                             vertical: 2,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: _getRoleColor(user.role).withOpacity(0.1),
+                                            color:
+                                                _getRoleColor(user.role).withOpacity(0.1),
                                             borderRadius: BorderRadius.circular(4),
                                           ),
                                           child: Text(

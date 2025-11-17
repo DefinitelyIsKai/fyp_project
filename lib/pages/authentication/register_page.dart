@@ -19,6 +19,7 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  String _selectedRole = 'staff';
 
   @override
   void dispose() {
@@ -46,6 +47,7 @@ class _RegisterPageState extends State<RegisterPage> {
           _nameController.text.trim(),
           _emailController.text.trim(),
           _passwordController.text,
+          role: _selectedRole,
         );
 
         if (success && mounted) {
@@ -114,6 +116,25 @@ class _RegisterPageState extends State<RegisterPage> {
                     return null;
                   },
                 ),
+                DropdownButtonFormField<String>(
+  value: _selectedRole,
+  decoration: const InputDecoration(
+    labelText: 'Role',
+    border: OutlineInputBorder(),
+  ),
+  items: const [
+    DropdownMenuItem(value: 'staff', child: Text('Staff')),
+    DropdownMenuItem(value: 'HR', child: Text('HR')),
+    DropdownMenuItem(value: 'manager', child: Text('Manager')),
+  ],
+  onChanged: (value) {
+    if (value != null) {
+      setState(() {
+        _selectedRole = value;
+      });
+    }
+  },
+),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _passwordController,

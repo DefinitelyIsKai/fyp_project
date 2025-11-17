@@ -1,9 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/pages/post_moderation/approve_reject_posts_page.dart';
 import 'package:fyp_project/pages/post_moderation/manage_tags_categories_page.dart';
 
 class PostModerationPage extends StatelessWidget {
   const PostModerationPage({super.key});
+
+  /// 🔥 Real-time stream: counts all posts with status = "pending"
+  Stream<int> _pendingPostsCountStream() {
+    return FirebaseFirestore.instance
+        .collection('posts')
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((snap) => snap.size);
+  }
+
+  /// 🔥 Real-time stream: counts all categories
+  Stream<int> _categoryCountStream() {
+    return FirebaseFirestore.instance
+        .collection('categories')
+        .snapshots()
+        .map((snap) => snap.size);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,9 +37,10 @@ class PostModerationPage extends StatelessWidget {
         backgroundColor: Colors.blue[700],
         elevation: 0,
       ),
+
       body: Column(
         children: [
-          // Header
+          // 🌟 Blue Header
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -35,7 +54,7 @@ class PostModerationPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Content Management',
                   style: TextStyle(
                     fontSize: 24,
@@ -54,42 +73,59 @@ class PostModerationPage extends StatelessWidget {
               ],
             ),
           ),
-          
-          // Cards Grid
+
+          // 🌟 Cards
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(20),
-              child: GridView(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 0.9,
-                ),
+              child: GridView.count(
+                crossAxisCount: 2,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 0.88, // FIX overflow for smaller screens
                 children: [
-                  _ModerationCard(
-                    title: 'Approve / Reject Posts',
-                    description: 'Review submitted job listings before publishing',
-                    icon: Icons.assignment_turned_in,
-                    iconColor: Colors.green,
-                    backgroundColor: Colors.green[50]!,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ApproveRejectPostsPage()),
-                    ),
-                    stats: '12 pending',
+                  // --- Approve / Reject Posts ---
+                  StreamBuilder<int>(
+                    stream: _pendingPostsCountStream(),
+                    builder: (context, snapshot) {
+                      final pendingCount = snapshot.data ?? 0;
+                      return _ModerationCard(
+                        title: 'Approve / Reject Posts',
+                        description: 'Review submitted job listings before publishing',
+                        icon: Icons.assignment_turned_in,
+                        iconColor: Colors.green,
+                        backgroundColor: Colors.green[50]!,
+                        stats: '$pendingCount pending',
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const ApproveRejectPostsPage()),
+                          );
+                        },
+                      );
+                    },
                   ),
-                  _ModerationCard(
-                    title: 'Manage Tags & Categories',
-                    description: 'Organize job posts by industry, type, or location',
-                    icon: Icons.category,
-                    iconColor: Colors.purple,
-                    backgroundColor: Colors.purple[50]!,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ManageTagsCategoriesPage()),
-                    ),
-                    stats: '45 categories',
+
+                  // --- Manage Tags & Categories ---
+                  StreamBuilder<int>(
+                    stream: _categoryCountStream(),
+                    builder: (context, snapshot) {
+                      final categoryCount = snapshot.data ?? 0;
+                      return _ModerationCard(
+                        title: 'Manage Tags & Categories',
+                        description: 'Organize job posts by industry, type, or location',
+                        icon: Icons.category,
+                        iconColor: Colors.purple,
+                        backgroundColor: Colors.purple[50]!,
+                        stats: '$categoryCount categories',
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const ManageTagsCategoriesPage()),
+                          );
+                        },
+                      );
+                    },
                   ),
                 ],
               ),
@@ -130,12 +166,12 @@ class _ModerationCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.all(20),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Icon
+              // Icon Box
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -144,35 +180,34 @@ class _ModerationCard extends StatelessWidget {
                 ),
                 child: Icon(icon, size: 28, color: iconColor),
               ),
-              
-              const SizedBox(height: 16),
-              
+
+              const SizedBox(height: 12),
+
               // Title
               Text(
                 title,
                 style: const TextStyle(
-                  fontSize: 16,
+                  fontSize: 15,
                   fontWeight: FontWeight.w600,
-                  height: 1.3,
                 ),
-                maxLines: 2,
               ),
-              
-              const SizedBox(height: 8),
-              
+
+              const SizedBox(height: 6),
+
               // Description
-              Text(
-                description,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                  height: 1.4,
+              Expanded(
+                child: Text(
+                  description,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                    height: 1.4,
+                  ),
                 ),
-                maxLines: 3,
               ),
-              
-              const Spacer(),
-              
+
+              const SizedBox(height: 10),
+
               // Footer
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -182,21 +217,10 @@ class _ModerationCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.grey[700],
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.arrow_forward_ios,
-                      size: 14,
-                      color: Colors.grey[600],
-                    ),
-                  ),
+                  Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey[600]),
                 ],
               ),
             ],

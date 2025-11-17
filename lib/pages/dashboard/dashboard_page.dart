@@ -25,6 +25,29 @@ class _DashboardPageState extends State<DashboardPage> {
   int _messages = 0;
   bool _isLoading = true;
 
+  // Role-based page access
+  final Map<String, List<String>> roleAccess = {
+    'manager': [
+      'Post Moderation',
+      'User Management',
+      'Monitoring & Search',
+      'System Configuration',
+      'Message Oversight',
+      'Analytics & Reporting',
+    ],
+    'hr': [
+      'Post Moderation',
+      'User Management',
+      'Monitoring & Search',
+      'Message Oversight',
+      'Analytics & Reporting',
+    ],
+    'staff': [
+      'Post Moderation',
+      'User Management',
+    ],
+  };
+
   @override
   void initState() {
     super.initState();
@@ -55,6 +78,10 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final role = authService.currentAdmin?.role.toLowerCase() ?? 'staff';
+    final allowedPages = roleAccess[role] ?? [];
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
@@ -71,7 +98,7 @@ class _DashboardPageState extends State<DashboardPage> {
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () async {
-              await Provider.of<AuthService>(context, listen: false).logout();
+              await authService.logout();
               if (context.mounted) {
                 Navigator.of(context).pushReplacementNamed(AppRoutes.login);
               }
@@ -86,7 +113,7 @@ class _DashboardPageState extends State<DashboardPage> {
               children: [
                 _buildHeaderSection(),
                 _buildStatsSection(),
-                Expanded(child: _buildDashboardGrid()),
+                Expanded(child: _buildDashboardGrid(allowedPages)),
               ],
             ),
     );
@@ -106,7 +133,7 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Welcome back, Admin!',
+          const Text('Welcome back!',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
           const SizedBox(height: 8),
           Text('Here\'s what\'s happening today',
@@ -152,7 +179,73 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildDashboardGrid() {
+  Widget _buildDashboardGrid(List<String> allowedPages) {
+    final cards = [
+      _DashboardCard(
+        title: 'Post Moderation',
+        icon: Icons.article,
+        color: Colors.blue[700]!,
+        subtitle: '$_pendingPosts pending reviews',
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const PostModerationPage()),
+        ),
+      ),
+      _DashboardCard(
+        title: 'User Management',
+        icon: Icons.people_alt,
+        color: Colors.green[700]!,
+        subtitle: '$_activeUsers active users',
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const UserManagementPage()),
+        ),
+      ),
+      _DashboardCard(
+        title: 'Monitoring & Search',
+        icon: Icons.search,
+        color: Colors.orange[700]!,
+        subtitle: 'Monitor activities',
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const MonitoringPage()),
+        ),
+      ),
+      _DashboardCard(
+        title: 'System Configuration',
+        icon: Icons.settings,
+        color: Colors.purple[700]!,
+        subtitle: 'System settings',
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const SystemConfigPage()),
+        ),
+      ),
+      _DashboardCard(
+        title: 'Message Oversight',
+        icon: Icons.chat_bubble,
+        color: Colors.red[700]!,
+        subtitle: '$_messages messages',
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const MessageOversightPage()),
+        ),
+      ),
+      _DashboardCard(
+        title: 'Analytics & Reporting',
+        icon: Icons.analytics,
+        color: Colors.teal[700]!,
+        subtitle: 'View reports',
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const AnalyticsPage()),
+        ),
+      ),
+    ];
+
+    // Filter cards based on role
+    final filteredCards = cards.where((c) => allowedPages.contains(c.title)).toList();
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: GridView.count(
@@ -160,68 +253,7 @@ class _DashboardPageState extends State<DashboardPage> {
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
         childAspectRatio: 1.2,
-        children: [
-          _DashboardCard(
-            title: 'Post Moderation',
-            icon: Icons.article,
-            color: Colors.blue[700]!,
-            subtitle: '$_pendingPosts pending reviews',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const PostModerationPage()),
-            ),
-          ),
-          _DashboardCard(
-            title: 'User Management',
-            icon: Icons.people_alt,
-            color: Colors.green[700]!,
-            subtitle: '$_activeUsers active users',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const UserManagementPage()),
-            ),
-          ),
-          _DashboardCard(
-            title: 'Monitoring & Search',
-            icon: Icons.search,
-            color: Colors.orange[700]!,
-            subtitle: 'Monitor activities',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const MonitoringPage()),
-            ),
-          ),
-          _DashboardCard(
-            title: 'System Configuration',
-            icon: Icons.settings,
-            color: Colors.purple[700]!,
-            subtitle: 'System settings',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SystemConfigPage()),
-            ),
-          ),
-          _DashboardCard(
-            title: 'Message Oversight',
-            icon: Icons.chat_bubble,
-            color: Colors.red[700]!,
-            subtitle: '$_messages messages',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const MessageOversightPage()),
-            ),
-          ),
-          _DashboardCard(
-            title: 'Analytics & Reporting',
-            icon: Icons.analytics,
-            color: Colors.teal[700]!,
-            subtitle: 'View reports',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AnalyticsPage()),
-            ),
-          ),
-        ],
+        children: filteredCards,
       ),
     );
   }

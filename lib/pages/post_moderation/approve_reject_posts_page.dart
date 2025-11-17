@@ -235,19 +235,16 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                 _TabButton(
                   label: 'Pending',
                   isSelected: _currentTabIndex == 0,
-                  count: _pendingPosts.length,
                   onTap: () => _switchTab(0),
                 ),
                 _TabButton(
                   label: 'Approved',
                   isSelected: _currentTabIndex == 1,
-                  count: _approvedPosts.length,
                   onTap: () => _switchTab(1),
                 ),
                 _TabButton(
                   label: 'Rejected',
                   isSelected: _currentTabIndex == 2,
-                  count: _rejectedPosts.length,
                   onTap: () => _switchTab(2),
                 ),
               ],
@@ -568,13 +565,11 @@ class _StatCard extends StatelessWidget {
 class _TabButton extends StatelessWidget {
   final String label;
   final bool isSelected;
-  final int count;
   final VoidCallback onTap;
 
   const _TabButton({
     required this.label,
     required this.isSelected,
-    required this.count,
     required this.onTap,
   });
 
@@ -610,22 +605,6 @@ class _TabButton extends StatelessWidget {
                     color: isSelected ? Colors.white : Colors.grey[600],
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isSelected ? Colors.white : Colors.grey[200],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    count.toString(),
-                    style: TextStyle(
-                      color: isSelected ? getTabColor() : Colors.grey[700],
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
                   ),
                 ),
               ],

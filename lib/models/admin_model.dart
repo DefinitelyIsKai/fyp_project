@@ -2,7 +2,7 @@ class AdminModel {
   final String id;
   final String email;
   final String name;
-  final String role; // 'super_admin', 'admin', 'moderator'
+  final String role;
   final List<String> permissions;
   final DateTime createdAt;
   final DateTime? lastLoginAt;

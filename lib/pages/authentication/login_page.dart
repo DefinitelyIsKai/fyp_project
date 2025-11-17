@@ -56,6 +56,10 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  void _navigateToRegister() {
+    Navigator.of(context).pushNamed(AppRoutes.register);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -83,12 +87,8 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   keyboardType: TextInputType.emailAddress,
                   validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your email';
-                    }
-                    if (!value.contains('@')) {
-                      return 'Please enter a valid email';
-                    }
+                    if (value == null || value.isEmpty) return 'Please enter your email';
+                    if (!value.contains('@')) return 'Please enter a valid email';
                     return null;
                   },
                 ),
@@ -106,9 +106,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   obscureText: _obscurePassword,
                   validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your password';
-                    }
+                    if (value == null || value.isEmpty) return 'Please enter your password';
                     return null;
                   },
                 ),
@@ -125,6 +123,20 @@ class _LoginPageState extends State<LoginPage> {
                         : const Text('Login', style: TextStyle(fontSize: 16)),
                   ),
                 ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('Don’t have an account? '),
+                    TextButton(
+                      onPressed: _navigateToRegister,
+                      child: const Text(
+                        'Register',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -133,4 +145,3 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
-
