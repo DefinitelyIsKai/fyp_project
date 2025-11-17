@@ -3,8 +3,21 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/pages/user_management/view_users_page.dart';
 import 'package:fyp_project/pages/user_management/user_actions_page.dart';
 
-class UserManagementPage extends StatelessWidget {
+class UserManagementPage extends StatefulWidget {
   const UserManagementPage({super.key});
+
+  @override
+  State<UserManagementPage> createState() => _UserManagementPageState();
+}
+
+class _UserManagementPageState extends State<UserManagementPage> {
+  bool _isStatsExpanded = true;
+
+  void _toggleStatsExpansion() {
+    setState(() {
+      _isStatsExpanded = !_isStatsExpanded;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,13 +34,34 @@ class UserManagementPage extends StatelessWidget {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildHeaderSection(),
-          _buildStatsSection(),
-          Expanded(child: _buildOptionsGrid(context)),
-        ],
+      body: NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          // Detect scroll down to collapse
+          if (notification is ScrollUpdateNotification) {
+            if (notification.metrics.pixels <= 0 && 
+                notification.scrollDelta! > 10 && 
+                _isStatsExpanded) {
+              _toggleStatsExpansion();
+              return true;
+            }
+            // Detect scroll up to expand when at top
+            else if (notification.metrics.pixels <= 0 && 
+                     notification.scrollDelta! < -10 && 
+                     !_isStatsExpanded) {
+              _toggleStatsExpansion();
+              return true;
+            }
+          }
+          return false;
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeaderSection(),
+            _buildStatsSection(),
+            Expanded(child: _buildOptionsGrid(context)),
+          ],
+        ),
       ),
     );
   }
@@ -71,11 +105,74 @@ class UserManagementPage extends StatelessWidget {
   }
 
   // -------------------------------------------------------
-  // REAL-TIME STATS
+  // REAL-TIME STATS with Expand/Collapse
   // -------------------------------------------------------
   Widget _buildStatsSection() {
+    return Container(
+      color: Colors.grey[50],
+      child: Column(
+        children: [
+          // Expand/Collapse Header
+          GestureDetector(
+            onTap: _toggleStatsExpansion,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'User Statistics',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.swipe,
+                        size: 16,
+                        color: Colors.grey[500],
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Pull down to close',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        _isStatsExpanded ? Icons.expand_less : Icons.expand_more,
+                        color: Colors.grey[500],
+                        size: 20,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          // Stats Cards with Animation
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 300),
+            crossFadeState: _isStatsExpanded 
+                ? CrossFadeState.showFirst 
+                : CrossFadeState.showSecond,
+            firstChild: _buildStatsCards(),
+            secondChild: const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsCards() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
       child: Row(
         children: [
           // Total Users
@@ -149,60 +246,63 @@ class UserManagementPage extends StatelessWidget {
   // Grid options
   // -------------------------------------------------------
   Widget _buildOptionsGrid(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: GridView(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: 0.9,
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 16,
+              childAspectRatio: 0.9,
+            ),
+            delegate: SliverChildListDelegate([
+              _ManagementCard(
+                title: 'View User Profiles',
+                description: 'Access account information',
+                icon: Icons.people_alt,
+                iconColor: Colors.blue[700]!,
+                backgroundColor: Colors.blue[50]!,
+                onTap: () {
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const ViewUsersPage()));
+                },
+                stats: 'View all users',
+              ),
+              _ManagementCard(
+                title: 'Account Actions',
+                description: 'Suspend, delete, or modify user accounts',
+                icon: Icons.admin_panel_settings,
+                iconColor: Colors.red[700]!,
+                backgroundColor: Colors.red[50]!,
+                onTap: () {
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const UserActionsPage()));
+                },
+                stats: 'Manage accounts',
+              ),
+              _ManagementCard(
+                title: 'User Analytics',
+                description: 'View user growth and engagement statistics',
+                icon: Icons.analytics,
+                iconColor: Colors.purple[700]!,
+                backgroundColor: Colors.purple[50]!,
+                onTap: () {},
+                stats: 'View analytics',
+              ),
+              _ManagementCard(
+                title: 'Bulk Operations',
+                description: 'Perform batch actions on multiple users',
+                icon: Icons.playlist_add_check,
+                iconColor: Colors.green[700]!,
+                backgroundColor: Colors.green[50]!,
+                onTap: () {},
+                stats: 'Bulk tools',
+              ),
+            ]),
+          ),
         ),
-        children: [
-          _ManagementCard(
-            title: 'View User Profiles',
-            description: 'Access account information',
-            icon: Icons.people_alt,
-            iconColor: Colors.blue[700]!,
-            backgroundColor: Colors.blue[50]!,
-            onTap: () {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const ViewUsersPage()));
-            },
-            stats: 'View all',
-          ),
-          _ManagementCard(
-            title: 'Account Actions',
-            description: 'Suspend, delete, modify accounts',
-            icon: Icons.admin_panel_settings,
-            iconColor: Colors.red[700]!,
-            backgroundColor: Colors.red[50]!,
-            onTap: () {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const UserActionsPage()));
-            },
-            stats: 'Manage',
-          ),
-          _ManagementCard(
-            title: 'User Analytics',
-            description: 'Growth & engagement stats',
-            icon: Icons.analytics,
-            iconColor: Colors.purple[700]!,
-            backgroundColor: Colors.purple[50]!,
-            onTap: () {},
-            stats: 'Analytics',
-          ),
-          _ManagementCard(
-            title: 'Bulk Operations',
-            description: 'Batch update multiple users',
-            icon: Icons.playlist_add_check,
-            iconColor: Colors.green[700]!,
-            backgroundColor: Colors.green[50]!,
-            onTap: () {},
-            stats: 'Tools',
-          ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -238,10 +338,11 @@ class _ManagementCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Icon
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -250,29 +351,59 @@ class _ManagementCard extends StatelessWidget {
                 ),
                 child: Icon(icon, size: 28, color: iconColor),
               ),
-              const SizedBox(height: 16),
-              Text(title,
+              
+              const SizedBox(height: 12),
+              
+              // Title
+              SizedBox(
+                height: 40,
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    height: 1.2,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              Text(
-                description,
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                maxLines: 3,
+                ),
               ),
-              const Spacer(),
+              
+              const SizedBox(height: 6),
+              
+              // Description
+              Expanded(
+                child: Text(
+                  description,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey[600],
+                    height: 1.3,
+                  ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              
+              const SizedBox(height: 8),
+              
+              // Footer
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(stats,
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[700],
-                          fontWeight: FontWeight.w500)),
-                  Icon(Icons.arrow_forward_ios,
-                      size: 14, color: Colors.grey[600]),
+                  Text(
+                    stats,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey[700],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    size: 12,
+                    color: Colors.grey[600],
+                  ),
                 ],
               ),
             ],
@@ -323,9 +454,10 @@ class _StatCard extends StatelessWidget {
                 Text(
                   value,
                   style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87),
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
                 ),
               ],
             ),
@@ -333,9 +465,10 @@ class _StatCard extends StatelessWidget {
             Text(
               title,
               style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500),
+                fontSize: 14,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),
