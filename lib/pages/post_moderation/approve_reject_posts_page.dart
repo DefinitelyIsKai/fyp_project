@@ -358,7 +358,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
           Expanded(
             child: _StatCard(
               count: _pendingPosts.length,
-              label: 'Pending Review',
+              label: 'Pending',
               color: Colors.orange,
               icon: Icons.pending_actions,
             ),

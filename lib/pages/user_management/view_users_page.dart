@@ -18,15 +18,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   String _selectedRole = 'all';
   final TextEditingController _searchController = TextEditingController();
 
-  // Role hierarchy for filtering
-  final Map<String, List<String>> _roleGroups = {
-    'staff': ['staff'], 
-    'HR': ['HR'],
-    'manager': ['manager'],
-    'job_seeker': ['job_seeker'],
-    'employer': ['employer'],
-  };
-
   @override
   void initState() {
     super.initState();
@@ -69,40 +60,33 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
         final matchesSearch = user.fullName.toLowerCase().contains(query) ||
             user.email.toLowerCase().contains(query);
 
-        // Role filtering with hierarchy
-        final rolesToShow =
-            _selectedRole == 'all' ? null : _roleGroups[_selectedRole];
-        final matchesRole =
-            _selectedRole == 'all' || (rolesToShow?.contains(user.role) ?? false);
+        final matchesRole = _selectedRole == 'all' || user.role == _selectedRole;
 
         return matchesSearch && matchesRole;
       }).toList();
     });
   }
 
-  Color _getRoleColor(String role) {
-    switch (role) {
-      case 'employer':
-        return Colors.blue;
-      case 'job_seeker':
-        return Colors.green;
-      case 'staff':
-        return Colors.purple;
-      case 'HR':
-        return Colors.orange;
-      case 'manager':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
+  Color _getStatusColor(UserModel user) {
+    if (user.isSuspended) return Colors.orange;
+    if (!user.isActive) return Colors.red;
+    return Colors.green;
+  }
+
+  String _getStatusText(UserModel user) {
+    if (user.isSuspended) return 'Suspended';
+    if (!user.isActive) return 'Inactive';
+    return 'Active';
   }
 
   String _getRoleDisplayName(String role) {
     switch (role) {
       case 'job_seeker':
-        return 'Job Seeker';
+        return 'Jobseeker';
       case 'employer':
         return 'Employer';
+      case 'employee':
+        return 'Employee';
       case 'staff':
         return 'Staff';
       case 'HR':
@@ -114,12 +98,199 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     }
   }
 
+  Widget _buildActionButtons(UserModel user) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        // View Profile Button
+        ElevatedButton.icon(
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => UserDetailPage(user: user),
+            ),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blue[50],
+            foregroundColor: Colors.blue[700],
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+          icon: const Icon(Icons.person, size: 16),
+          label: const Text(
+            'View Profile',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+          ),
+        ),
+
+        // Status Toggle Button
+        ElevatedButton.icon(
+          onPressed: () {
+            _toggleUserStatus(user);
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: user.isSuspended ? Colors.green[50] : Colors.orange[50],
+            foregroundColor: user.isSuspended ? Colors.green[700] : Colors.orange[700],
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+          icon: Icon(
+            user.isSuspended ? Icons.check_circle : Icons.pause_circle,
+            size: 16,
+          ),
+          label: Text(
+            user.isSuspended ? 'Activate' : 'Suspend',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+          ),
+        ),
+
+        // Delete Button
+        ElevatedButton.icon(
+          onPressed: () {
+            _deleteUser(user);
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red[50],
+            foregroundColor: Colors.red[700],
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+          icon: const Icon(Icons.delete, size: 16),
+          label: const Text(
+            'Delete',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _toggleUserStatus(UserModel user) {
+    final bool isSuspended = user.status == 'Suspended';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isSuspended ? 'Activate User' : 'Suspend User'),
+        content: Text(
+          'Are you sure you want to ${isSuspended ? 'activate' : 'suspend'} ${user.fullName}?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                if (isSuspended) {
+                  await _userService.unsuspendUser(user.id);
+                } else {
+                  await _userService.suspendUser(user.id);
+                }
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        '${user.fullName} ${isSuspended ? 'activated' : 'suspended'} successfully',
+                      ),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+
+                _loadUsers(); // refresh
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error updating user: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: Text(isSuspended ? 'Activate' : 'Suspend'),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  void _deleteUser(UserModel user) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete User'),
+        content: Text('Are you sure you want to delete ${user.fullName}? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await _userService.deleteUser(user.id);
+                _loadUsers(); // Refresh the list
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('${user.fullName} deleted successfully'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error deleting user: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
+  String _formatUserId(String userId) {
+    // Show only first 8 characters of user ID for better readability
+    return userId.length > 8 ? '${userId.substring(0, 8)}...' : userId;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'View Users',
+          'User Management',
           style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
         backgroundColor: Colors.blue[700],
@@ -187,8 +358,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                             child: DropdownButton<String>(
                               value: _selectedRole,
                               isExpanded: true,
-                              icon:
-                                  const Icon(Icons.filter_list, color: Colors.grey),
+                              icon: const Icon(Icons.filter_list, color: Colors.grey),
                               items: const [
                                 DropdownMenuItem(
                                     value: 'all', child: Text('All Roles')),
@@ -196,6 +366,8 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                                     value: 'job_seeker', child: Text('Job Seekers')),
                                 DropdownMenuItem(
                                     value: 'employer', child: Text('Employers')),
+                                DropdownMenuItem(
+                                    value: 'employee', child: Text('Employees')),
                                 DropdownMenuItem(
                                     value: 'staff', child: Text('Staff')),
                                 DropdownMenuItem(
@@ -253,13 +425,20 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                     ),
                   ),
                   if (_selectedRole != 'all')
-                    Chip(
-                      label: Text(
-                        _getRoleDisplayName(_selectedRole),
-                        style:
-                            const TextStyle(fontSize: 12, color: Colors.white),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        borderRadius: BorderRadius.circular(6),
                       ),
-                      backgroundColor: _getRoleColor(_selectedRole),
+                      child: Text(
+                        _getRoleDisplayName(_selectedRole),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.blue[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ),
                 ],
               ),
@@ -269,183 +448,164 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
           Expanded(
             child: _isLoading
                 ? const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CircularProgressIndicator(),
-                        SizedBox(height: 16),
-                        Text(
-                          'Loading users...',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      ],
-                    ),
-                  )
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text(
+                    'Loading users...',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+            )
                 : _filteredUsers.isEmpty
-                    ? Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                ? Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.people_outline,
+                  size: 80,
+                  color: Colors.grey[300],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  _searchController.text.isEmpty &&
+                      _selectedRole == 'all'
+                      ? 'No users found'
+                      : 'No users match your search',
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Colors.grey[500],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Try adjusting your search or filters',
+                  style: TextStyle(
+                    color: Colors.grey[400],
+                  ),
+                ),
+              ],
+            )
+                : ListView.builder(
+              itemCount: _filteredUsers.length,
+              itemBuilder: (context, index) {
+                final user = _filteredUsers[index];
+                final status = _getStatusText(user);
+                final statusColor = _getStatusColor(user);
+
+                return Container(
+                  margin: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 8),
+                  child: Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            Icons.people_outline,
-                            size: 80,
-                            color: Colors.grey[300],
+                          // Name and Status Row
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  user.fullName.isNotEmpty
+                                      ? user.fullName
+                                      : 'Unnamed User',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: statusColor.withOpacity(0.3)),
+                                ),
+                                child: Text(
+                                  status,
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 4),
+
+                          // Email
                           Text(
-                            _searchController.text.isEmpty &&
-                                    _selectedRole == 'all'
-                                ? 'No users found'
-                                : 'No users match your search',
+                            user.email,
                             style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.grey[500],
-                              fontWeight: FontWeight.w500,
+                              color: Colors.grey[600],
+                              fontSize: 14,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 8),
-                          Text(
-                            'Try adjusting your search or filters',
-                            style: TextStyle(
-                              color: Colors.grey[400],
-                            ),
+
+                          // Role and ID
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue[50],
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '${_getRoleDisplayName(user.role)} + ID: ${_formatUserId(user.id)}',
+                                  style: TextStyle(
+                                    color: Colors.blue[700],
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                'Joined: ${_formatDate(user.createdAt)}',
+                                style: TextStyle(
+                                  color: Colors.grey[500],
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                           ),
+                          const SizedBox(height: 12),
+
+                          // Action Buttons
+                          _buildActionButtons(user),
                         ],
-                      )
-                    : ListView.builder(
-                        itemCount: _filteredUsers.length,
-                        itemBuilder: (context, index) {
-                          final user = _filteredUsers[index];
-                          return Container(
-                            margin: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 6),
-                            child: Card(
-                              elevation: 2,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
-                                ),
-                                leading: Container(
-                                  width: 50,
-                                  height: 50,
-                                  decoration: BoxDecoration(
-                                    color: _getRoleColor(user.role).withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(25),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      user.fullName.isNotEmpty
-                                          ? user.fullName[0].toUpperCase()
-                                          : user.email.isNotEmpty
-                                              ? user.email[0].toUpperCase()
-                                              : '?',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: _getRoleColor(user.role),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                title: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        user.fullName.isNotEmpty
-                                            ? user.fullName
-                                            : 'Unnamed User',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 16,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    if (user.isSuspended)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.red[50],
-                                          borderRadius: BorderRadius.circular(6),
-                                          border: Border.all(color: Colors.red[200]!),
-                                        ),
-                                        child: Text(
-                                          'Suspended',
-                                          style: TextStyle(
-                                            color: Colors.red[700],
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      user.email,
-                                      style: TextStyle(
-                                        color: Colors.grey[600],
-                                        fontSize: 14,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color:
-                                                _getRoleColor(user.role).withOpacity(0.1),
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: Text(
-                                            _getRoleDisplayName(user.role),
-                                            style: TextStyle(
-                                              color: _getRoleColor(user.role),
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                                trailing: Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[50],
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Icon(
-                                    Icons.chevron_right,
-                                    color: Colors.grey[400],
-                                  ),
-                                ),
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => UserDetailPage(user: user),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
                       ),
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),

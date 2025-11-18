@@ -3,12 +3,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class UserModel {
   final String id;
 
-  // Basic info
   final String email;
   final String fullName;
   final String? phoneNumber;
   final String location;
   final String role;
+
+  final String status;
+  final bool isActive;
+  final bool isSuspended;
 
   // Profile metadata
   final bool profileCompleted;
@@ -27,8 +30,6 @@ class UserModel {
   final Map<String, dynamic>? resume;
 
   final int reportCount;
-  final bool isActive;
-  final bool isSuspended;
   final DateTime createdAt;
 
   UserModel({
@@ -38,6 +39,11 @@ class UserModel {
     this.phoneNumber,
     required this.location,
     required this.role,
+
+    required this.status,
+    required this.isActive,
+    required this.isSuspended,
+
     required this.profileCompleted,
     required this.acceptedTerms,
     required this.professionalSummary,
@@ -45,27 +51,22 @@ class UserModel {
     required this.workExperience,
     required this.seeking,
     required this.reportCount,
-    required this.isActive,
-    required this.isSuspended,
     required this.createdAt,
     this.photoUrl,
     this.cvUrl,
     this.image,
     this.resume,
-
   });
 
-  // Convert Firestore → Dart model
+  // Firestore → Model
   factory UserModel.fromJson(Map<String, dynamic> json, String docId) {
-    DateTime parseCreatedAt(dynamic value) {
-      if (value is Timestamp) return value.toDate();
-      if (value is DateTime) return value;
-      if (value is int) {
-        return DateTime.fromMillisecondsSinceEpoch(value);
-      }
-      if (value is String) {
-        return DateTime.tryParse(value) ?? DateTime.now();
-      }
+    String status = json['status'] ?? 'Active';
+
+    DateTime parseCreatedAt(dynamic v) {
+      if (v is Timestamp) return v.toDate();
+      if (v is DateTime) return v;
+      if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
+      if (v is String) return DateTime.tryParse(v) ?? DateTime.now();
       return DateTime.now();
     }
 
@@ -73,9 +74,13 @@ class UserModel {
       id: docId,
       email: json['email'] ?? '',
       fullName: json['fullName'] ?? '',
-      phoneNumber: json['phoneNumber'] as String?,
+      phoneNumber: json['phoneNumber'],
       location: json['location'] ?? '',
       role: json['role'] ?? 'employee',
+
+      status: status,
+      isActive: status != 'Non-active',
+      isSuspended: status == 'Suspended',
 
       profileCompleted: json['profileCompleted'] ?? false,
       acceptedTerms: json['acceptedTerms'] ?? false,
@@ -87,17 +92,16 @@ class UserModel {
       professionalProfile: json['professionalProfile'] ?? '',
       workExperience: json['workExperience'] ?? '',
       seeking: json['seeking'] ?? '',
-      reportCount: (json['reportCount'] is num) ? (json['reportCount'] as num).toInt() : 0,
-      isActive: json['isActive'] ?? true,
-      isSuspended: json['isSuspended'] ?? false,
+      reportCount: (json['reportCount'] ?? 0).toInt(),
+
       createdAt: parseCreatedAt(json['createdAt']),
 
-      image: json['image'] as Map<String, dynamic>?,
-      resume: json['resume'] as Map<String, dynamic>?,
+      image: json['image'],
+      resume: json['resume'],
     );
   }
 
-  // Convert Dart → Firestore
+  // Model → Firestore
   Map<String, dynamic> toJson() {
     return {
       'email': email,
@@ -105,10 +109,8 @@ class UserModel {
       'phoneNumber': phoneNumber,
       'location': location,
       'role': role,
-      'reportCount': reportCount,
-      'isActive': isActive,
-      'isSuspended': isSuspended,
-      'createdAt': createdAt,
+
+      'status': status,
 
       'profileCompleted': profileCompleted,
       'acceptedTerms': acceptedTerms,
@@ -121,8 +123,12 @@ class UserModel {
       'workExperience': workExperience,
       'seeking': seeking,
 
+      'reportCount': reportCount,
+      'createdAt': createdAt,
+
       'image': image,
       'resume': resume,
     };
   }
+
 }

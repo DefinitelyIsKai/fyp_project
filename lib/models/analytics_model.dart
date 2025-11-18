@@ -27,38 +27,7 @@ class AnalyticsModel {
     this.additionalMetrics,
   });
 
-  factory AnalyticsModel.fromJson(Map<String, dynamic> json) {
-    return AnalyticsModel(
-      date: DateTime.parse(json['date'] as String),
-      totalUsers: json['totalUsers'] as int,
-      activeUsers: json['activeUsers'] as int,
-      totalJobPosts: json['totalJobPosts'] as int,
-      pendingJobPosts: json['pendingJobPosts'] as int,
-      approvedJobPosts: json['approvedJobPosts'] as int,
-      totalApplications: json['totalApplications'] as int,
-      totalReports: json['totalReports'] as int,
-      pendingReports: json['pendingReports'] as int,
-      totalMessages: json['totalMessages'] as int,
-      reportedMessages: json['reportedMessages'] as int,
-      additionalMetrics: json['additionalMetrics'] as Map<String, dynamic>?,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'date': date.toIso8601String(),
-      'totalUsers': totalUsers,
-      'activeUsers': activeUsers,
-      'totalJobPosts': totalJobPosts,
-      'pendingJobPosts': pendingJobPosts,
-      'approvedJobPosts': approvedJobPosts,
-      'totalApplications': totalApplications,
-      'totalReports': totalReports,
-      'pendingReports': pendingReports,
-      'totalMessages': totalMessages,
-      'reportedMessages': reportedMessages,
-      'additionalMetrics': additionalMetrics,
-    };
-  }
+  int get inactiveUsers => totalUsers - activeUsers;
+  double get activeUserPercentage =>
+      totalUsers == 0 ? 0 : (activeUsers / totalUsers) * 100;
 }
-
