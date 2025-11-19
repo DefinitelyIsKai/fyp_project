@@ -6,7 +6,7 @@ import 'package:fyp_project/pages/post_moderation/manage_tags_categories_page.da
 class PostModerationPage extends StatelessWidget {
   const PostModerationPage({super.key});
 
-  /// 🔥 Real-time stream: counts all posts with status = "pending"
+  // Real-time stream: counts all posts with status = "pending"
   Stream<int> _pendingPostsCountStream() {
     return FirebaseFirestore.instance
         .collection('posts')
@@ -15,7 +15,7 @@ class PostModerationPage extends StatelessWidget {
         .map((snap) => snap.size);
   }
 
-  /// 🔥 Real-time stream: counts all categories
+  // Real-time stream: counts all categories
   Stream<int> _categoryCountStream() {
     return FirebaseFirestore.instance
         .collection('categories')
@@ -40,92 +40,173 @@ class PostModerationPage extends StatelessWidget {
 
       body: Column(
         children: [
-          // 🌟 Blue Header
+          // Enhanced Header with better spacing
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 40),
             decoration: BoxDecoration(
               color: Colors.blue[700],
               borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(20),
-                bottomRight: Radius.circular(20),
+                bottomLeft: Radius.circular(24),
+                bottomRight: Radius.circular(24),
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.blue[800]!.withOpacity(0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Welcome message
                 const Text(
                   'Content Management',
                   style: TextStyle(
-                    fontSize: 24,
+                    fontSize: 28,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
+                    height: 1.2,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Manage job posts and categories',
+                  'Manage job posts and organize content efficiently',
                   style: TextStyle(
                     fontSize: 16,
                     color: Colors.white.withOpacity(0.9),
+                    height: 1.4,
                   ),
+                ),
+                const SizedBox(height: 16),
+
+                // Quick stats row
+                Row(
+                  children: [
+                    StreamBuilder<int>(
+                      stream: _pendingPostsCountStream(),
+                      builder: (context, snapshot) {
+                        final pendingCount = snapshot.data ?? 0;
+                        return _HeaderStat(
+                          value: pendingCount,
+                          label: 'Pending Posts',
+                          color: Colors.orange[400]!,
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 20),
+                    StreamBuilder<int>(
+                      stream: _categoryCountStream(),
+                      builder: (context, snapshot) {
+                        final categoryCount = snapshot.data ?? 0;
+                        return _HeaderStat(
+                          value: categoryCount,
+                          label: 'Categories',
+                          color: Colors.purple[300]!,
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
 
-          // 🌟 Cards
+          // Main Content Area
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: GridView.count(
-                crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 0.88, // FIX overflow for smaller screens
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- Approve / Reject Posts ---
-                  StreamBuilder<int>(
-                    stream: _pendingPostsCountStream(),
-                    builder: (context, snapshot) {
-                      final pendingCount = snapshot.data ?? 0;
-                      return _ModerationCard(
-                        title: 'Approve / Reject Posts',
-                        description: 'Review submitted job listings before publishing',
-                        icon: Icons.assignment_turned_in,
-                        iconColor: Colors.green,
-                        backgroundColor: Colors.green[50]!,
-                        stats: '$pendingCount pending',
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const ApproveRejectPostsPage()),
-                          );
-                        },
-                      );
-                    },
+                  // Section Title
+                  const Text(
+                    'Management Tools',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black87,
+                    ),
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Choose an option to manage your content',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
 
-                  // --- Manage Tags & Categories ---
-                  StreamBuilder<int>(
-                    stream: _categoryCountStream(),
-                    builder: (context, snapshot) {
-                      final categoryCount = snapshot.data ?? 0;
-                      return _ModerationCard(
-                        title: 'Manage Tags & Categories',
-                        description: 'Organize job posts by industry, type, or location',
-                        icon: Icons.category,
-                        iconColor: Colors.purple,
-                        backgroundColor: Colors.purple[50]!,
-                        stats: '$categoryCount categories',
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const ManageTagsCategoriesPage()),
-                          );
-                        },
-                      );
-                    },
+                  // Single column layout for better focus
+                  Expanded(
+                    child: ListView(
+                      children: [
+                        // Approve/Reject Posts Card
+                        StreamBuilder<int>(
+                          stream: _pendingPostsCountStream(),
+                          builder: (context, snapshot) {
+                            final pendingCount = snapshot.data ?? 0;
+                            return _FeatureCard(
+                              title: 'Review Job Posts',
+                              subtitle: 'Approve or reject pending job listings',
+                              icon: Icons.assignment_turned_in,
+                              iconColor: Colors.green[700]!,
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Colors.green[50]!,
+                                  Colors.lightGreen[50]!,
+                                ],
+                              ),
+                              badgeCount: pendingCount,
+                              badgeColor: Colors.orange,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const ApproveRejectPostsPage()),
+                                );
+                              },
+                            );
+                          },
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Manage Tags & Categories Card
+                        StreamBuilder<int>(
+                          stream: _categoryCountStream(),
+                          builder: (context, snapshot) {
+                            final categoryCount = snapshot.data ?? 0;
+                            return _FeatureCard(
+                              title: 'Organize Content',
+                              subtitle: 'Manage categories and tags for better organization',
+                              icon: Icons.category,
+                              iconColor: Colors.purple[700]!,
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Colors.purple[50]!,
+                                  Colors.deepPurple[50]!,
+                                ],
+                              ),
+                              badgeCount: categoryCount,
+                              badgeColor: Colors.purple,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const ManageTagsCategoriesPage()),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -137,90 +218,187 @@ class PostModerationPage extends StatelessWidget {
   }
 }
 
-class _ModerationCard extends StatelessWidget {
+class _HeaderStat extends StatelessWidget {
+  final int value;
+  final String label;
+  final Color color;
+
+  const _HeaderStat({
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              value.toString(),
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: color,
+                height: 0.9,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label.split(' ').first,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.white.withOpacity(0.8),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label.split(' ').skip(1).join(' '),
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.white.withOpacity(0.7),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FeatureCard extends StatelessWidget {
   final String title;
-  final String description;
-  final String stats;
+  final String subtitle;
   final IconData icon;
   final Color iconColor;
-  final Color backgroundColor;
+  final Gradient gradient;
+  final int badgeCount;
+  final Color badgeColor;
   final VoidCallback onTap;
 
-  const _ModerationCard({
+  const _FeatureCard({
     required this.title,
-    required this.description,
-    required this.stats,
+    required this.subtitle,
     required this.icon,
     required this.iconColor,
-    required this.backgroundColor,
+    required this.gradient,
+    required this.badgeCount,
+    required this.badgeColor,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: 4,
+      elevation: 2,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: gradient,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
             children: [
-              // Icon Box
+              // Icon Container
               Container(
-                padding: const EdgeInsets.all(12),
+                width: 60,
+                height: 60,
                 decoration: BoxDecoration(
-                  color: backgroundColor,
-                  borderRadius: BorderRadius.circular(12),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: iconColor.withOpacity(0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                child: Icon(icon, size: 28, color: iconColor),
+                child: Icon(
+                  icon,
+                  size: 32,
+                  color: iconColor,
+                ),
               ),
 
-              const SizedBox(height: 12),
+              const SizedBox(width: 16),
 
-              // Title
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-
-              const SizedBox(height: 6),
-
-              // Description
+              // Content
               Expanded(
-                child: Text(
-                  description,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                    height: 1.4,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[700],
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
-              const SizedBox(height: 10),
-
-              // Footer
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              // Badge and Arrow
+              Column(
                 children: [
-                  Text(
-                    stats,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[700],
-                      fontWeight: FontWeight.w600,
+                  if (badgeCount > 0) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: badgeColor,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        badgeCount.toString(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16,
+                      color: Colors.grey[600],
                     ),
                   ),
-                  Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey[600]),
                 ],
               ),
             ],

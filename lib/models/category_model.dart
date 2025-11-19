@@ -1,50 +1,50 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class CategoryModel {
   final String id;
   final String name;
   final String? description;
-  final String? icon;
-  final bool isActive;
   final int jobCount;
-  final DateTime createdAt;
+
+  // NEW FIELDS
+  final bool isActive;
+  final DateTime? createdAt;
   final DateTime? updatedAt;
 
   CategoryModel({
     required this.id,
     required this.name,
     this.description,
-    this.icon,
-    this.isActive = true,
     this.jobCount = 0,
-    required this.createdAt,
+    this.isActive = true,
+    this.createdAt,
     this.updatedAt,
   });
 
-  factory CategoryModel.fromJson(Map<String, dynamic> json) {
+  factory CategoryModel.fromJson(Map<String, dynamic> map, String id) {
     return CategoryModel(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      description: json['description'] as String?,
-      icon: json['icon'] as String?,
-      isActive: json['isActive'] as bool? ?? true,
-      jobCount: json['jobCount'] as int? ?? 0,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
+      id: id,
+      name: map['name'] ?? '',
+      description: map['description'],
+      jobCount: map['jobCount'] ?? 0,
+      isActive: map['isActive'] ?? true,
+      createdAt: map['createdAt'] != null
+          ? (map['createdAt'] as Timestamp).toDate()
+          : null,
+      updatedAt: map['updatedAt'] != null
+          ? (map['updatedAt'] as Timestamp).toDate()
           : null,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
       'name': name,
       'description': description,
-      'icon': icon,
-      'isActive': isActive,
       'jobCount': jobCount,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt?.toIso8601String(),
+      'isActive': isActive,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
     };
   }
 }
-

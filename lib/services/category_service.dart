@@ -1,44 +1,41 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/models/category_model.dart';
 
 class CategoryService {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   Future<List<CategoryModel>> getAllCategories() async {
-    // TODO: Implement actual API call
-    await Future.delayed(const Duration(seconds: 1));
-    
-    // Mock data
-    return [
-      CategoryModel(
-        id: '1',
-        name: 'Retail',
-        description: 'Retail jobs',
-        createdAt: DateTime.now(),
-        isActive: true,
-        jobCount: 10,
-      ),
-      CategoryModel(
-        id: '2',
-        name: 'Food Service',
-        description: 'Food service jobs',
-        createdAt: DateTime.now(),
-        isActive: true,
-        jobCount: 15,
-      ),
-    ];
+    final snapshot = await _firestore.collection('categories').get();
+    return snapshot.docs
+        .map((doc) => CategoryModel.fromJson(doc.data(), doc.id))
+        .toList();
   }
 
-  Future<void> createCategory(String name, String? description) async {
-    // TODO: Implement actual API call
-    await Future.delayed(const Duration(seconds: 1));
+  Future<void> createCategory(String name, String description) async {
+    final docRef = _firestore.collection('categories').doc();
+
+    await docRef.set({
+      'name': name,
+      'description': description,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'isActive': true,
+      'jobCount': 0,
+    });
   }
 
-  Future<void> updateCategory(String categoryId, String name, String? description) async {
-    // TODO: Implement actual API call
-    await Future.delayed(const Duration(seconds: 1));
+  Future<void> updateCategory(String id, String name, String? description) async {
+    await _firestore.collection('categories').doc(id).update({
+      'name': name,
+      'description': description,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
-  Future<void> deleteCategory(String categoryId) async {
-    // TODO: Implement actual API call
-    await Future.delayed(const Duration(seconds: 1));
+  Future<void> toggleCategoryStatus(String id, bool isActive) async {
+    await _firestore.collection('categories').doc(id).update({
+      'isActive': isActive,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 }
-

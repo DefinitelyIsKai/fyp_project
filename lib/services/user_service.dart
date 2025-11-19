@@ -46,10 +46,12 @@ class UserService {
     return users;
   }
 
-  Future<void> suspendUser(String userId) async {
+  Future<void> suspendUser(String userId, {String? violationReason, int? durationDays}) async {
     await _usersRef.doc(userId).update({
       'status': 'Suspended',
-      'isActive': false,
+      'suspendedAt': FieldValue.serverTimestamp(),
+      'suspensionReason': violationReason,
+      'suspensionDuration': durationDays,
     });
   }
 
@@ -57,13 +59,18 @@ class UserService {
     await _usersRef.doc(userId).update({
       'status': 'Active',
       'isActive': true,
+      'suspendedAt': null,
+      'suspensionReason': null,
+      'suspensionDuration': null,
     });
   }
 
-  Future<void> deleteUser(String userId) async {
+  Future<void> deleteUser(String userId, {String? deletionReason}) async {
     await _usersRef.doc(userId).update({
-      'status': 'Non-active',
+      'status': 'Deleted',
       'isActive': false,
+      'deletedAt': FieldValue.serverTimestamp(),
+      'deletionReason': deletionReason,
     });
   }
 }

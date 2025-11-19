@@ -20,7 +20,8 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   // Store posts data
   List<JobPostModel> _allPosts = [];
   List<JobPostModel> _pendingPosts = [];
-  List<JobPostModel> _approvedPosts = [];
+  List<JobPostModel> _activePosts = [];
+  List<JobPostModel> _completedPosts = [];
   List<JobPostModel> _rejectedPosts = [];
   bool _isLoading = true;
 
@@ -64,7 +65,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
     try {
       await _postService.approvePost(post.id);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Post approved'), backgroundColor: Colors.green),
+        const SnackBar(content: Text('Post approved and now active'), backgroundColor: Colors.green),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -76,17 +77,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   Future<void> _rejectPost(JobPostModel post) async {
     final reason = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Reject Post'),
-        content: const Text('Are you sure you want to reject this post?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, 'Rejected by admin'),
-            child: const Text('Reject', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      builder: (context) => _RejectPostDialog(post: post), // Pass the post here
     );
 
     if (reason != null) {
@@ -103,6 +94,32 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
     }
   }
 
+  Future<void> _completePost(JobPostModel post) async {
+    try {
+      await _postService.completePost(post.id);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Post marked as completed'), backgroundColor: Colors.blue),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _reopenPost(JobPostModel post) async {
+    try {
+      await _postService.reopenPost(post.id);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Post reopened'), backgroundColor: Colors.green),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   void _viewPost(JobPostModel post) {
     Navigator.push(
       context,
@@ -113,20 +130,21 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   List<JobPostModel> _filterPosts(List<JobPostModel> posts) {
     final query = _searchController.text.toLowerCase();
     if (query.isEmpty) return posts;
-    
+
     return posts.where((post) =>
-      post.title.toLowerCase().contains(query) ||
-      post.description.toLowerCase().contains(query)
+    post.title.toLowerCase().contains(query) ||
+        post.description.toLowerCase().contains(query) ||
+        (post.submitterName ?? '').toLowerCase().contains(query)
     ).toList();
   }
 
   void _handlePostsUpdate(List<JobPostModel> posts) {
-    // Use WidgetsBinding to schedule the state update after the build phase
     WidgetsBinding.instance.addPostFrameCallback((_) {
       setState(() {
         _allPosts = posts;
         _pendingPosts = _allPosts.where((p) => p.status == 'pending').toList();
-        _approvedPosts = _allPosts.where((p) => p.status == 'approved').toList();
+        _activePosts = _allPosts.where((p) => p.status == 'active').toList();
+        _completedPosts = _allPosts.where((p) => p.status == 'completed').toList();
         _rejectedPosts = _allPosts.where((p) => p.status == 'rejected').toList();
         _isLoading = false;
       });
@@ -138,7 +156,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Post Moderation',
+          'Job Post Management',
           style: TextStyle(
             fontWeight: FontWeight.w600,
             color: Colors.white,
@@ -165,7 +183,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search job posts by title or description...',
+                hintText: 'Search job posts by title, description, or author...',
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
                 filled: true,
                 fillColor: Colors.grey[50],
@@ -183,7 +201,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
             color: Colors.grey[50],
             child: Column(
               children: [
-                // Expand/Collapse Header
                 GestureDetector(
                   onTap: _toggleStatsExpansion,
                   child: Container(
@@ -208,12 +225,11 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                     ),
                   ),
                 ),
-                
-                // Stats Cards
+
                 AnimatedCrossFade(
                   duration: const Duration(milliseconds: 300),
-                  crossFadeState: _isStatsExpanded 
-                      ? CrossFadeState.showFirst 
+                  crossFadeState: _isStatsExpanded
+                      ? CrossFadeState.showFirst
                       : CrossFadeState.showSecond,
                   firstChild: _buildStatsSection(),
                   secondChild: const SizedBox.shrink(),
@@ -238,14 +254,19 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                   onTap: () => _switchTab(0),
                 ),
                 _TabButton(
-                  label: 'Approved',
+                  label: 'Active',
                   isSelected: _currentTabIndex == 1,
                   onTap: () => _switchTab(1),
                 ),
                 _TabButton(
-                  label: 'Rejected',
+                  label: 'Completed',
                   isSelected: _currentTabIndex == 2,
                   onTap: () => _switchTab(2),
+                ),
+                _TabButton(
+                  label: 'Rejected',
+                  isSelected: _currentTabIndex == 3,
+                  onTap: () => _switchTab(3),
                 ),
               ],
             ),
@@ -306,7 +327,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                   );
                 }
 
-                // Handle data when it arrives
                 if (snapshot.hasData) {
                   final posts = snapshot.data!;
                   _handlePostsUpdate(posts);
@@ -322,14 +342,28 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                       status: 'pending',
                       onApprove: _approvePost,
                       onReject: _rejectPost,
+                      onComplete: null,
+                      onReopen: null,
                       onView: _viewPost,
                     ),
-                    // Approved Tab
+                    // Active Tab
                     _PostsList(
-                      posts: _filterPosts(_approvedPosts),
-                      status: 'approved',
-                      onApprove: _approvePost,
+                      posts: _filterPosts(_activePosts),
+                      status: 'active',
+                      onApprove: null,
                       onReject: _rejectPost,
+                      onComplete: _completePost,
+                      onReopen: null,
+                      onView: _viewPost,
+                    ),
+                    // Completed Tab
+                    _PostsList(
+                      posts: _filterPosts(_completedPosts),
+                      status: 'completed',
+                      onApprove: null,
+                      onReject: null,
+                      onComplete: null,
+                      onReopen: _reopenPost,
                       onView: _viewPost,
                     ),
                     // Rejected Tab
@@ -337,7 +371,9 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                       posts: _filterPosts(_rejectedPosts),
                       status: 'rejected',
                       onApprove: _approvePost,
-                      onReject: _rejectPost,
+                      onReject: null,
+                      onComplete: null,
+                      onReopen: null,
                       onView: _viewPost,
                     ),
                   ],
@@ -366,9 +402,18 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
           const SizedBox(width: 12),
           Expanded(
             child: _StatCard(
-              count: _approvedPosts.length,
-              label: 'Approved',
+              count: _activePosts.length,
+              label: 'Active',
               color: Colors.green,
+              icon: Icons.play_arrow,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _StatCard(
+              count: _completedPosts.length,
+              label: 'Completed',
+              color: Colors.blue,
               icon: Icons.check_circle,
             ),
           ),
@@ -387,19 +432,517 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   }
 }
 
+// Reject Post Dialog
+class _RejectPostDialog extends StatefulWidget {
+  final JobPostModel post;
+
+  const _RejectPostDialog({required this.post});
+
+  @override
+  State<_RejectPostDialog> createState() => _RejectPostDialogState();
+}
+
+class _RejectPostDialogState extends State<_RejectPostDialog> {
+  final TextEditingController _reasonController = TextEditingController();
+  String? _selectedReason;
+  bool _isCustomReason = false;
+
+  final List<Map<String, String>> _commonReasons = [
+    {
+      'title': 'Incomplete Information',
+      'description': 'Missing essential job details'
+    },
+    {
+      'title': 'Inappropriate Content',
+      'description': 'Contains offensive language'
+    },
+    {
+      'title': 'Duplicate Post',
+      'description': 'Similar job already exists'
+    },
+    {
+      'title': 'Violates Guidelines',
+      'description': 'Breaks community rules'
+    },
+    {
+      'title': 'Spam Content',
+      'description': 'Promotional or spam content'
+    },
+    {
+      'title': 'Unclear Description',
+      'description': 'Job details are vague'
+    },
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 0,
+      backgroundColor: Colors.white,
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.9,
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.red[50],
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.red[100],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(Icons.warning_amber, color: Colors.red[700]),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Reject Job Post',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.red[700],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Please provide a reason for rejecting this post',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.red[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Post Preview
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey[200]!),
+                ),
+              ),
+              child: Container(
+                width: double.infinity,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Post Details',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      widget.post.title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${widget.post.category} • ${widget.post.location}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Content
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Common Reasons Section
+                    Text(
+                      'Select a reason',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Choose from common reasons or write your own',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Common Reasons - Single Column for better layout
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isSmallScreen = constraints.maxWidth < 400;
+                        return GridView.builder(
+                          physics: const NeverScrollableScrollPhysics(),
+                          shrinkWrap: true,
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: isSmallScreen ? 1 : 2,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                            childAspectRatio: isSmallScreen ? 3.5 : 2.5,
+                            mainAxisExtent: isSmallScreen ? 80 : 90,
+                          ),
+                          itemCount: _commonReasons.length,
+                          itemBuilder: (context, index) {
+                            final reason = _commonReasons[index];
+                            final isSelected = _selectedReason == reason['title'] && !_isCustomReason;
+
+                            return _ReasonCard(
+                              title: reason['title']!,
+                              description: reason['description']!,
+                              isSelected: isSelected,
+                              onTap: () {
+                                setState(() {
+                                  _selectedReason = reason['title'];
+                                  _reasonController.text = reason['title']!;
+                                  _isCustomReason = false;
+                                });
+                              },
+                            );
+                          },
+                        );
+                      },
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Custom Reason Option
+                    _CustomReasonCard(
+                      isSelected: _isCustomReason,
+                      controller: _reasonController,
+                      onTap: () {
+                        setState(() {
+                          _isCustomReason = true;
+                          _selectedReason = null;
+                          _reasonController.clear();
+                        });
+                      },
+                      onChanged: (value) {
+                        setState(() {});
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Actions
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(16),
+                  bottomRight: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        side: BorderSide(color: Colors.grey[400]!),
+                      ),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _reasonController.text.trim().isNotEmpty
+                          ? () => Navigator.pop(context, _reasonController.text.trim())
+                          : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.close, size: 18),
+                          SizedBox(width: 8),
+                          Text('Reject Post'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReasonCard extends StatelessWidget {
+  final String title;
+  final String description;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _ReasonCard({
+    required this.title,
+    required this.description,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: isSelected ? 2 : 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isSelected ? Colors.red : Colors.grey[300]!,
+          width: isSelected ? 2 : 1,
+        ),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.red[50] : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isSelected ? Colors.red : Colors.grey[400]!,
+                    width: 2,
+                  ),
+                  color: isSelected ? Colors.red : Colors.transparent,
+                ),
+                child: isSelected
+                    ? Icon(Icons.check, size: 12, color: Colors.white)
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: isSelected ? Colors.red[700] : Colors.grey[800],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isSelected ? Colors.red[600] : Colors.grey[600],
+                        height: 1.3,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CustomReasonCard extends StatelessWidget {
+  final bool isSelected;
+  final TextEditingController controller;
+  final VoidCallback onTap;
+  final Function(String) onChanged;
+
+  const _CustomReasonCard({
+    required this.isSelected,
+    required this.controller,
+    required this.onTap,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: isSelected ? 2 : 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isSelected ? Colors.blue : Colors.grey[300]!,
+          width: isSelected ? 2 : 1,
+        ),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.blue[50] : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected ? Colors.blue : Colors.grey[400]!,
+                        width: 2,
+                      ),
+                      color: isSelected ? Colors.blue : Colors.transparent,
+                    ),
+                    child: isSelected
+                        ? Icon(Icons.check, size: 12, color: Colors.white)
+                        : null,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Custom Reason',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected ? Colors.blue[700] : Colors.grey[800],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                onChanged: onChanged,
+                enabled: isSelected,
+                maxLines: 3,
+                minLines: 3,
+                decoration: InputDecoration(
+                  hintText: 'Type your reason here...',
+                  filled: true,
+                  fillColor: isSelected ? Colors.white : Colors.grey[50],
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey[300]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey[300]!),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.blue!),
+                  ),
+                  contentPadding: const EdgeInsets.all(12),
+                ),
+              ),
+              if (!isSelected) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Tap to enable custom reason',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[500],
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 // Posts List for each tab
 class _PostsList extends StatelessWidget {
   final List<JobPostModel> posts;
   final String status;
-  final Function(JobPostModel) onApprove;
-  final Function(JobPostModel) onReject;
+  final Function(JobPostModel)? onApprove;
+  final Function(JobPostModel)? onReject;
+  final Function(JobPostModel)? onComplete;
+  final Function(JobPostModel)? onReopen;
   final Function(JobPostModel) onView;
 
   const _PostsList({
     required this.posts,
     required this.status,
-    required this.onApprove,
-    required this.onReject,
+    this.onApprove,
+    this.onReject,
+    this.onComplete,
+    this.onReopen,
     required this.onView,
   });
 
@@ -407,7 +950,6 @@ class _PostsList extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Results count
         if (posts.isNotEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -424,23 +966,24 @@ class _PostsList extends StatelessWidget {
               ],
             ),
           ),
-        
-        // Posts list or empty state
+
         Expanded(
           child: posts.isNotEmpty
               ? ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  itemCount: posts.length,
-                  itemBuilder: (context, index) {
-                    final post = posts[index];
-                    return _PostCard(
-                      post: post,
-                      onApprove: onApprove,
-                      onReject: onReject,
-                      onView: onView,
-                    );
-                  },
-                )
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            itemCount: posts.length,
+            itemBuilder: (context, index) {
+              final post = posts[index];
+              return _PostCard(
+                post: post,
+                onApprove: onApprove,
+                onReject: onReject,
+                onComplete: onComplete,
+                onReopen: onReopen,
+                onView: onView,
+              );
+            },
+          )
               : _buildEmptyState(status),
         ),
       ],
@@ -450,12 +993,14 @@ class _PostsList extends StatelessWidget {
   Widget _buildEmptyState(String status) {
     final emptyMessages = {
       'pending': 'No pending posts to review',
-      'approved': 'No approved posts yet',
+      'active': 'No active posts',
+      'completed': 'No completed posts',
       'rejected': 'No rejected posts'
     };
     final emptyIcons = {
       'pending': Icons.pending_actions,
-      'approved': Icons.check_circle,
+      'active': Icons.play_arrow,
+      'completed': Icons.check_circle,
       'rejected': Icons.cancel
     };
 
@@ -508,7 +1053,7 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 80, // Fixed height for same size
+      height: 80,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -577,8 +1122,10 @@ class _TabButton extends StatelessWidget {
     switch (label) {
       case 'Pending':
         return Colors.orange;
-      case 'Approved':
+      case 'Active':
         return Colors.green;
+      case 'Completed':
+        return Colors.blue;
       case 'Rejected':
         return Colors.red;
       default:
@@ -618,14 +1165,18 @@ class _TabButton extends StatelessWidget {
 
 class _PostCard extends StatelessWidget {
   final JobPostModel post;
-  final Function(JobPostModel) onApprove;
-  final Function(JobPostModel) onReject;
+  final Function(JobPostModel)? onApprove;
+  final Function(JobPostModel)? onReject;
+  final Function(JobPostModel)? onComplete;
+  final Function(JobPostModel)? onReopen;
   final Function(JobPostModel) onView;
 
   const _PostCard({
     required this.post,
-    required this.onApprove,
-    required this.onReject,
+    this.onApprove,
+    this.onReject,
+    this.onComplete,
+    this.onReopen,
     required this.onView,
   });
 
@@ -633,8 +1184,10 @@ class _PostCard extends StatelessWidget {
     switch (status) {
       case 'pending':
         return Colors.orange;
-      case 'approved':
+      case 'active':
         return Colors.green;
+      case 'completed':
+        return Colors.blue;
       case 'rejected':
         return Colors.red;
       default:
@@ -646,8 +1199,10 @@ class _PostCard extends StatelessWidget {
     switch (status) {
       case 'pending':
         return 'Pending Review';
-      case 'approved':
-        return 'Approved';
+      case 'active':
+        return 'Active';
+      case 'completed':
+        return 'Completed';
       case 'rejected':
         return 'Rejected';
       default:
@@ -659,63 +1214,113 @@ class _PostCard extends StatelessWidget {
   Widget build(BuildContext context) {
     List<Widget> actionButtons = [];
 
-    if (post.status == 'pending') {
-      actionButtons = [
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: () => onApprove(post),
-            icon: const Icon(Icons.check, size: 18),
-            label: const Text('Approve'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    // Build action buttons based on current status
+    switch (post.status) {
+      case 'pending':
+        actionButtons = [
+          if (onApprove != null)
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => onApprove!(post),
+                icon: const Icon(Icons.check, size: 18),
+                label: const Text('Approve'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
             ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: () => onReject(post),
-            icon: const Icon(Icons.close, size: 18),
-            label: const Text('Reject'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          if (onApprove != null && onReject != null) const SizedBox(width: 8),
+          if (onReject != null)
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => onReject!(post),
+                icon: const Icon(Icons.close, size: 18),
+                label: const Text('Reject'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
             ),
-          ),
-        ),
-      ];
-    } else if (post.status == 'approved') {
-      actionButtons = [
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: () => onReject(post),
-            icon: const Icon(Icons.close, size: 18),
-            label: const Text('Reject'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ];
+        break;
+      case 'active':
+        actionButtons = [
+          if (onComplete != null)
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => onComplete!(post),
+                icon: const Icon(Icons.done_all, size: 18),
+                label: const Text('Complete'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
             ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        const Expanded(child: SizedBox()), // Spacer for alignment
-      ];
-    } else {
-      actionButtons = [
-        const Expanded(child: SizedBox()),
-        const SizedBox(width: 8),
-        const Expanded(child: SizedBox()),
-      ];
+          if (onComplete != null && onReject != null) const SizedBox(width: 8),
+          if (onReject != null)
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => onReject!(post),
+                icon: const Icon(Icons.close, size: 18),
+                label: const Text('Reject'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ),
+        ];
+        break;
+      case 'completed':
+        actionButtons = [
+          if (onReopen != null)
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => onReopen!(post),
+                icon: const Icon(Icons.replay, size: 18),
+                label: const Text('Reopen'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ),
+        ];
+        break;
+      case 'rejected':
+        actionButtons = [
+          if (onApprove != null)
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => onApprove!(post),
+                icon: const Icon(Icons.check, size: 18),
+                label: const Text('Approve'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ),
+        ];
+        break;
     }
 
-    // Always add view button
+    // Add view button
     actionButtons.add(const SizedBox(width: 8));
     actionButtons.add(
       Container(
