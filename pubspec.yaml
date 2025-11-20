@@ -44,6 +44,9 @@ dependencies:
   pdf: ^3.11.1
   printing: ^5.13.3
   path_provider: ^2.1.5
+  google_maps_flutter: ^2.5.0
+  geocoding: ^3.0.0
+  http: ^1.1.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

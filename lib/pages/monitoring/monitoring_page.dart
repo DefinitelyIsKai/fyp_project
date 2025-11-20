@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/pages/monitoring/search_filter_page.dart';
 import 'package:fyp_project/pages/monitoring/flagged_content_page.dart';
+import 'package:fyp_project/pages/monitoring/map_oversight_page.dart';
 
 class MonitoringPage extends StatelessWidget {
   const MonitoringPage({super.key});
@@ -207,6 +208,23 @@ class MonitoringPage extends StatelessWidget {
                 badgeCount: pendingCount,
               );
             },
+          ),
+
+          // Map Oversight Card
+          _ManagementCard(
+            title: 'Map Oversight',
+            description: 'Visualize users and job posts on an interactive map',
+            icon: Icons.map,
+            iconColor: Colors.green[700]!,
+            backgroundColor: Colors.green[50]!,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const MapOversightPage()),
+              );
+            },
+            stats: 'View on map',
+            badgeCount: 0,
           ),
         ],
       ),
