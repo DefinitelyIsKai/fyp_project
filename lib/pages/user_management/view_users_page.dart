@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/models/user_model.dart';
 import 'package:fyp_project/services/user_service.dart';
 import 'package:fyp_project/pages/user_management/user_detail_page.dart';
@@ -13,9 +12,9 @@ class ViewUsersPage extends StatefulWidget {
 
 class _ViewUsersPageState extends State<ViewUsersPage> {
   final UserService _userService = UserService();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   List<UserModel> _users = [];
   List<UserModel> _filteredUsers = [];
+  List<String> _availableRoles = [];
   bool _isLoading = true;
   String _selectedRole = 'all';
   final TextEditingController _searchController = TextEditingController();
@@ -23,7 +22,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   @override
   void initState() {
     super.initState();
-    _loadUsers();
+    _loadData();
     _searchController.addListener(_filterUsers);
   }
 
@@ -33,17 +32,23 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     super.dispose();
   }
 
-  Future<void> _loadUsers() async {
+  Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      final users = await _userService.getAllUsers();
+      final usersFuture = _userService.getAllUsers();
+      final rolesFuture = _userService.getAllRoles();
+
+      final users = await usersFuture;
+      final roles = await rolesFuture;
+
       setState(() {
         _users = users;
         _filteredUsers = users;
+        _availableRoles = roles;
       });
     } catch (e) {
       if (mounted) {
-        _showSnackBar('Error loading users: $e', isError: true);
+        _showSnackBar('Error loading data: $e', isError: true);
       }
     } finally {
       setState(() => _isLoading = false);
@@ -75,84 +80,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     );
   }
 
-  Future<void> _sendViolationNotification({
-    required String userId,
-    required String violationReason,
-    required int durationDays,
-    required String userName,
-    required String userEmail,
-  }) async {
-    try {
-      await _firestore.collection('notifications').add({
-        'body': 'Your account has been suspended for $durationDays days due to violation of our community guidelines. Reason: $violationReason',
-        'category': 'account_suspension',
-        'createdAt': FieldValue.serverTimestamp(),
-        'isRead': false,
-        'metadata': {
-          'violationReason': violationReason,
-          'suspensionDuration': durationDays,
-          'userName': userName,
-          'userEmail': userEmail,
-          'actionType': 'suspension',
-        },
-        'title': 'Account Suspension Notice',
-        'userId': userId,
-      });
-    } catch (e) {
-      print('Error sending violation notification: $e');
-    }
-  }
-
-  Future<void> _sendUnsuspensionNotification({
-    required String userId,
-    required String userName,
-    required String userEmail,
-  }) async {
-    try {
-      await _firestore.collection('notifications').add({
-        'body': 'Your account suspension has been lifted. You can now access all features normally.',
-        'category': 'account_unsuspension',
-        'createdAt': FieldValue.serverTimestamp(),
-        'isRead': false,
-        'metadata': {
-          'userName': userName,
-          'userEmail': userEmail,
-          'actionType': 'unsuspension',
-        },
-        'title': 'Account Access Restored',
-        'userId': userId,
-      });
-    } catch (e) {
-      print('Error sending unsuspension notification: $e');
-    }
-  }
-
-  Future<void> _sendDeletionNotification({
-    required String userId,
-    required String userName,
-    required String userEmail,
-    required String deletionReason,
-  }) async {
-    try {
-      await _firestore.collection('notifications').add({
-        'body': 'Your account has been permanently deleted due to severe violations of our community guidelines. Reason: $deletionReason',
-        'category': 'account_deletion',
-        'createdAt': FieldValue.serverTimestamp(),
-        'isRead': false,
-        'metadata': {
-          'deletionReason': deletionReason,
-          'userName': userName,
-          'userEmail': userEmail,
-          'actionType': 'deletion',
-        },
-        'title': 'Account Deletion Notice',
-        'userId': userId,
-      });
-    } catch (e) {
-      print('Error sending deletion notification: $e');
-    }
-  }
-
   Color _getStatusColor(UserModel user) {
     if (user.isSuspended) return Colors.orange;
     if (!user.isActive) return Colors.red;
@@ -166,22 +93,11 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   }
 
   String _getRoleDisplayName(String role) {
-    switch (role) {
-      case 'job_seeker':
-        return 'Jobseeker';
-      case 'employer':
-        return 'Employer';
-      case 'employee':
-        return 'Employee';
-      case 'staff':
-        return 'Staff';
-      case 'HR':
-        return 'HR';
-      case 'manager':
-        return 'Manager';
-      default:
-        return role;
-    }
+    // Convert snake_case to Title Case
+    return role.replaceAll('_', ' ').split(' ').map((word) {
+      if (word.isEmpty) return word;
+      return word[0].toUpperCase() + word.substring(1).toLowerCase();
+    }).join(' ');
   }
 
   Widget _buildActionButtons(UserModel user) {
@@ -213,13 +129,13 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
           ),
         ),
 
-        // Status Toggle Button
+        // Warning Button (replaces Suspend)
         ElevatedButton.icon(
           onPressed: () {
             if (user.isSuspended) {
               _unsuspendUser(user);
             } else {
-              _showSuspendDialog(user);
+              _showWarningDialog(user);
             }
           },
           style: ElevatedButton.styleFrom(
@@ -232,11 +148,11 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           ),
           icon: Icon(
-            user.isSuspended ? Icons.check_circle : Icons.pause_circle,
+            user.isSuspended ? Icons.check_circle : Icons.warning_amber,
             size: 16,
           ),
           label: Text(
-            user.isSuspended ? 'Activate' : 'Suspend',
+            user.isSuspended ? 'Activate' : 'Give Warning',
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
           ),
         ),
@@ -265,9 +181,12 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     );
   }
 
-  Future<void> _showSuspendDialog(UserModel user) async {
+  Future<void> _showWarningDialog(UserModel user) async {
     final violationController = TextEditingController();
-    final durationController = TextEditingController(text: '7');
+
+    // Get current strike count
+    final currentStrikes = await _userService.getStrikeCount(user.id);
+    final strikesRemaining = 3 - currentStrikes;
 
     await showDialog(
       context: context,
@@ -276,7 +195,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
           children: [
             Icon(Icons.warning_amber, color: Colors.orange),
             SizedBox(width: 8),
-            Text('Suspend User Account'),
+            Text('Issue Warning'),
           ],
         ),
         content: SingleChildScrollView(
@@ -285,8 +204,33 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'You are about to suspend ${user.fullName}.',
+                'You are about to issue a warning to ${user.fullName}.',
                 style: const TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange[200]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.orange[700], size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Current strikes: $currentStrikes/3\n${strikesRemaining > 0 ? '$strikesRemaining more strike${strikesRemaining == 1 ? '' : 's'} until automatic suspension' : 'Account will be suspended automatically'}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
 
@@ -305,25 +249,9 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                 ),
                 textInputAction: TextInputAction.done,
               ),
-              const SizedBox(height: 16),
-
-              const Text(
-                'Suspension Duration (days)',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: durationController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  hintText: 'Enter number of days',
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.all(12),
-                ),
-              ),
               const SizedBox(height: 8),
               Text(
-                'The user will receive a notification explaining the violation and suspension duration.',
+                'The user will receive a warning notification. After 3 strikes, their account will be automatically suspended.',
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey[600],
@@ -341,7 +269,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
           ElevatedButton(
             onPressed: () async {
               final violationReason = violationController.text.trim();
-              final duration = int.tryParse(durationController.text.trim()) ?? 7;
 
               if (violationReason.isEmpty) {
                 if (!mounted) return;
@@ -355,56 +282,63 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
               }
 
               Navigator.pop(context);
-              await _suspendUser(user, violationReason, duration);
+              await _issueWarning(user, violationReason);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Suspend Account'),
+            child: const Text('Issue Warning'),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _suspendUser(UserModel user, String violationReason, int durationDays) async {
+  Future<void> _issueWarning(UserModel user, String violationReason) async {
     try {
-      // Send violation notification first
-      await _sendViolationNotification(
+      final result = await _userService.issueWarning(
         userId: user.id,
         violationReason: violationReason,
-        durationDays: durationDays,
-        userName: user.fullName,
-        userEmail: user.email,
       );
 
-      // Then suspend the user
-      await _userService.suspendUser(user.id);
-
       if (!mounted) return;
-      _showSnackBar('${user.fullName} suspended for $durationDays days');
-      _loadUsers();
+
+      if (result['success'] == true) {
+        final strikeCount = result['strikeCount'];
+        final wasSuspended = result['wasSuspended'];
+        final userName = result['userName'];
+
+        if (wasSuspended) {
+          _showSnackBar('$userName has reached 3 strikes and has been automatically suspended');
+        } else {
+          _showSnackBar('Warning issued to $userName (Strike $strikeCount/3)');
+        }
+      } else {
+        _showSnackBar('Failed to issue warning: ${result['error']}', isError: true);
+      }
+
+      _loadData();
     } catch (e) {
       if (!mounted) return;
-      _showSnackBar('Failed to suspend user: $e', isError: true);
+      _showSnackBar('Failed to issue warning: $e', isError: true);
     }
   }
 
   Future<void> _unsuspendUser(UserModel user) async {
     try {
-      await _userService.unsuspendUser(user.id);
-
-      // Send unsuspension notification
-      await _sendUnsuspensionNotification(
-        userId: user.id,
-        userName: user.fullName,
-        userEmail: user.email,
-      );
+      final result = await _userService.unsuspendUserWithReset(user.id);
 
       if (!mounted) return;
-      _showSnackBar('${user.fullName} unsuspended successfully');
-      _loadUsers();
+
+      if (result['success'] == true) {
+        final userName = result['userName'];
+        _showSnackBar('$userName unsuspended successfully. Strikes reset to 0.');
+      } else {
+        _showSnackBar('Failed to unsuspend user: ${result['error']}', isError: true);
+      }
+
+      _loadData();
     } catch (e) {
       if (!mounted) return;
       _showSnackBar('Failed to unsuspend user: $e', isError: true);
@@ -493,20 +427,21 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
 
   Future<void> _deleteUser(UserModel user, String deletionReason) async {
     try {
-      // Send deletion notification first
-      await _sendDeletionNotification(
+      final result = await _userService.deleteUserWithNotification(
         userId: user.id,
-        userName: user.fullName,
-        userEmail: user.email,
         deletionReason: deletionReason,
       );
 
-      // Then delete the user
-      await _userService.deleteUser(user.id);
-
       if (!mounted) return;
-      _showSnackBar('${user.fullName}\'s account has been deleted');
-      _loadUsers();
+
+      if (result['success'] == true) {
+        final userName = result['userName'];
+        _showSnackBar('$userName\'s account has been deleted');
+      } else {
+        _showSnackBar('Failed to delete user: ${result['error']}', isError: true);
+      }
+
+      _loadData();
     } catch (e) {
       if (!mounted) return;
       _showSnackBar('Failed to delete user: $e', isError: true);
@@ -535,7 +470,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: RefreshIndicator(
-        onRefresh: _loadUsers,
+        onRefresh: _loadData,
         color: Colors.blue[700],
         backgroundColor: Colors.white,
         child: Column(
@@ -577,7 +512,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Filter Row (removed refresh button)
+                  // Filter Row with dynamic roles
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -597,21 +532,17 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                           value: _selectedRole,
                           isExpanded: true,
                           icon: const Icon(Icons.filter_list, color: Colors.grey),
-                          items: const [
-                            DropdownMenuItem(
-                                value: 'all', child: Text('All Roles')),
-                            DropdownMenuItem(
-                                value: 'job_seeker', child: Text('Job Seekers')),
-                            DropdownMenuItem(
-                                value: 'employer', child: Text('Employers')),
-                            DropdownMenuItem(
-                                value: 'employee', child: Text('Employees')),
-                            DropdownMenuItem(
-                                value: 'staff', child: Text('Staff')),
-                            DropdownMenuItem(
-                                value: 'HR', child: Text('HR')),
-                            DropdownMenuItem(
-                                value: 'manager', child: Text('Manager')),
+                          items: [
+                            const DropdownMenuItem(
+                              value: 'all',
+                              child: Text('All Roles'),
+                            ),
+                            ..._availableRoles.map((role) {
+                              return DropdownMenuItem(
+                                value: role,
+                                child: Text(_getRoleDisplayName(role)),
+                              );
+                            }).toList(),
                           ],
                           onChanged: (value) {
                             setState(() => _selectedRole = value ?? 'all');
@@ -720,112 +651,145 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                   final status = _getStatusText(user);
                   final statusColor = _getStatusColor(user);
 
-                  return Container(
-                    margin: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
-                    child: Card(
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Name and Status Row
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    user.fullName.isNotEmpty
-                                        ? user.fullName
-                                        : 'Unnamed User',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 16,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: statusColor.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: statusColor.withOpacity(0.3)),
-                                  ),
-                                  child: Text(
-                                    status,
-                                    style: TextStyle(
-                                      color: statusColor,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
+                  return FutureBuilder<int>(
+                    future: _userService.getStrikeCount(user.id),
+                    builder: (context, snapshot) {
+                      final strikeCount = snapshot.data ?? 0;
 
-                            // Email
-                            Text(
-                              user.email,
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 14,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 8),
-
-                            // Role and ID
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              crossAxisAlignment: WrapCrossAlignment.center,
+                      return Container(
+                        margin: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        child: Card(
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue[50],
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    '${_getRoleDisplayName(user.role)} + ID: ${_formatUserId(user.id)}',
-                                    style: TextStyle(
-                                      color: Colors.blue[700],
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
+                                // Name and Status Row
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        user.fullName.isNotEmpty
+                                            ? user.fullName
+                                            : 'Unnamed User',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 16,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
-                                  ),
+                                    const SizedBox(width: 8),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: statusColor.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(color: statusColor.withOpacity(0.3)),
+                                          ),
+                                          child: Text(
+                                            status,
+                                            style: TextStyle(
+                                              color: statusColor,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                        if (strikeCount > 0 && !user.isSuspended) ...[
+                                          const SizedBox(height: 4),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.orange[100],
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              '$strikeCount/3 strikes',
+                                              style: TextStyle(
+                                                color: Colors.orange[800],
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ],
                                 ),
-                                const Spacer(),
+                                const SizedBox(height: 4),
+
+                                // Email
                                 Text(
-                                  'Joined: ${_formatDate(user.createdAt)}',
+                                  user.email,
                                   style: TextStyle(
-                                    color: Colors.grey[500],
-                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                    fontSize: 14,
                                   ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
+                                const SizedBox(height: 8),
+
+                                // Role and ID
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue[50],
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        '${_getRoleDisplayName(user.role)} + ID: ${_formatUserId(user.id)}',
+                                        style: TextStyle(
+                                          color: Colors.blue[700],
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    Text(
+                                      'Joined: ${_formatDate(user.createdAt)}',
+                                      style: TextStyle(
+                                        color: Colors.grey[500],
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+
+                                // Action Buttons
+                                _buildActionButtons(user),
                               ],
                             ),
-                            const SizedBox(height: 12),
-
-                            // Action Buttons
-                            _buildActionButtons(user),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
+                      );
+                    },
                   );
                 },
               ),

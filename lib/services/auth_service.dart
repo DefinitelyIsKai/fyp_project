@@ -18,7 +18,6 @@ class AuthService extends ChangeNotifier {
   /// --------------------
 Future<bool> register(String name, String email, String password, {required String role}) async{
     try {
-      // 1️⃣ Create user in Firebase Auth
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
         email: email.trim().toLowerCase(),
         password: password.trim(),
@@ -26,8 +25,7 @@ Future<bool> register(String name, String email, String password, {required Stri
 
       final uid = userCredential.user!.uid;
 
-      // 2️⃣ Create Firestore user document
-      await _firestore.collection('users').doc(uid).set({
+        await _firestore.collection('users').doc(uid).set({
         'email': email.trim().toLowerCase(),
         'fullName': name,
         'role': role,

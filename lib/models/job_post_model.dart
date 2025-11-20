@@ -54,13 +54,11 @@ class JobPostModel {
           : null,
       createdAt: (data['createdAt'] as Timestamp).toDate(),
 
-      /// 🔥 Correct field (Firestore uses ownerId)
       submitterName: data['ownerId'],
 
       tags: List<String>.from(data['tags'] ?? []),
       requiredSkills: List<String>.from(data['requiredSkills'] ?? []),
 
-      /// 🔥 Show rejection reason (can be null)
       rejectionReason: data['rejectionReason'],
     );
   }
