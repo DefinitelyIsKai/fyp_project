@@ -14,7 +14,7 @@ class UserAnalyticsPage extends StatefulWidget {
 class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
   final AnalyticsService _analyticsService = AnalyticsService();
   bool _isLoading = true;
-  AnalyticsModel? _todayAnalytics;
+  AnalyticsModel? _analytics;
   List<AnalyticsModel> _weeklyAnalytics = [];
   DateTime _startDate = DateTime.now().subtract(const Duration(days: 30));
   DateTime _endDate = DateTime.now();
@@ -26,28 +26,45 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
   }
 
   Future<void> _loadAnalytics() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      final today = DateTime.now();
-      // Use comprehensive analytics for richer data
-      final todayData = await _analyticsService.getComprehensiveAnalytics(today);
-
+      // Use the selected date range for analytics
+      final analytics = await _analyticsService.getAnalyticsForRange(_startDate, _endDate);
+      
+      // Load data for charts - use the selected date range
       List<AnalyticsModel> weekly = [];
-      for (int i = 6; i >= 0; i--) {
-        final day = today.subtract(Duration(days: i));
-        weekly.add(await _analyticsService.getComprehensiveAnalytics(day));
+      final daysDiff = _endDate.difference(_startDate).inDays;
+      final daysToLoad = daysDiff > 7 ? 7 : daysDiff;
+      
+      // Calculate step size to evenly distribute points across the range
+      final step = daysDiff > 0 ? daysDiff / daysToLoad : 1;
+      
+      for (int i = 0; i <= daysToLoad; i++) {
+        final dayOffset = (step * i).round();
+        final day = _startDate.add(Duration(days: dayOffset));
+        if (day.isBefore(_endDate.add(const Duration(days: 1)))) {
+          // Get analytics for this specific day
+          final dayStart = DateTime(day.year, day.month, day.day);
+          final dayEnd = DateTime(day.year, day.month, day.day, 23, 59, 59);
+          weekly.add(await _analyticsService.getAnalyticsForRange(dayStart, dayEnd));
+        }
       }
 
-      setState(() {
-        _todayAnalytics = todayData;
-        _weeklyAnalytics = weekly;
-      });
+      if (mounted) {
+        setState(() {
+          _analytics = analytics;
+          _weeklyAnalytics = weekly;
+        });
+      }
     } catch (e) {
       if (mounted) {
         _showSnackBar('Error loading analytics: $e', isError: true);
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -62,248 +79,597 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, String subtitle, Color color, IconData icon) {
-    return Container(
-      margin: const EdgeInsets.all(6),
-      child: Card(
-        elevation: 3,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [color.withOpacity(0.1), color.withOpacity(0.05)],
-            ),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 24, color: color),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      value,
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: color,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[700],
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    if (subtitle.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+  Future<void> _selectDateRange() async {
+    if (!mounted) return;
+
+    final result = await showDialog<Map<String, DateTime>>(
+      context: context,
+      builder: (dialogContext) => _DateRangePickerDialog(
+        startDate: _startDate,
+        endDate: _endDate,
       ),
     );
+
+    if (result != null && mounted) {
+      setState(() {
+        _startDate = result['start']!;
+        _endDate = result['end']!;
+      });
+      _loadAnalytics();
+    }
   }
 
-  Widget _buildGrowthIndicator(double growth, {bool isPositiveGood = true}) {
-    final isPositive = growth > 0;
-    final color = isPositiveGood ? (isPositive ? Colors.green : Colors.red) : (isPositive ? Colors.red : Colors.green);
-    final icon = isPositive ? Icons.trending_up : Icons.trending_down;
+  void _selectQuickDateRange(int days) {
+    setState(() {
+      _endDate = DateTime.now();
+      _startDate = DateTime.now().subtract(Duration(days: days));
+    });
+    _loadAnalytics();
+  }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  String _getDateRangeText() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final startDay = DateTime(_startDate.year, _startDate.month, _startDate.day);
+    final endDay = DateTime(_endDate.year, _endDate.month, _endDate.day);
+    final daysDiff = _endDate.difference(_startDate).inDays;
+    
+    // Check if it's actually today
+    if (startDay == today && endDay == today) {
+      return 'Today';
+    }
+    
+    // Check if it's actually yesterday
+    if (startDay == yesterday && endDay == yesterday) {
+      return 'Yesterday';
+    }
+    
+    // Check for common ranges only if they match the actual date range
+    if (daysDiff == 6 && endDay == today) {
+      return 'Last 7 days';
+    }
+    if (daysDiff == 29 && endDay == today) {
+      return 'Last 30 days';
+    }
+    if (daysDiff == 89 && endDay == today) {
+      return 'Last 3 months';
+    }
+    
+    // For custom ranges, show the actual dates
+    return '${_formatDate(_startDate)} - ${_formatDate(_endDate)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(
+        title: const Text(
+          'User Analytics Dashboard',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
+        backgroundColor: Colors.purple[700],
+        elevation: 0,
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      body: Column(
         children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 4),
-          Text(
-            '${growth.abs().toStringAsFixed(1)}%',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: color,
+          // Header Section
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.purple[700],
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(20),
+                bottomRight: Radius.circular(20),
+              ),
             ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'User Analytics & Insights',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Track user growth, engagement, and activity patterns',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.white.withOpacity(0.9),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Date Range Selector with Quick Presets
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  spreadRadius: 1,
+                  blurRadius: 3,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: _selectDateRange,
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey[300]!),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.calendar_today, color: Colors.purple[700]),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Date Range',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _getDateRangeText(),
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: _loadAnalytics,
+                      icon: const Icon(Icons.refresh, size: 20),
+                      label: const Text('Refresh'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.purple[700],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Quick Date Presets
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _QuickDateButton(
+                      label: 'Today',
+                      onTap: () => _selectQuickDateRange(0),
+                      isActive: _endDate.difference(_startDate).inDays == 0,
+                    ),
+                    _QuickDateButton(
+                      label: '7 Days',
+                      onTap: () => _selectQuickDateRange(7),
+                      isActive: _endDate.difference(_startDate).inDays == 7,
+                    ),
+                    _QuickDateButton(
+                      label: '30 Days',
+                      onTap: () => _selectQuickDateRange(30),
+                      isActive: _endDate.difference(_startDate).inDays == 30,
+                    ),
+                    _QuickDateButton(
+                      label: '90 Days',
+                      onTap: () => _selectQuickDateRange(90),
+                      isActive: _endDate.difference(_startDate).inDays == 90,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Analytics Content
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _analytics == null
+                    ? _buildEmptyState()
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            // Quick Stats Row
+                            _buildQuickStats(),
+                            const SizedBox(height: 20),
+
+                            // User Statistics Section
+                            _buildUserStatisticsSection(),
+                            const SizedBox(height: 16),
+
+                            // User Engagement Section
+                            _buildUserEngagementSection(),
+                            const SizedBox(height: 16),
+
+                            // User Activity Charts
+                            _buildChartsSection(),
+                            const SizedBox(height: 16),
+
+                            // User Reports Section
+                            _buildUserReportsSection(),
+                            const SizedBox(height: 20),
+
+                            // Generate Report Button
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () async {
+                                  try {
+                                    final result = await _analyticsService.generateComprehensiveReport(
+                                      _startDate,
+                                      _endDate,
+                                    );
+                                    if (mounted) {
+                                      _showSnackBar('Report generated successfully!');
+                                      // You could also show a dialog with the report
+                                      print(result); // For now, just print to console
+                                    }
+                                  } catch (e) {
+                                    if (mounted) {
+                                      _showSnackBar('Error generating report: $e', isError: true);
+                                    }
+                                  }
+                                },
+                                icon: const Icon(Icons.analytics),
+                                label: const Text(
+                                  'Generate Comprehensive User Report',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.purple[700],
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                          ],
+                        ),
+                      ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildLineChart() {
-    if (_weeklyAnalytics.isEmpty) return _buildEmptyChart('No data available');
-
-    return Container(
-      height: 300,
-      padding: const EdgeInsets.all(16),
-      child: Card(
-        elevation: 3,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: SfCartesianChart(
-            title: ChartTitle(text: 'User Growth Trend'),
-            primaryXAxis: CategoryAxis(
-              labelRotation: 45,
-              majorGridLines: const MajorGridLines(width: 0),
-              labelStyle: const TextStyle(fontSize: 12),
-            ),
-            primaryYAxis: NumericAxis(
-              minimum: 0,
-              majorGridLines: const MajorGridLines(width: 0.5, color: Colors.grey),
-              labelStyle: const TextStyle(fontSize: 12),
-            ),
-            legend: Legend(
-              isVisible: true,
-              position: LegendPosition.bottom,
-              overflowMode: LegendItemOverflowMode.wrap,
-            ),
-            tooltipBehavior: TooltipBehavior(
-              enable: true,
-              header: '',
-              format: 'point.x\npoint.y users',
-            ),
-            series: <CartesianSeries<AnalyticsModel, String>>[
-              LineSeries<AnalyticsModel, String>(
-                name: 'Total Users',
-                dataSource: _weeklyAnalytics,
-                xValueMapper: (model, _) => DateFormat('MMM dd').format(model.date),
-                yValueMapper: (model, _) => model.totalUsers,
-                markerSettings: const MarkerSettings(isVisible: true, height: 6, width: 6),
-                color: Colors.blue,
-                width: 3,
-              ),
-              LineSeries<AnalyticsModel, String>(
-                name: 'Active Users',
-                dataSource: _weeklyAnalytics,
-                xValueMapper: (model, _) => DateFormat('MMM dd').format(model.date),
-                yValueMapper: (model, _) => model.activeUsers,
-                markerSettings: const MarkerSettings(isVisible: true, height: 6, width: 6),
-                color: Colors.green,
-                width: 3,
-              ),
-              LineSeries<AnalyticsModel, String>(
-                name: 'New Registrations',
-                dataSource: _weeklyAnalytics,
-                xValueMapper: (model, _) => DateFormat('MMM dd').format(model.date),
-                yValueMapper: (model, _) => model.newRegistrations,
-                markerSettings: const MarkerSettings(isVisible: true, height: 6, width: 6),
-                color: Colors.orange,
-                width: 3,
-              ),
-            ],
+  Widget _buildQuickStats() {
+    return Row(
+      children: [
+        Expanded(
+          child: _QuickStatCard(
+            title: 'Total Users',
+            value: _analytics!.totalUsers.toString(),
+            subtitle: 'All registered',
+            color: Colors.blue,
+            icon: Icons.people,
+            trend: _analytics!.userGrowthRate,
           ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _QuickStatCard(
+            title: 'Active Users',
+            value: _analytics!.activeUsers.toString(),
+            subtitle: 'Currently online',
+            color: Colors.green,
+            icon: Icons.online_prediction,
+            trend: _analytics!.activeUserGrowth,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _QuickStatCard(
+            title: 'New Users',
+            value: _analytics!.newRegistrations.toString(),
+            subtitle: 'This period',
+            color: Colors.orange,
+            icon: Icons.person_add,
+            trend: _analytics!.registrationGrowth,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUserStatisticsSection() {
+    return _AnalyticsSectionCard(
+      title: 'User Statistics',
+      icon: Icons.people_alt,
+      color: Colors.blue,
+      children: [
+        _MetricRow(
+          label: 'Total Users',
+          value: _analytics!.totalUsers.toString(),
+          trend: _analytics!.userGrowthRate,
+        ),
+        _MetricRow(
+          label: 'Active Users',
+          value: '${_analytics!.activeUsers.toString()} (${_analytics!.activeUserPercentage.toStringAsFixed(1)}%)',
+          trend: _analytics!.activeUserGrowth,
+          subMetrics: {
+            'Inactive': _analytics!.inactiveUsers.toString(),
+          },
+        ),
+        _MetricRow(
+          label: 'New Registrations',
+          value: _analytics!.newRegistrations.toString(),
+          trend: _analytics!.registrationGrowth,
+        ),
+        _MetricRow(
+          label: 'Average Session Duration',
+          value: '${_analytics!.avgSessionDuration.toStringAsFixed(1)} min',
+          trend: _analytics!.sessionGrowth,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUserEngagementSection() {
+    return _AnalyticsSectionCard(
+      title: 'User Engagement',
+      icon: Icons.trending_up,
+      color: Colors.green,
+      children: [
+        _MetricRow(
+          label: 'Engagement Rate',
+          value: '${_analytics!.engagementRate.toStringAsFixed(1)}%',
+          trend: _analytics!.engagementGrowth,
+        ),
+        _MetricRow(
+          label: 'Profile Views',
+          value: _analytics!.profileViews.toString(),
+          trend: _analytics!.profileViewGrowth,
+        ),
+        _MetricRow(
+          label: 'Messages Sent',
+          value: _analytics!.totalMessages.toString(),
+          trend: _analytics!.messageGrowth,
+        ),
+        _MetricRow(
+          label: 'Job Applications',
+          value: _analytics!.totalApplications.toString(),
+          trend: _analytics!.applicationGrowth,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChartsSection() {
+    return Column(
+      children: [
+        // Line Chart
+        _buildLineChart(),
+        const SizedBox(height: 16),
+        // Pie Chart
+        _buildPieChart(),
+      ],
+    );
+  }
+
+  Widget _buildLineChart() {
+    if (_weeklyAnalytics.isEmpty) return _buildEmptyChart('No chart data available');
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.show_chart, size: 24, color: Colors.blue),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'User Growth Trend',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 300,
+              child: SfCartesianChart(
+                primaryXAxis: CategoryAxis(
+                  labelRotation: 45,
+                  majorGridLines: const MajorGridLines(width: 0),
+                  labelStyle: const TextStyle(fontSize: 12),
+                ),
+                primaryYAxis: NumericAxis(
+                  minimum: 0,
+                  majorGridLines: const MajorGridLines(width: 0.5, color: Colors.grey),
+                  labelStyle: const TextStyle(fontSize: 12),
+                ),
+                legend: Legend(
+                  isVisible: true,
+                  position: LegendPosition.bottom,
+                  overflowMode: LegendItemOverflowMode.wrap,
+                ),
+                tooltipBehavior: TooltipBehavior(
+                  enable: true,
+                  header: '',
+                  format: 'point.x\npoint.y users',
+                ),
+                series: <CartesianSeries<AnalyticsModel, String>>[
+                  LineSeries<AnalyticsModel, String>(
+                    name: 'Total Users',
+                    dataSource: _weeklyAnalytics,
+                    xValueMapper: (model, _) => DateFormat('MMM dd').format(model.date),
+                    yValueMapper: (model, _) => model.totalUsers,
+                    markerSettings: const MarkerSettings(isVisible: true, height: 6, width: 6),
+                    color: Colors.blue,
+                    width: 3,
+                  ),
+                  LineSeries<AnalyticsModel, String>(
+                    name: 'Active Users',
+                    dataSource: _weeklyAnalytics,
+                    xValueMapper: (model, _) => DateFormat('MMM dd').format(model.date),
+                    yValueMapper: (model, _) => model.activeUsers,
+                    markerSettings: const MarkerSettings(isVisible: true, height: 6, width: 6),
+                    color: Colors.green,
+                    width: 3,
+                  ),
+                  LineSeries<AnalyticsModel, String>(
+                    name: 'New Registrations',
+                    dataSource: _weeklyAnalytics,
+                    xValueMapper: (model, _) => DateFormat('MMM dd').format(model.date),
+                    yValueMapper: (model, _) => model.newRegistrations,
+                    markerSettings: const MarkerSettings(isVisible: true, height: 6, width: 6),
+                    color: Colors.orange,
+                    width: 3,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildPieChart() {
-    if (_todayAnalytics == null) return _buildEmptyChart('No data available');
+    if (_analytics == null) return _buildEmptyChart('No data available');
 
-    final active = _todayAnalytics!.activeUsers.toDouble();
-    final inactive = (_todayAnalytics!.totalUsers - _todayAnalytics!.activeUsers).toDouble();
-    final total = _todayAnalytics!.totalUsers.toDouble();
+    final active = _analytics!.activeUsers.toDouble();
+    final inactive = _analytics!.inactiveUsers.toDouble();
+    final total = _analytics!.totalUsers.toDouble();
 
     if (total == 0) return _buildEmptyChart('No user data');
 
-    return Container(
-      height: 280,
-      padding: const EdgeInsets.all(16),
-      child: Card(
-        elevation: 3,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Text(
-                'User Distribution',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.pie_chart, size: 24, color: Colors.purple),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: SfCircularChart(
-                  legend: Legend(
-                    isVisible: true,
-                    position: LegendPosition.bottom,
-                    overflowMode: LegendItemOverflowMode.wrap,
-                    textStyle: const TextStyle(fontSize: 12),
+                const SizedBox(width: 12),
+                const Text(
+                  'User Distribution',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
                   ),
-                  tooltipBehavior: TooltipBehavior(
-                    enable: true,
-                    format: 'point.x : point.y%',
-                  ),
-                  series: <CircularSeries>[
-                    DoughnutSeries<ChartData, String>(
-                      dataSource: [
-                        ChartData('Active Users', active, Colors.green),
-                        ChartData('Inactive Users', inactive, Colors.orange),
-                      ],
-                      xValueMapper: (data, _) => data.label,
-                      yValueMapper: (data, _) => data.value,
-                      dataLabelSettings: const DataLabelSettings(
-                        isVisible: true,
-                        labelPosition: ChartDataLabelPosition.outside,
-                        textStyle: TextStyle(fontSize: 12),
-                      ),
-                      radius: '70%',
-                      innerRadius: '60%',
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 280,
+              child: SfCircularChart(
+                legend: Legend(
+                  isVisible: true,
+                  position: LegendPosition.bottom,
+                  overflowMode: LegendItemOverflowMode.wrap,
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+                tooltipBehavior: TooltipBehavior(
+                  enable: true,
+                  format: 'point.x : point.y%',
+                ),
+                series: <CircularSeries>[
+                  DoughnutSeries<ChartData, String>(
+                    dataSource: [
+                      ChartData('Active Users', active, Colors.green),
+                      ChartData('Inactive Users', inactive, Colors.orange),
+                    ],
+                    xValueMapper: (data, _) => data.label,
+                    yValueMapper: (data, _) => data.value,
+                    dataLabelSettings: const DataLabelSettings(
+                      isVisible: true,
+                      labelPosition: ChartDataLabelPosition.outside,
+                      textStyle: TextStyle(fontSize: 12),
                     ),
-                  ],
-                ),
+                    radius: '70%',
+                    innerRadius: '60%',
+                  ),
+                ],
               ),
-              Container(
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(top: 8),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildStatInfo('Active', '${((active / total) * 100).toStringAsFixed(1)}%', Colors.green),
-                    _buildStatInfo('Inactive', '${((inactive / total) * 100).toStringAsFixed(1)}%', Colors.orange),
-                  ],
-                ),
+            ),
+            Container(
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(top: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(12),
               ),
-            ],
-          ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildStatInfo('Active', '${((active / total) * 100).toStringAsFixed(1)}%', Colors.green),
+                  _buildStatInfo('Inactive', '${((inactive / total) * 100).toStringAsFixed(1)}%', Colors.orange),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -340,13 +706,42 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
     );
   }
 
+  Widget _buildUserReportsSection() {
+    return _AnalyticsSectionCard(
+      title: 'User Reports & Moderation',
+      icon: Icons.flag,
+      color: Colors.red,
+      children: [
+        _MetricRow(
+          label: 'Total Reports',
+          value: _analytics!.totalReports.toString(),
+          trend: _analytics!.reportGrowth,
+          subMetrics: {
+            'Pending': _analytics!.pendingReports.toString(),
+            'Resolved': _analytics!.resolvedReports.toString(),
+          },
+        ),
+        _MetricRow(
+          label: 'Reported Messages',
+          value: _analytics!.reportedMessages.toString(),
+          trend: _analytics!.reportedMessageGrowth,
+        ),
+        _MetricRow(
+          label: 'Report Resolution Rate',
+          value: '${_analytics!.reportResolutionRate.toStringAsFixed(1)}%',
+          trend: 0.0,
+        ),
+      ],
+    );
+  }
+
   Widget _buildEmptyChart(String message) {
-    return Container(
-      height: 200,
-      padding: const EdgeInsets.all(16),
-      child: Card(
-        elevation: 3,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Container(
+        height: 200,
+        padding: const EdgeInsets.all(16),
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -367,247 +762,488 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
     );
   }
 
-  Widget _buildEngagementMetrics() {
-    if (_todayAnalytics == null) return const SizedBox();
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.people_outline,
+            size: 80,
+            color: Colors.grey[300],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No User Analytics Data',
+            style: TextStyle(
+              fontSize: 18,
+              color: Colors.grey[500],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'User analytics data will appear here once available',
+            style: TextStyle(
+              color: Colors.grey[400],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Card(
-        elevation: 3,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Engagement Metrics',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
+// Helper Widgets
+class _QuickStatCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final String subtitle;
+  final Color color;
+  final IconData icon;
+  final double trend;
+
+  const _QuickStatCard({
+    required this.title,
+    required this.value,
+    required this.subtitle,
+    required this.color,
+    required this.icon,
+    required this.trend,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, size: 20, color: color),
+                ),
+                if (trend != 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: trend > 0 ? Colors.green[50] : Colors.red[50],
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: trend > 0 ? Colors.green[100]! : Colors.red[100]!,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          trend > 0 ? Icons.arrow_upward : Icons.arrow_downward,
+                          size: 12,
+                          color: trend > 0 ? Colors.green[700] : Colors.red[700],
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          '${trend.abs().toStringAsFixed(1)}%',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: trend > 0 ? Colors.green[700] : Colors.red[700],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AnalyticsSectionCard extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Color color;
+  final List<Widget> children;
+
+  const _AnalyticsSectionCard({
+    required this.title,
+    required this.icon,
+    required this.color,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, size: 24, color: color),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MetricRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final double trend;
+  final Map<String, String>? subMetrics;
+
+  const _MetricRow({
+    required this.label,
+    required this.value,
+    required this.trend,
+    this.subMetrics,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildMetricItem(
-                      'Engagement Rate',
-                      '${_todayAnalytics!.engagementRate.toStringAsFixed(1)}%',
-                      Icons.trending_up,
-                      Colors.purple,
-                      _todayAnalytics!.engagementGrowth,
+            ),
+            Row(
+              children: [
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (trend != 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: trend > 0 ? Colors.green[50] : Colors.red[50],
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: trend > 0 ? Colors.green[100]! : Colors.red[100]!,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          trend > 0 ? Icons.arrow_upward : Icons.arrow_downward,
+                          size: 12,
+                          color: trend > 0 ? Colors.green[700] : Colors.red[700],
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          '${trend.abs().toStringAsFixed(1)}%',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: trend > 0 ? Colors.green[700] : Colors.red[700],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  Expanded(
-                    child: _buildMetricItem(
-                      'New Users',
-                      _todayAnalytics!.newRegistrations.toString(),
-                      Icons.person_add,
-                      Colors.blue,
-                      _todayAnalytics!.registrationGrowth,
-                    ),
+              ],
+            ),
+          ],
+        ),
+        if (subMetrics != null && subMetrics!.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            children: subMetrics!.entries.map((entry) {
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  '${entry.key}: ${entry.value}',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey[700],
+                    fontWeight: FontWeight.w500,
                   ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildMetricItem(
-                      'Active Rate',
-                      '${_todayAnalytics!.activeUserPercentage.toStringAsFixed(1)}%',
-                      Icons.online_prediction,
-                      Colors.green,
-                      _todayAnalytics!.activeUserGrowth,
-                    ),
-                  ),
-                  Expanded(
-                    child: _buildMetricItem(
-                      'Reports',
-                      _todayAnalytics!.totalReports.toString(),
-                      Icons.flag,
-                      Colors.orange,
-                      _todayAnalytics!.reportGrowth,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+        const SizedBox(height: 12),
+      ],
+    );
+  }
+}
+
+class _QuickDateButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  final bool isActive;
+
+  const _QuickDateButton({
+    required this.label,
+    required this.onTap,
+    required this.isActive,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.purple[700] : Colors.grey[100],
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isActive ? Colors.purple[700]! : Colors.grey[300]!,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isActive ? Colors.white : Colors.grey[700],
+            fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+            fontSize: 12,
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildMetricItem(String title, String value, IconData icon, Color color, double growth) {
-    return Container(
-      margin: const EdgeInsets.all(8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 20, color: color),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey[700],
-                  ),
-                ),
-              ),
-              _buildGrowthIndicator(growth),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-        ],
-      ),
+class _DateRangePickerDialog extends StatefulWidget {
+  final DateTime startDate;
+  final DateTime endDate;
+
+  const _DateRangePickerDialog({
+    required this.startDate,
+    required this.endDate,
+  });
+
+  @override
+  State<_DateRangePickerDialog> createState() => _DateRangePickerDialogState();
+}
+
+class _DateRangePickerDialogState extends State<_DateRangePickerDialog> {
+  late DateTime _tempStartDate;
+  late DateTime _tempEndDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _tempStartDate = widget.startDate;
+    _tempEndDate = widget.endDate;
+  }
+
+  Future<void> _selectStartDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _tempStartDate,
+      firstDate: DateTime(2020),
+      lastDate: _tempEndDate,
     );
+    if (picked != null) {
+      setState(() => _tempStartDate = picked);
+    }
+  }
+
+  Future<void> _selectEndDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _tempEndDate,
+      firstDate: _tempStartDate,
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() => _tempEndDate = picked);
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: const Text(
-          'User Analytics Dashboard',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
+    return AlertDialog(
+      title: const Text('Select Date Range'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            onTap: _selectStartDate,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[300]!),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Start Date',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.calendar_today, size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            _formatDate(_tempStartDate),
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const Icon(Icons.arrow_drop_down),
+                ],
+              ),
+            ),
           ),
-        ),
-        backgroundColor: Colors.purple[700],
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadAnalytics,
-            tooltip: 'Refresh Data',
+          const SizedBox(height: 16),
+          InkWell(
+            onTap: _selectEndDate,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[300]!),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'End Date',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.calendar_today, size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            _formatDate(_tempEndDate),
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const Icon(Icons.arrow_drop_down),
+                ],
+              ),
+            ),
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-        onRefresh: _loadAnalytics,
-        color: Colors.purple[700],
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Quick Stats Row
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildStatCard(
-                      'Total Users',
-                      '${_todayAnalytics?.totalUsers ?? 0}',
-                      'All registered users',
-                      Colors.blue,
-                      Icons.people,
-                    ),
-                  ),
-                  Expanded(
-                    child: _buildStatCard(
-                      'Active Users',
-                      '${_todayAnalytics?.activeUsers ?? 0}',
-                      'Currently online',
-                      Colors.green,
-                      Icons.online_prediction,
-                    ),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildStatCard(
-                      'New Registrations',
-                      '${_todayAnalytics?.newRegistrations ?? 0}',
-                      'This period',
-                      Colors.orange,
-                      Icons.person_add,
-                    ),
-                  ),
-                  Expanded(
-                    child: _buildStatCard(
-                      'Reported Users',
-                      '${_todayAnalytics?.totalReports ?? 0}',
-                      'Total reports',
-                      Colors.red,
-                      Icons.flag,
-                    ),
-                  ),
-                ],
-              ),
-
-              // Engagement Metrics
-              _buildEngagementMetrics(),
-
-              // Charts
-              _buildLineChart(),
-              _buildPieChart(),
-
-              // Action Button
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () async {
-                      final result = await _analyticsService.generateComprehensiveReport(
-                        DateTime.now().subtract(const Duration(days: 7)),
-                        DateTime.now(),
-                      );
-                      if (mounted) {
-                        _showSnackBar('Report generated successfully!');
-                        // You could also show a dialog with the report
-                        print(result); // For now, just print to console
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.purple[700],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 2,
-                    ),
-                    icon: const Icon(Icons.analytics),
-                    label: const Text(
-                      'Generate Comprehensive Report',
-                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
         ),
-      ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context, {
+              'start': _tempStartDate,
+              'end': _tempEndDate,
+            });
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.purple[700],
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Apply'),
+        ),
+      ],
     );
   }
 }

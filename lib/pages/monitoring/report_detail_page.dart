@@ -22,7 +22,7 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
       await _reportService.updateReportStatus(
         widget.report.id,
         status,
-        _notesController.text,
+        notes: _notesController.text,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

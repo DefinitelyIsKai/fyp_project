@@ -1,27 +1,27 @@
 import 'package:flutter/material.dart';
-import 'package:fyp_project/models/message_model.dart';
-import 'package:fyp_project/services/message_service.dart';
+import 'package:fyp_project/models/rating_model.dart';
+import 'package:fyp_project/services/rating_service.dart';
 import 'package:fyp_project/services/user_service.dart';
 import 'package:fyp_project/services/auth_service.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
-class MessageDetailPage extends StatefulWidget {
-  final MessageModel message;
+class RatingDetailPage extends StatefulWidget {
+  final RatingModel rating;
 
-  const MessageDetailPage({super.key, required this.message});
+  const RatingDetailPage({super.key, required this.rating});
 
   @override
-  State<MessageDetailPage> createState() => _MessageDetailPageState();
+  State<RatingDetailPage> createState() => _RatingDetailPageState();
 }
 
-class _MessageDetailPageState extends State<MessageDetailPage> {
-  final MessageService _messageService = MessageService();
+class _RatingDetailPageState extends State<RatingDetailPage> {
+  final RatingService _ratingService = RatingService();
   final UserService _userService = UserService();
   final TextEditingController _notesController = TextEditingController();
   bool _isProcessing = false;
-  String? _senderName;
-  String? _receiverName;
+  String? _raterName;
+  String? _ratedUserName;
   bool _loadingUserInfo = true;
 
   @override
@@ -38,19 +38,19 @@ class _MessageDetailPageState extends State<MessageDetailPage> {
 
   Future<void> _loadUserInfo() async {
     try {
-      final senderDoc = await _userService.getAllUsers();
-      final sender = senderDoc.firstWhere(
-        (u) => u.id == widget.message.senderId,
-        orElse: () => senderDoc.first,
+      final users = await _userService.getAllUsers();
+      final rater = users.firstWhere(
+        (u) => u.id == widget.rating.raterId,
+        orElse: () => users.first,
       );
-      final receiver = senderDoc.firstWhere(
-        (u) => u.id == widget.message.receiverId,
-        orElse: () => senderDoc.first,
+      final ratedUser = users.firstWhere(
+        (u) => u.id == widget.rating.ratedUserId,
+        orElse: () => users.first,
       );
       if (mounted) {
         setState(() {
-          _senderName = sender.fullName;
-          _receiverName = receiver.fullName;
+          _raterName = rater.fullName;
+          _ratedUserName = ratedUser.fullName;
           _loadingUserInfo = false;
         });
       }
@@ -72,8 +72,8 @@ class _MessageDetailPageState extends State<MessageDetailPage> {
 
     setState(() => _isProcessing = true);
     try {
-      await _messageService.reviewMessage(
-        messageId: widget.message.id,
+      await _ratingService.reviewRating(
+        ratingId: widget.rating.id,
         action: action,
         reviewedBy: reviewerId,
         reviewNotes: _notesController.text.isNotEmpty ? _notesController.text : null,
@@ -82,19 +82,19 @@ class _MessageDetailPageState extends State<MessageDetailPage> {
       // If warning or suspend, also take action on the user
       if (action == 'warning') {
         await _userService.issueWarning(
-          userId: widget.message.senderId,
-          violationReason: 'Inappropriate message content: ${widget.message.reportReason ?? "Violation of community guidelines"}',
+          userId: widget.rating.raterId,
+          violationReason: 'Inappropriate rating content: ${widget.rating.flaggedReason ?? "Violation of community guidelines"}',
         );
       } else if (action == 'suspend') {
         await _userService.suspendUser(
-          widget.message.senderId,
-          violationReason: 'Severe message violation: ${widget.message.reportReason ?? "Violation of community guidelines"}',
+          widget.rating.raterId,
+          violationReason: 'Severe rating violation: ${widget.rating.flaggedReason ?? "Violation of community guidelines"}',
           durationDays: 7,
         );
       }
 
       if (mounted) {
-        _showSnackBar('Message reviewed successfully. Action: ${action.toUpperCase()}', isError: false);
+        _showSnackBar('Rating reviewed successfully. Action: ${action.toUpperCase()}', isError: false);
         Navigator.pop(context, true);
       }
     } catch (e) {
@@ -124,8 +124,8 @@ class _MessageDetailPageState extends State<MessageDetailPage> {
         ),
         content: Text(
           action == 'warning'
-              ? 'This will issue a warning to the sender. After 3 warnings, their account will be automatically suspended.'
-              : 'This will suspend the sender\'s account for 7 days. They will not be able to access the platform during this time.',
+              ? 'This will issue a warning to the rater. After 3 warnings, their account will be automatically suspended.'
+              : 'This will suspend the rater\'s account for 7 days. They will not be able to access the platform during this time.',
         ),
         actions: [
           TextButton(
@@ -162,7 +162,7 @@ class _MessageDetailPageState extends State<MessageDetailPage> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text(
-          'Message Review',
+          'Rating Review',
           style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
         backgroundColor: Colors.blue[700],
@@ -173,7 +173,7 @@ class _MessageDetailPageState extends State<MessageDetailPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Message Content Card
+            // Rating Card
             Card(
               elevation: 2,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -187,15 +187,15 @@ class _MessageDetailPageState extends State<MessageDetailPage> {
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: Colors.red[50],
+                            color: Colors.orange[50],
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Icon(Icons.message, size: 20, color: Colors.red[700]),
+                          child: Icon(Icons.star, size: 20, color: Colors.orange[700]),
                         ),
                         const SizedBox(width: 12),
                         const Expanded(
                           child: Text(
-                            'Flagged Message',
+                            'Flagged Rating',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -205,24 +205,48 @@ class _MessageDetailPageState extends State<MessageDetailPage> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[50],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        widget.message.content,
-                        style: const TextStyle(fontSize: 14, height: 1.5),
-                      ),
+                    Row(
+                      children: [
+                        ...List.generate(5, (index) {
+                          return Icon(
+                            index < widget.rating.rating.floor()
+                                ? Icons.star
+                                : Icons.star_border,
+                            size: 32,
+                            color: Colors.amber,
+                          );
+                        }),
+                        const SizedBox(width: 12),
+                        Text(
+                          widget.rating.rating.toStringAsFixed(1),
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
+                    if (widget.rating.comment != null && widget.rating.comment!.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[50],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          widget.rating.comment!,
+                          style: const TextStyle(fontSize: 14, height: 1.5),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 16),
 
-            // Message Details
+            // Rating Details
             Card(
               elevation: 2,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -232,7 +256,7 @@ class _MessageDetailPageState extends State<MessageDetailPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Message Details',
+                      'Rating Details',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -240,43 +264,43 @@ class _MessageDetailPageState extends State<MessageDetailPage> {
                     ),
                     const SizedBox(height: 12),
                     _DetailRow(
-                      label: 'From',
+                      label: 'Rated By',
                       value: _loadingUserInfo
                           ? 'Loading...'
-                          : (_senderName ?? widget.message.senderId),
+                          : (_raterName ?? widget.rating.raterId),
                     ),
                     _DetailRow(
-                      label: 'To',
+                      label: 'Rated User',
                       value: _loadingUserInfo
                           ? 'Loading...'
-                          : (_receiverName ?? widget.message.receiverId),
+                          : (_ratedUserName ?? widget.rating.ratedUserId),
                     ),
                     _DetailRow(
-                      label: 'Sent At',
-                      value: DateFormat('MMM dd, yyyy • hh:mm a').format(widget.message.sentAt),
+                      label: 'Created At',
+                      value: DateFormat('MMM dd, yyyy • hh:mm a').format(widget.rating.createdAt),
                     ),
-                    if (widget.message.reportReason != null)
+                    if (widget.rating.flaggedReason != null)
                       _DetailRow(
-                        label: 'Report Reason',
-                        value: widget.message.reportReason!,
+                        label: 'Flagged Reason',
+                        value: widget.rating.flaggedReason!,
                         valueColor: Colors.red[700],
                       ),
-                    if (widget.message.reviewedBy != null) ...[
+                    if (widget.rating.reviewedBy != null) ...[
                       const Divider(),
                       _DetailRow(
                         label: 'Reviewed By',
-                        value: widget.message.reviewedBy!,
+                        value: widget.rating.reviewedBy!,
                       ),
-                      if (widget.message.reviewedAt != null)
+                      if (widget.rating.reviewedAt != null)
                         _DetailRow(
                           label: 'Reviewed At',
                           value: DateFormat('MMM dd, yyyy • hh:mm a')
-                              .format(widget.message.reviewedAt!),
+                              .format(widget.rating.reviewedAt!),
                         ),
-                      if (widget.message.reviewAction != null)
+                      if (widget.rating.reviewAction != null)
                         _DetailRow(
                           label: 'Action Taken',
-                          value: widget.message.reviewAction!,
+                          value: widget.rating.reviewAction!,
                         ),
                     ],
                   ],
@@ -368,7 +392,7 @@ class _MessageDetailPageState extends State<MessageDetailPage> {
               child: ElevatedButton.icon(
                 onPressed: _isProcessing ? null : () => _takeAction('warning'),
                 icon: const Icon(Icons.warning, size: 20),
-                label: const Text('Issue Warning to Sender'),
+                label: const Text('Issue Warning to Rater'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.orange,
                   foregroundColor: Colors.white,
@@ -385,7 +409,7 @@ class _MessageDetailPageState extends State<MessageDetailPage> {
               child: ElevatedButton.icon(
                 onPressed: _isProcessing ? null : () => _takeAction('suspend'),
                 icon: const Icon(Icons.pause_circle_outline, size: 20),
-                label: const Text('Suspend Sender Account'),
+                label: const Text('Suspend Rater Account'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red[700],
                   foregroundColor: Colors.white,
@@ -449,3 +473,4 @@ class _DetailRow extends StatelessWidget {
     );
   }
 }
+

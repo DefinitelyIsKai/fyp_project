@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:fyp_project/models/analytics_model.dart';
 import 'package:fyp_project/services/analytics_service.dart';
 import 'package:fyp_project/pages/analytics/analytics_detail_page.dart';
+import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key});
@@ -13,6 +18,7 @@ class AnalyticsPage extends StatefulWidget {
 class _AnalyticsPageState extends State<AnalyticsPage> {
   final AnalyticsService _analyticsService = AnalyticsService();
   AnalyticsModel? _analytics;
+  List<AnalyticsModel> _trendData = [];
   bool _isLoading = true;
   DateTime _startDate = DateTime.now().subtract(const Duration(days: 30));
   DateTime _endDate = DateTime.now();
@@ -27,9 +33,28 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      final analytics = await _analyticsService.getComprehensiveAnalytics(_endDate);
+      // Load main analytics
+      final analytics = await _analyticsService.getAnalyticsForRange(_startDate, _endDate);
+      
+      // Load trend data for charts (daily breakdown)
+      List<AnalyticsModel> trendData = [];
+      final daysDiff = _endDate.difference(_startDate).inDays;
+      final daysToLoad = daysDiff > 30 ? 30 : daysDiff;
+      
+      for (int i = daysToLoad; i >= 0; i--) {
+        final day = _endDate.subtract(Duration(days: i));
+        final dayStart = DateTime(day.year, day.month, day.day);
+        final dayEnd = DateTime(day.year, day.month, day.day, 23, 59, 59);
+        final dayAnalytics = await _analyticsService.getAnalyticsForRange(dayStart, dayEnd);
+        // Update the date to the specific day for chart display
+        trendData.add(dayAnalytics.copyWith(date: dayStart));
+      }
+      
       if (mounted) {
-        setState(() => _analytics = analytics);
+        setState(() {
+          _analytics = analytics;
+          _trendData = trendData;
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -51,6 +76,16 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
+  }
+
+  void _setQuickDateRange(int days) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    setState(() {
+      _endDate = today;
+      _startDate = today.subtract(Duration(days: days));
+    });
+    _loadAnalytics();
   }
 
   Future<void> _selectDateRange() async {
@@ -78,12 +113,160 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   }
 
   String _getDateRangeText() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final startDay = DateTime(_startDate.year, _startDate.month, _startDate.day);
+    final endDay = DateTime(_endDate.year, _endDate.month, _endDate.day);
     final daysDiff = _endDate.difference(_startDate).inDays;
-    if (daysDiff == 1) return 'Today';
-    if (daysDiff == 7) return 'Last 7 days';
-    if (daysDiff == 30) return 'Last 30 days';
-    if (daysDiff == 90) return 'Last 3 months';
+    
+    if (startDay == today && endDay == today) return 'Today';
+    if (daysDiff == 6 && endDay == today) return 'Last 7 days';
+    if (daysDiff == 29 && endDay == today) return 'Last 30 days';
+    if (daysDiff == 89 && endDay == today) return 'Last 3 months';
     return '${_formatDate(_startDate)} - ${_formatDate(_endDate)}';
+  }
+
+  Future<void> _generatePDFReport() async {
+    if (_analytics == null) return;
+
+    try {
+      final pdf = pw.Document();
+      final analytics = _analytics!;
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(40),
+          build: (pw.Context context) {
+            return [
+              // Header
+              pw.Header(
+                level: 0,
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(
+                      'Platform Analytics Report',
+                      style: pw.TextStyle(
+                        fontSize: 24,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.Text(
+                      DateFormat('dd MMM yyyy').format(DateTime.now()),
+                      style: pw.TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              
+              // Date Range
+              pw.Text(
+                'Period: ${_formatDate(_startDate)} - ${_formatDate(_endDate)}',
+                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 20),
+
+              // Executive Summary
+              pw.Text(
+                'Executive Summary',
+                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 10),
+              pw.Table(
+                border: pw.TableBorder.all(),
+                children: [
+                  _buildPDFTableRow('Total Users', analytics.totalUsers.toString()),
+                  _buildPDFTableRow('Active Users', '${analytics.activeUsers} (${analytics.activeUserPercentage.toStringAsFixed(1)}%)'),
+                  _buildPDFTableRow('New Registrations', analytics.newRegistrations.toString()),
+                  _buildPDFTableRow('Job Posts Created', analytics.totalJobPosts.toString()),
+                  _buildPDFTableRow('Total Applications', analytics.totalApplications.toString()),
+                  _buildPDFTableRow('Flagged Content', analytics.totalReports.toString()),
+                  _buildPDFTableRow('Engagement Rate', '${analytics.engagementRate.toStringAsFixed(1)}%'),
+                ],
+              ),
+              pw.SizedBox(height: 20),
+
+              // User Activity Trends
+              pw.Text(
+                'User Activity Trends',
+                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 10),
+              pw.Table(
+                border: pw.TableBorder.all(),
+                children: [
+                  _buildPDFTableRow('User Growth Rate', '${analytics.userGrowthRate.toStringAsFixed(1)}%'),
+                  _buildPDFTableRow('Active User Growth', '${analytics.activeUserGrowth.toStringAsFixed(1)}%'),
+                  _buildPDFTableRow('Registration Growth', '${analytics.registrationGrowth.toStringAsFixed(1)}%'),
+                  _buildPDFTableRow('Engagement Growth', '${analytics.engagementGrowth.toStringAsFixed(1)}%'),
+                ],
+              ),
+              pw.SizedBox(height: 20),
+
+              // Content & Moderation
+              pw.Text(
+                'Content & Moderation Statistics',
+                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 10),
+              pw.Table(
+                border: pw.TableBorder.all(),
+                children: [
+                  _buildPDFTableRow('Total Job Posts', analytics.totalJobPosts.toString()),
+                  _buildPDFTableRow('Pending Posts', analytics.pendingJobPosts.toString()),
+                  _buildPDFTableRow('Approved Posts', analytics.approvedJobPosts.toString()),
+                  _buildPDFTableRow('Rejected Posts', analytics.rejectedJobPosts.toString()),
+                  _buildPDFTableRow('Total Reports', analytics.totalReports.toString()),
+                  _buildPDFTableRow('Pending Reports', analytics.pendingReports.toString()),
+                  _buildPDFTableRow('Resolved Reports', analytics.resolvedReports.toString()),
+                ],
+              ),
+              pw.SizedBox(height: 20),
+
+              // Application Trends
+              pw.Text(
+                'Application Trends',
+                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 10),
+              pw.Table(
+                border: pw.TableBorder.all(),
+                children: [
+                  _buildPDFTableRow('Total Applications', analytics.totalApplications.toString()),
+                  _buildPDFTableRow('Application Growth', '${analytics.applicationGrowth.toStringAsFixed(1)}%'),
+                  _buildPDFTableRow('Avg Applications per Job', analytics.avgApplicationsPerJob.toStringAsFixed(1)),
+                ],
+              ),
+            ];
+          },
+        ),
+      );
+
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+      );
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar('Error generating PDF: $e', isError: true);
+      }
+    }
+  }
+
+  pw.TableRow _buildPDFTableRow(String label, String value) {
+    return pw.TableRow(
+      children: [
+        pw.Padding(
+          padding: const pw.EdgeInsets.all(8),
+          child: pw.Text(label, style: pw.TextStyle(fontSize: 12)),
+        ),
+        pw.Padding(
+          padding: const pw.EdgeInsets.all(8),
+          child: pw.Text(value, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+        ),
+      ],
+    );
   }
 
   @override
@@ -100,6 +283,19 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         ),
         backgroundColor: Colors.blue[700],
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadAnalytics,
+            tooltip: 'Refresh',
+          ),
+          if (_analytics != null)
+            IconButton(
+              icon: const Icon(Icons.picture_as_pdf),
+              onPressed: _generatePDFReport,
+              tooltip: 'Generate PDF Report',
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -151,62 +347,90 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 ),
               ],
             ),
-            child: Row(
+            child: Column(
               children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: _selectDateRange,
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.calendar_today, color: Colors.blue[700]),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Date Range',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _getDateRangeText(),
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: _selectDateRange,
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey[300]!),
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
-                        ],
+                          child: Row(
+                            children: [
+                              Icon(Icons.calendar_today, color: Colors.blue[700]),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Date Range',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _getDateRangeText(),
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton.icon(
-                  onPressed: _loadAnalytics,
-                  icon: const Icon(Icons.refresh, size: 20),
-                  label: const Text('Refresh'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[700],
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: _loadAnalytics,
+                      icon: const Icon(Icons.refresh, size: 20),
+                      label: const Text('Refresh'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue[700],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Quick Date Range Presets
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _QuickDateButton(
+                      label: 'Today',
+                      onTap: () => _setQuickDateRange(0),
+                    ),
+                    _QuickDateButton(
+                      label: 'Last 7 Days',
+                      onTap: () => _setQuickDateRange(7),
+                    ),
+                    _QuickDateButton(
+                      label: 'Last 30 Days',
+                      onTap: () => _setQuickDateRange(30),
+                    ),
+                    _QuickDateButton(
+                      label: 'Last 3 Months',
+                      onTap: () => _setQuickDateRange(90),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -226,34 +450,60 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                   _buildQuickStats(),
                   const SizedBox(height: 20),
 
+                  // Visual Dashboards
+                  _buildTrendCharts(),
+                  const SizedBox(height: 20),
+
                   // Main Analytics Cards
                   _buildAnalyticsCards(),
                   const SizedBox(height: 20),
 
-                  // Detailed Report Button
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => AnalyticsDetailPage(analytics: _analytics!),
+                  // Action Buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AnalyticsDetailPage(analytics: _analytics!),
+                            ),
+                          ),
+                          icon: const Icon(Icons.analytics),
+                          label: const Text(
+                            'Detailed Report',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue[700],
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
                         ),
                       ),
-                      icon: const Icon(Icons.analytics),
-                      label: const Text(
-                        'View Detailed Analytics Report',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue[700],
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _generatePDFReport,
+                          icon: const Icon(Icons.picture_as_pdf),
+                          label: const Text(
+                            'Export PDF',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red[700],
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
                 ],
               ),
@@ -274,6 +524,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             subtitle: 'Online now',
             color: Colors.green,
             icon: Icons.people_alt,
+            trend: _analytics!.activeUserGrowth,
           ),
         ),
         const SizedBox(width: 12),
@@ -284,16 +535,253 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             subtitle: 'This period',
             color: Colors.blue,
             icon: Icons.article,
+            trend: _analytics!.jobPostGrowth,
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: _QuickStatCard(
-            title: 'Engagement',
-            value: '${_analytics!.engagementRate.toStringAsFixed(1)}%',
-            subtitle: 'Platform usage',
-            color: Colors.orange,
-            icon: Icons.trending_up, // Changed from non-existent icon
+            title: 'Applications',
+            value: _analytics!.totalApplications.toString(),
+            subtitle: 'Total applications',
+            color: Colors.purple,
+            icon: Icons.work,
+            trend: _analytics!.applicationGrowth,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _QuickStatCard(
+            title: 'Flagged Content',
+            value: _analytics!.totalReports.toString(),
+            subtitle: 'Requires attention',
+            color: Colors.red,
+            icon: Icons.flag,
+            trend: _analytics!.reportGrowth,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTrendCharts() {
+    if (_trendData.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      children: [
+        // User Growth Trend
+        Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'User Activity Trends',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 300,
+                  child: SfCartesianChart(
+                    primaryXAxis: CategoryAxis(
+                      labelRotation: -45,
+                      majorGridLines: const MajorGridLines(width: 0),
+                    ),
+                    primaryYAxis: NumericAxis(),
+                    legend: Legend(
+                      isVisible: true,
+                      position: LegendPosition.bottom,
+                    ),
+                    tooltipBehavior: TooltipBehavior(enable: true),
+                    series: <CartesianSeries<AnalyticsModel, String>>[
+                      LineSeries<AnalyticsModel, String>(
+                        name: 'Total Users',
+                        dataSource: _trendData,
+                        xValueMapper: (model, _) => DateFormat('MMM dd').format(model.date),
+                        yValueMapper: (model, _) => model.totalUsers,
+                        color: Colors.blue,
+                        width: 3,
+                        markerSettings: const MarkerSettings(isVisible: true),
+                      ),
+                      LineSeries<AnalyticsModel, String>(
+                        name: 'Active Users',
+                        dataSource: _trendData,
+                        xValueMapper: (model, _) => DateFormat('MMM dd').format(model.date),
+                        yValueMapper: (model, _) => model.activeUsers,
+                        color: Colors.green,
+                        width: 3,
+                        markerSettings: const MarkerSettings(isVisible: true),
+                      ),
+                      LineSeries<AnalyticsModel, String>(
+                        name: 'New Registrations',
+                        dataSource: _trendData,
+                        xValueMapper: (model, _) => DateFormat('MMM dd').format(model.date),
+                        yValueMapper: (model, _) => model.newRegistrations,
+                        color: Colors.orange,
+                        width: 3,
+                        markerSettings: const MarkerSettings(isVisible: true),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Content & Application Trends
+        Row(
+          children: [
+            Expanded(
+              child: Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Job Posts Trend',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 250,
+                        child: SfCartesianChart(
+                          primaryXAxis: CategoryAxis(
+                            labelRotation: -45,
+                            majorGridLines: const MajorGridLines(width: 0),
+                          ),
+                          primaryYAxis: NumericAxis(),
+                          tooltipBehavior: TooltipBehavior(enable: true),
+                          series: <CartesianSeries<AnalyticsModel, String>>[
+                            ColumnSeries<AnalyticsModel, String>(
+                              name: 'Job Posts',
+                              dataSource: _trendData,
+                              xValueMapper: (model, _) => DateFormat('MM/dd').format(model.date),
+                              yValueMapper: (model, _) => model.totalJobPosts,
+                              color: Colors.blue,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Applications Trend',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 250,
+                        child: SfCartesianChart(
+                          primaryXAxis: CategoryAxis(
+                            labelRotation: -45,
+                            majorGridLines: const MajorGridLines(width: 0),
+                          ),
+                          primaryYAxis: NumericAxis(),
+                          tooltipBehavior: TooltipBehavior(enable: true),
+                          series: <CartesianSeries<AnalyticsModel, String>>[
+                            ColumnSeries<AnalyticsModel, String>(
+                              name: 'Applications',
+                              dataSource: _trendData,
+                              xValueMapper: (model, _) => DateFormat('MM/dd').format(model.date),
+                              yValueMapper: (model, _) => model.totalApplications,
+                              color: Colors.purple,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Flagged Content Trend
+        Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Flagged Content & Reports Trend',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 300,
+                  child: SfCartesianChart(
+                    primaryXAxis: CategoryAxis(
+                      labelRotation: -45,
+                      majorGridLines: const MajorGridLines(width: 0),
+                    ),
+                    primaryYAxis: NumericAxis(),
+                    legend: Legend(
+                      isVisible: true,
+                      position: LegendPosition.bottom,
+                    ),
+                    tooltipBehavior: TooltipBehavior(enable: true),
+                    series: <CartesianSeries<AnalyticsModel, String>>[
+                      LineSeries<AnalyticsModel, String>(
+                        name: 'Total Reports',
+                        dataSource: _trendData,
+                        xValueMapper: (model, _) => DateFormat('MMM dd').format(model.date),
+                        yValueMapper: (model, _) => model.totalReports,
+                        color: Colors.red,
+                        width: 3,
+                        markerSettings: const MarkerSettings(isVisible: true),
+                      ),
+                      LineSeries<AnalyticsModel, String>(
+                        name: 'Pending Reports',
+                        dataSource: _trendData,
+                        xValueMapper: (model, _) => DateFormat('MMM dd').format(model.date),
+                        yValueMapper: (model, _) => model.pendingReports,
+                        color: Colors.orange,
+                        width: 3,
+                        markerSettings: const MarkerSettings(isVisible: true),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -468,6 +956,7 @@ class _QuickStatCard extends StatelessWidget {
   final String subtitle;
   final Color color;
   final IconData icon;
+  final double trend;
 
   const _QuickStatCard({
     required this.title,
@@ -475,6 +964,7 @@ class _QuickStatCard extends StatelessWidget {
     required this.subtitle,
     required this.color,
     required this.icon,
+    this.trend = 0.0,
   });
 
   @override
@@ -498,13 +988,46 @@ class _QuickStatCard extends StatelessWidget {
                   ),
                   child: Icon(icon, size: 20, color: color),
                 ),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      value,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    if (trend != 0)
+                      Container(
+                        margin: const EdgeInsets.only(top: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: trend > 0 ? Colors.green[50] : Colors.red[50],
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              trend > 0 ? Icons.arrow_upward : Icons.arrow_downward,
+                              size: 12,
+                              color: trend > 0 ? Colors.green[700] : Colors.red[700],
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              '${trend.abs().toStringAsFixed(1)}%',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: trend > 0 ? Colors.green[700] : Colors.red[700],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
               ],
             ),
@@ -834,6 +1357,40 @@ class _DateRangePickerDialogState extends State<_DateRangePickerDialog> {
           child: const Text('Apply'),
         ),
       ],
+    );
+  }
+}
+
+class _QuickDateButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _QuickDateButton({
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.blue[300]!),
+          borderRadius: BorderRadius.circular(8),
+          color: Colors.blue[50],
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.blue[700],
+          ),
+        ),
+      ),
     );
   }
 }

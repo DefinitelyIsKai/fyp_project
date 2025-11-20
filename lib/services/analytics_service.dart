@@ -140,13 +140,20 @@ class AnalyticsService {
   // ==================== PRIVATE ANALYTICS METHODS ====================
 
   Future<Map<String, dynamic>> _getEnhancedUserAnalytics(DateTime startDate, DateTime endDate) async {
-    final usersSnapshot = await _firestore.collection('users').get();
-    final totalUsers = usersSnapshot.docs.length;
+    // Total users up to the end date (all users created before or on endDate)
+    final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+    final totalUsersSnapshot = await _firestore
+        .collection('users')
+        .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
+        .get();
+    final totalUsers = totalUsersSnapshot.docs.length;
 
-    // Active users (users with recent activity - last 7 days)
+    // Active users: users who logged in during the selected date range
+    // Or users with lastLoginAt within the date range
     final activeUsersSnapshot = await _firestore
         .collection('users')
-        .where('lastLoginAt', isGreaterThan: Timestamp.fromDate(endDate.subtract(const Duration(days: 7))))
+        .where('lastLoginAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
+        .where('lastLoginAt', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
         .get();
     final activeUsers = activeUsersSnapshot.docs.length;
 
@@ -154,7 +161,7 @@ class AnalyticsService {
     final newRegistrationsSnapshot = await _firestore
         .collection('users')
         .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
-        .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
+        .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
         .get();
     final newRegistrations = newRegistrationsSnapshot.docs.length;
 
@@ -428,8 +435,99 @@ class AnalyticsService {
 
   /// Get analytics for a custom date range
   Future<AnalyticsModel> getAnalyticsForRange(DateTime startDate, DateTime endDate) async {
-    // Adjust to use the enhanced analytics with custom range
-    return getComprehensiveAnalytics(endDate);
+    try {
+      // Normalize dates to start and end of day
+      final normalizedStart = DateTime(startDate.year, startDate.month, startDate.day);
+      final normalizedEnd = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+      
+      // Calculate the period duration for comparison
+      final periodDuration = normalizedEnd.difference(normalizedStart).inDays;
+      final previousStartDate = normalizedStart.subtract(Duration(days: periodDuration + 1));
+      final previousEndDate = normalizedStart.subtract(const Duration(seconds: 1));
+
+      // Execute all queries in parallel for better performance
+      final futures = await Future.wait([
+        _getEnhancedUserAnalytics(normalizedStart, normalizedEnd),
+        _getJobPostAnalytics(normalizedStart, normalizedEnd),
+        _getApplicationAnalytics(normalizedStart, normalizedEnd),
+        _getReportAnalytics(normalizedStart, normalizedEnd),
+        _getMessageAnalytics(normalizedStart, normalizedEnd),
+        _getPaymentAnalytics(normalizedStart, normalizedEnd),
+        _getPreviousPeriodAnalytics(previousStartDate, previousEndDate),
+      ]);
+
+      final userAnalytics = futures[0] as Map<String, dynamic>;
+      final jobPostAnalytics = futures[1] as Map<String, dynamic>;
+      final applicationAnalytics = futures[2] as Map<String, dynamic>;
+      final reportAnalytics = futures[3] as Map<String, dynamic>;
+      final messageAnalytics = futures[4] as Map<String, dynamic>;
+      final paymentAnalytics = futures[5] as Map<String, dynamic>;
+      final previousAnalytics = futures[6] as Map<String, dynamic>;
+
+      // Calculate growth rates
+      final growthRates = _calculateGrowthRates(
+        currentAnalytics: {
+          ...userAnalytics,
+          ...jobPostAnalytics,
+          ...applicationAnalytics,
+          ...reportAnalytics,
+          ...messageAnalytics,
+          ...paymentAnalytics,
+        },
+        previousAnalytics: previousAnalytics,
+      );
+
+      // Calculate engagement rate for the selected period
+      final engagementRate = _calculateEngagementRate(
+        activeUsers: userAnalytics['activeUsers'] ?? 0,
+        totalUsers: userAnalytics['totalUsers'] ?? 0,
+        totalApplications: applicationAnalytics['totalApplications'] ?? 0,
+        totalMessages: messageAnalytics['totalMessages'] ?? 0,
+      );
+
+      return AnalyticsModel(
+        date: normalizedEnd,
+        totalUsers: userAnalytics['totalUsers'] ?? 0,
+        activeUsers: userAnalytics['activeUsers'] ?? 0,
+        totalJobPosts: jobPostAnalytics['totalJobPosts'] ?? 0,
+        pendingJobPosts: jobPostAnalytics['pendingJobPosts'] ?? 0,
+        approvedJobPosts: jobPostAnalytics['approvedJobPosts'] ?? 0,
+        totalApplications: applicationAnalytics['totalApplications'] ?? 0,
+        totalReports: reportAnalytics['totalReports'] ?? 0,
+        pendingReports: reportAnalytics['pendingReports'] ?? 0,
+        totalMessages: messageAnalytics['totalMessages'] ?? 0,
+        reportedMessages: messageAnalytics['reportedMessages'] ?? 0,
+        newRegistrations: userAnalytics['newRegistrations'] ?? 0,
+        rejectedJobPosts: jobPostAnalytics['rejectedJobPosts'] ?? 0,
+        resolvedReports: reportAnalytics['resolvedReports'] ?? 0,
+        profileViews: userAnalytics['profileViews'] ?? 0,
+        avgSessionDuration: userAnalytics['avgSessionDuration'] ?? 0.0,
+        engagementRate: engagementRate,
+        totalCreditsUsed: paymentAnalytics['totalCreditsUsed'] ?? 0,
+        activeSubscriptions: paymentAnalytics['activeSubscriptions'] ?? 0,
+        revenue: paymentAnalytics['revenue'] ?? 0.0,
+        creditPurchases: paymentAnalytics['creditPurchases'] ?? 0,
+
+        // Growth rates
+        userGrowthRate: growthRates['userGrowthRate'] ?? 0.0,
+        activeUserGrowth: growthRates['activeUserGrowth'] ?? 0.0,
+        registrationGrowth: growthRates['registrationGrowth'] ?? 0.0,
+        sessionGrowth: growthRates['sessionGrowth'] ?? 0.0,
+        engagementGrowth: growthRates['engagementGrowth'] ?? 0.0,
+        applicationGrowth: growthRates['applicationGrowth'] ?? 0.0,
+        messageGrowth: growthRates['messageGrowth'] ?? 0.0,
+        profileViewGrowth: growthRates['profileViewGrowth'] ?? 0.0,
+        jobPostGrowth: growthRates['jobPostGrowth'] ?? 0.0,
+        reportGrowth: growthRates['reportGrowth'] ?? 0.0,
+        reportedMessageGrowth: growthRates['reportedMessageGrowth'] ?? 0.0,
+        creditUsageGrowth: growthRates['creditUsageGrowth'] ?? 0.0,
+        subscriptionGrowth: growthRates['subscriptionGrowth'] ?? 0.0,
+        revenueGrowth: growthRates['revenueGrowth'] ?? 0.0,
+        purchaseGrowth: growthRates['purchaseGrowth'] ?? 0.0,
+      );
+    } catch (e) {
+      throw Exception('Failed to load analytics for range: $e');
+    }
   }
 
   /// Get real-time analytics stream
