@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/models/job_post_model.dart';
 import 'package:fyp_project/models/user_model.dart';
-import 'package:fyp_project/services/post_service.dart';
 import 'package:fyp_project/services/user_service.dart';
 import 'package:fyp_project/pages/user_management/user_detail_page.dart';
 import 'package:fyp_project/pages/post_moderation/post_detail_page.dart';
@@ -27,6 +26,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
   
   List<dynamic> _results = [];
   bool _isLoading = false;
+  bool _isFiltersExpanded = false;
   List<String> _categories = [];
   List<String> _locations = [];
   List<String> _roles = [];
@@ -177,6 +177,15 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
     });
   }
 
+  void _resetFilters() {
+    setState(() {
+      _selectedCategory = 'all';
+      _selectedStatus = 'all';
+      _selectedLocation = 'all';
+      _selectedRole = 'all';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -184,13 +193,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
         title: const Text('Search & Filter'),
         backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.clear_all),
-            onPressed: _clearFilters,
-            tooltip: 'Clear Filters',
-          ),
-        ],
+
       ),
       body: Column(
         children: [
@@ -244,27 +247,66 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
             ),
             child: Column(
               children: [
-                // Search Bar
-                TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search by keywords...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() {});
-                            },
-                          )
-                        : null,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                // Search Bar and Button Row
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Search by keywords...',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: _searchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() {});
+                                  },
+                                )
+                              : null,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onChanged: (_) => setState(() {}),
+                        onSubmitted: (_) => _performSearch(),
+                      ),
                     ),
-                  ),
-                  onChanged: (_) => setState(() {}),
-                  onSubmitted: (_) => _performSearch(),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: _isLoading ? null : _performSearch,
+                      icon: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Icon(Icons.search),
+                      label: Text(
+                        _isLoading ? 'Searching...' : 'Search',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue[700],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 16,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 2,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
 
@@ -291,165 +333,264 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                 ),
                 const SizedBox(height: 12),
 
-                // Filters Row
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    // Category Filter (for posts)
-                    if (_searchType == 'posts' || _searchType == 'all')
-                      SizedBox(
-                        width: 150,
-                        child: DropdownButtonFormField<String>(
-                          value: _selectedCategory,
-                          decoration: InputDecoration(
-                            labelText: 'Category',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
+                // Filters Section (Expandable)
+                if (_searchType == 'posts' || _searchType == 'all' || _searchType == 'users') ...[
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  InkWell(
+                    onTap: () {
+                      setState(() {
+                        _isFiltersExpanded = !_isFiltersExpanded;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.filter_list,
+                            size: 20,
+                            color: Colors.blue[700],
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Filters',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[800],
                             ),
                           ),
-                          items: [
-                            const DropdownMenuItem(value: 'all', child: Text('All Categories')),
-                            ..._categories.map((cat) => DropdownMenuItem(
-                                  value: cat,
-                                  child: Text(cat),
-                                )),
-                          ],
-                          onChanged: (value) {
-                            setState(() => _selectedCategory = value ?? 'all');
-                          },
-                        ),
-                      ),
-
-                    // Status Filter (for posts)
-                    if (_searchType == 'posts' || _searchType == 'all')
-                      SizedBox(
-                        width: 150,
-                        child: DropdownButtonFormField<String>(
-                          value: _selectedStatus,
-                          decoration: InputDecoration(
-                            labelText: 'Status',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
+                          const Spacer(),
+                          // Show active filter count
+                          if (_hasActiveFilters())
+                            Container(
+                              margin: const EdgeInsets.only(right: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.blue[700],
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '${_getActiveFilterCount()}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
+                          Icon(
+                            _isFiltersExpanded
+                                ? Icons.expand_less
+                                : Icons.expand_more,
+                            color: Colors.grey[600],
                           ),
-                          items: const [
-                            DropdownMenuItem(value: 'all', child: Text('All Status')),
-                            DropdownMenuItem(value: 'pending', child: Text('Pending')),
-                            DropdownMenuItem(value: 'active', child: Text('Active')),
-                            DropdownMenuItem(value: 'completed', child: Text('Completed')),
-                            DropdownMenuItem(value: 'rejected', child: Text('Rejected')),
-                          ],
-                          onChanged: (value) {
-                            setState(() => _selectedStatus = value ?? 'all');
-                          },
-                        ),
-                      ),
-
-                    // Location Filter (for posts)
-                    if (_searchType == 'posts' || _searchType == 'all')
-                      SizedBox(
-                        width: 150,
-                        child: DropdownButtonFormField<String>(
-                          value: _selectedLocation,
-                          decoration: InputDecoration(
-                            labelText: 'Location',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                          ),
-                          items: [
-                            const DropdownMenuItem(value: 'all', child: Text('All Locations')),
-                            ..._locations.map((loc) => DropdownMenuItem(
-                                  value: loc,
-                                  child: Text(loc),
-                                )),
-                          ],
-                          onChanged: (value) {
-                            setState(() => _selectedLocation = value ?? 'all');
-                          },
-                        ),
-                      ),
-
-                    // Role Filter (for users)
-                    if (_searchType == 'users' || _searchType == 'all')
-                      SizedBox(
-                        width: 150,
-                        child: DropdownButtonFormField<String>(
-                          value: _selectedRole,
-                          decoration: InputDecoration(
-                            labelText: 'Role',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                          ),
-                          items: [
-                            const DropdownMenuItem(value: 'all', child: Text('All Roles')),
-                            ..._roles.map((role) => DropdownMenuItem(
-                                  value: role,
-                                  child: Text(role),
-                                )),
-                          ],
-                          onChanged: (value) {
-                            setState(() => _selectedRole = value ?? 'all');
-                          },
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Search Button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _performSearch,
-                    icon: _isLoading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.search),
-                    label: Text(_isLoading ? 'Searching...' : 'Search'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue[700],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        ],
                       ),
                     ),
                   ),
-                ),
+                  // Expandable Filters Content
+                  ClipRect(
+                    child: AnimatedSize(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      child: _isFiltersExpanded
+                          ? Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Column(
+                                children: [
+                                  Wrap(
+                                    spacing: 12,
+                                    runSpacing: 12,
+                                    children: [
+                                // Category Filter (for posts)
+                                if (_searchType == 'posts' || _searchType == 'all')
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: DropdownButtonFormField<String>(
+                                      value: _selectedCategory,
+                                      decoration: InputDecoration(
+                                        labelText: 'Category',
+                                        prefixIcon: const Icon(Icons.category, size: 20),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        filled: true,
+                                        fillColor: Colors.grey[50],
+                                        contentPadding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 16,
+                                        ),
+                                      ),
+                                      items: [
+                                        const DropdownMenuItem(value: 'all', child: Text('All Categories')),
+                                        ..._categories.map((cat) => DropdownMenuItem(
+                                              value: cat,
+                                              child: Text(cat),
+                                            )),
+                                      ],
+                                      onChanged: (value) {
+                                        setState(() => _selectedCategory = value ?? 'all');
+                                      },
+                                    ),
+                                  ),
+
+                                // Status Filter (for posts)
+                                if (_searchType == 'posts' || _searchType == 'all')
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: DropdownButtonFormField<String>(
+                                      value: _selectedStatus,
+                                      decoration: InputDecoration(
+                                        labelText: 'Status',
+                                        prefixIcon: const Icon(Icons.info_outline, size: 20),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        filled: true,
+                                        fillColor: Colors.grey[50],
+                                        contentPadding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 16,
+                                        ),
+                                      ),
+                                      items: const [
+                                        DropdownMenuItem(value: 'all', child: Text('All Status')),
+                                        DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                                        DropdownMenuItem(value: 'active', child: Text('Active')),
+                                        DropdownMenuItem(value: 'completed', child: Text('Completed')),
+                                        DropdownMenuItem(value: 'rejected', child: Text('Rejected')),
+                                      ],
+                                      onChanged: (value) {
+                                        setState(() => _selectedStatus = value ?? 'all');
+                                      },
+                                    ),
+                                  ),
+
+                                // Location Filter (for posts)
+                                if (_searchType == 'posts' || _searchType == 'all')
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: DropdownButtonFormField<String>(
+                                      value: _selectedLocation,
+                                      decoration: InputDecoration(
+                                        labelText: 'Location',
+                                        prefixIcon: const Icon(Icons.location_on, size: 20),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        filled: true,
+                                        fillColor: Colors.grey[50],
+                                        contentPadding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 16,
+                                        ),
+                                      ),
+                                      items: [
+                                        const DropdownMenuItem(value: 'all', child: Text('All Locations')),
+                                        ..._locations.map((loc) => DropdownMenuItem(
+                                              value: loc,
+                                              child: Text(loc),
+                                            )),
+                                      ],
+                                      onChanged: (value) {
+                                        setState(() => _selectedLocation = value ?? 'all');
+                                      },
+                                    ),
+                                  ),
+
+                                // Role Filter (for users)
+                                if (_searchType == 'users' || _searchType == 'all')
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: DropdownButtonFormField<String>(
+                                      value: _selectedRole,
+                                      decoration: InputDecoration(
+                                        labelText: 'Role',
+                                        prefixIcon: const Icon(Icons.person_outline, size: 20),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        filled: true,
+                                        fillColor: Colors.grey[50],
+                                        contentPadding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 16,
+                                        ),
+                                      ),
+                                      items: [
+                                        const DropdownMenuItem(value: 'all', child: Text('All Roles')),
+                                        ..._roles.map((role) => DropdownMenuItem(
+                                              value: role,
+                                              child: Text(_getRoleDisplayName(role)),
+                                            )),
+                                      ],
+                                      onChanged: (value) {
+                                        setState(() => _selectedRole = value ?? 'all');
+                                      },
+                                    ),
+                                  ),
+                                    ],
+                                  ),
+                                  // Reset Filters Button
+                                  if (_hasActiveFilters())
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 12),
+                                      child: SizedBox(
+                                        width: double.infinity,
+                                        child: OutlinedButton.icon(
+                                          onPressed: _resetFilters,
+                                          icon: const Icon(Icons.refresh, size: 18),
+                                          label: const Text('Reset Filters'),
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: Colors.blue[700],
+                                            side: BorderSide(color: Colors.blue[300]!),
+                                            padding: const EdgeInsets.symmetric(vertical: 12),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
 
                 // Results Count
                 if (_results.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      'Found ${_results.length} result(s)',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[700],
-                        fontWeight: FontWeight.w500,
-                      ),
+                  Container(
+                    margin: const EdgeInsets.only(top: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue[200]!),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, size: 16, color: Colors.blue[700]),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Found ${_results.length} result${_results.length == 1 ? '' : 's'}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.blue[900],
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
               ],
@@ -459,30 +600,71 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
           // Results List
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
+                        Text(
+                          'Searching...',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
                 : _results.isEmpty
                     ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No results found',
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.grey[600],
-                                fontWeight: FontWeight.w500,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(24),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[50],
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.search_off,
+                                  size: 64,
+                                  color: Colors.grey[400],
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Try adjusting your search criteria',
-                              style: TextStyle(
-                                color: Colors.grey[500],
+                              const SizedBox(height: 24),
+                              Text(
+                                'No results found',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  color: Colors.grey[800],
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 8),
+                              Text(
+                                'Try adjusting your search criteria or filters',
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              OutlinedButton.icon(
+                                onPressed: _clearFilters,
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Clear All Filters'),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       )
                     : ListView.builder(
@@ -504,65 +686,61 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
     );
   }
 
+  Color _getUserStatusColor(UserModel user) {
+    if (user.isSuspended) return Colors.orange;
+    if (!user.isActive) return Colors.red;
+    return Colors.green;
+  }
+
+  String _getUserStatusText(UserModel user) {
+    if (user.isSuspended) return 'Suspended';
+    if (!user.isActive) return 'Inactive';
+    return 'Active';
+  }
+
+  String _getRoleDisplayName(String role) {
+    return role.replaceAll('_', ' ').split(' ').map((word) {
+      if (word.isEmpty) return word;
+      return word[0].toUpperCase() + word.substring(1).toLowerCase();
+    }).join(' ');
+  }
+
+  bool _hasActiveFilters() {
+    if (_searchType == 'posts' || _searchType == 'all') {
+      return _selectedCategory != 'all' ||
+          _selectedStatus != 'all' ||
+          _selectedLocation != 'all' ||
+          (_searchType == 'all' && _selectedRole != 'all');
+    } else if (_searchType == 'users') {
+      return _selectedRole != 'all';
+    }
+    return false;
+  }
+
+  int _getActiveFilterCount() {
+    int count = 0;
+    if (_searchType == 'posts' || _searchType == 'all') {
+      if (_selectedCategory != 'all') count++;
+      if (_selectedStatus != 'all') count++;
+      if (_selectedLocation != 'all') count++;
+      if (_searchType == 'all' && _selectedRole != 'all') count++;
+    } else if (_searchType == 'users') {
+      if (_selectedRole != 'all') count++;
+    }
+    return count;
+  }
+
   Widget _buildUserCard(UserModel user) {
+    final statusColor = _getUserStatusColor(user);
+    final statusText = _getUserStatusText(user);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
-        leading: CircleAvatar(
-          backgroundColor: Colors.blue[100],
-          child: Text(
-            user.fullName.isNotEmpty
-                ? user.fullName[0].toUpperCase()
-                : user.email.isNotEmpty
-                    ? user.email[0].toUpperCase()
-                    : '?',
-            style: TextStyle(
-              color: Colors.blue[700],
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        title: Text(
-          user.fullName,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Text('${user.email} • ${user.role}'),
-            Text(
-              'Location: ${user.location}',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-              ),
-            ),
-            if (user.reportCount > 0)
-              Container(
-                margin: const EdgeInsets.only(top: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.red[50],
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  '${user.reportCount} report(s)',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.red[700],
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-          ],
-        ),
-        trailing: Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[400]),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: InkWell(
         onTap: () {
           Navigator.push(
             context,
@@ -571,89 +749,206 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
             ),
           );
         },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              // Avatar
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: Colors.blue[100],
+                child: Text(
+                  user.fullName.isNotEmpty
+                      ? user.fullName[0].toUpperCase()
+                      : user.email.isNotEmpty
+                          ? user.email[0].toUpperCase()
+                          : '?',
+                  style: TextStyle(
+                    color: Colors.blue[700],
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              // User Info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            user.fullName.isNotEmpty ? user.fullName : 'Unnamed User',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: statusColor.withOpacity(0.3)),
+                          ),
+                          child: Text(
+                            statusText,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: statusColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(Icons.email, size: 14, color: Colors.grey[600]),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            user.email,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[700],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.blue[50],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            _getRoleDisplayName(user.role),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.blue[700],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        if (user.location.isNotEmpty)
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[100],
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.location_on, size: 12, color: Colors.grey[600]),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      user.location,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey[700],
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        if (user.reportCount > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.red[50],
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.flag, size: 12, color: Colors.red[700]),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${user.reportCount} report${user.reportCount > 1 ? 's' : ''}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.red[700],
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right, color: Colors.grey[400]),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildPostCard(JobPostModel post) {
-    Color statusColor;
-    switch (post.status) {
+  Color _getPostStatusColor(String status) {
+    switch (status) {
       case 'pending':
-        statusColor = Colors.orange;
-        break;
+        return Colors.orange;
       case 'active':
-        statusColor = Colors.green;
-        break;
+        return Colors.green;
       case 'rejected':
-        statusColor = Colors.red;
-        break;
+        return Colors.red;
       case 'completed':
-        statusColor = Colors.blue;
-        break;
+        return Colors.blue;
       default:
-        statusColor = Colors.grey;
+        return Colors.grey;
     }
+  }
+
+  String _formatBudget(JobPostModel post) {
+    final min = post.budgetMin;
+    final max = post.budgetMax;
+    if (min == null && max == null) return 'Not specified';
+    if (min != null && max != null) {
+      return '\$${min.toStringAsFixed(0)} - \$${max.toStringAsFixed(0)}';
+    }
+    return '\$${(min ?? max)!.toStringAsFixed(0)}';
+  }
+
+  Widget _buildPostCard(JobPostModel post) {
+    final statusColor = _getPostStatusColor(post.status);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
-        leading: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.blue[50],
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(Icons.article, color: Colors.blue[700]),
-        ),
-        title: Text(
-          post.title,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-          ),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Text('${post.category} • ${post.location}'),
-            Text(
-              'Created: ${DateFormat('dd/MM/yyyy').format(post.createdAt)}',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-              ),
-            ),
-          ],
-        ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: statusColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: statusColor),
-              ),
-              child: Text(
-                post.status.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 10,
-                  color: statusColor,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[400]),
-          ],
-        ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: InkWell(
         onTap: () {
           Navigator.push(
             context,
@@ -662,6 +957,222 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
             ),
           );
         },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Icon
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(Icons.work_outline, color: Colors.blue[700], size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  // Title and Status
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                post.title,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: statusColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: statusColor.withOpacity(0.3)),
+                              ),
+                              child: Text(
+                                post.status.toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: statusColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        // Description preview
+                        if (post.description.isNotEmpty)
+                          Text(
+                            post.description,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[700],
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Tags and Info
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (post.category.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.purple[50],
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.category, size: 14, color: Colors.purple[700]),
+                          const SizedBox(width: 4),
+                          Text(
+                            post.category,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.purple[700],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (post.location.isNotEmpty)
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.location_on, size: 14, color: Colors.grey[700]),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                post.location,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[700],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  if (post.jobType.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.access_time, size: 14, color: Colors.blue[700]),
+                          const SizedBox(width: 4),
+                          Text(
+                            post.jobType,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.blue[700],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.attach_money, size: 14, color: Colors.green[700]),
+                        const SizedBox(width: 4),
+                        Text(
+                          _formatBudget(post),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.green[700],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Footer with date and view button
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Created: ${DateFormat('MMM dd, yyyy').format(post.createdAt)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Text(
+                        'View Details',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.blue[700],
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(Icons.chevron_right, size: 18, color: Colors.blue[700]),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

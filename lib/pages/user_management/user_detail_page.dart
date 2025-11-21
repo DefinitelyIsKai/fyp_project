@@ -509,18 +509,16 @@ class UserDetailPage extends StatelessWidget {
               spacing: 12,
               runSpacing: 12,
               children: [
-                // Suspend/Activate Button
+                // Warning Button
                 if (!user.isSuspended)
                   ActionButton(
-                    text: 'Suspend User',
-                    icon: Icons.pause_circle_outline,
+                    text: 'Give Warning',
                     color: Colors.orange,
-                    onPressed: () => _showStatusConfirmationDialog(context, userService, 'suspend'),
+                    onPressed: () => _showWarningDialog(context, userService),
                   )
                 else
                   ActionButton(
                     text: 'Activate User',
-                    icon: Icons.play_arrow,
                     color: Colors.green,
                     onPressed: () => _showStatusConfirmationDialog(context, userService, 'activate'),
                   ),
@@ -528,25 +526,8 @@ class UserDetailPage extends StatelessWidget {
                 // Delete Button
                 ActionButton(
                   text: 'Delete Account',
-                  icon: Icons.delete_outline,
                   color: Colors.red,
                   onPressed: () => _showStatusConfirmationDialog(context, userService, 'delete'),
-                ),
-
-                // View Profile Button
-                ActionButton(
-                  text: 'View Full Profile',
-                  icon: Icons.visibility,
-                  color: Colors.blue,
-                  onPressed: () {
-                    // Navigate to full profile page if available
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Opening full user profile...'),
-                        backgroundColor: Colors.blue,
-                      ),
-                    );
-                  },
                 ),
               ],
             ),
@@ -554,6 +535,166 @@ class UserDetailPage extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _showWarningDialog(BuildContext context, UserService userService) async {
+    final violationController = TextEditingController();
+
+    // Get current strike count
+    final currentStrikes = await userService.getStrikeCount(user.id);
+    final strikesRemaining = 3 - currentStrikes;
+
+    await showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Issue Warning'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'You are about to issue a warning to ${user.fullName}.',
+                style: const TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange[200]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.orange[700], size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Current strikes: $currentStrikes/3\n${strikesRemaining > 0 ? '$strikesRemaining more strike${strikesRemaining == 1 ? '' : 's'} until automatic suspension' : 'Account will be suspended automatically'}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              const Text(
+                'Violation Reason *',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: violationController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  hintText: 'Explain the violation (this will be sent to the user)...',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.all(12),
+                ),
+                textInputAction: TextInputAction.done,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'The user will receive a warning notification. After 3 strikes, their account will be automatically suspended.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final violationReason = violationController.text.trim();
+
+              if (violationReason.isEmpty) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please provide a violation reason'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              Navigator.pop(context);
+              await _issueWarning(context, userService, violationReason);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Issue Warning'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _issueWarning(BuildContext context, UserService userService, String violationReason) async {
+    try {
+      final result = await userService.issueWarning(
+        userId: user.id,
+        violationReason: violationReason,
+      );
+
+      if (!context.mounted) return;
+
+      if (result['success'] == true) {
+        final strikeCount = result['strikeCount'];
+        final wasSuspended = result['wasSuspended'];
+        final userName = result['userName'];
+
+        if (wasSuspended) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$userName has reached 3 strikes and has been automatically suspended'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Warning issued to $userName (Strike $strikeCount/3)'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to issue warning: ${result['error']}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+
+      if (context.mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to issue warning: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }
 
@@ -769,28 +910,26 @@ class _DetailSection extends StatelessWidget {
 
 class ActionButton extends StatelessWidget {
   final String text;
-  final IconData icon;
   final Color color;
   final VoidCallback onPressed;
 
   const ActionButton({
     required this.text,
-    required this.icon,
     required this.color,
     required this.onPressed,
   });
 
   @override
   Widget build(BuildContext context) {
-    return ElevatedButton.icon(
+    return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
         backgroundColor: color,
+        foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
-      icon: Icon(icon, size: 18),
-      label: Text(
+      child: Text(
         text,
         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
       ),

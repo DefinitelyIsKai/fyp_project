@@ -8,7 +8,7 @@ class ReportService {
   Stream<List<ReportModel>> streamAllReports() {
     return _firestore
         .collection('reports')
-        .orderBy('reportedAt', descending: true)
+        .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
@@ -22,7 +22,7 @@ class ReportService {
     return _firestore
         .collection('reports')
         .where('status', isEqualTo: status)
-        .orderBy('reportedAt', descending: true)
+        .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) => _mapReport(doc)).toList();
@@ -34,7 +34,7 @@ class ReportService {
     try {
       final snapshot = await _firestore
           .collection('reports')
-          .orderBy('reportedAt', descending: true)
+          .orderBy('createdAt', descending: true)
           .get();
       return snapshot.docs.map((doc) => _mapReport(doc)).toList();
     } catch (e) {
@@ -45,10 +45,20 @@ class ReportService {
   /// Get reports by type
   Future<List<ReportModel>> getReportsByType(ReportType type) async {
     try {
+      // Map ReportType to Firestore type values
+      String firestoreType;
+      if (type == ReportType.user) {
+        firestoreType = 'employee';
+      } else if (type == ReportType.jobPost) {
+        firestoreType = 'post';
+      } else {
+        firestoreType = type.toString().split('.').last;
+      }
+      
       final snapshot = await _firestore
           .collection('reports')
-          .where('reportType', isEqualTo: type.toString().split('.').last)
-          .orderBy('reportedAt', descending: true)
+          .where('type', isEqualTo: firestoreType)
+          .orderBy('createdAt', descending: true)
           .get();
       return snapshot.docs.map((doc) => _mapReport(doc)).toList();
     } catch (e) {
@@ -110,27 +120,53 @@ class ReportService {
   ReportModel _mapReport(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     
+    // Determine the reported item ID based on report type
+    String reportedItemId = '';
+    final reportType = data['type']?.toString().toLowerCase() ?? '';
+    
+    if (reportType == 'employee') {
+      // For employee reports, the reported item is the employee
+      reportedItemId = data['reportedEmployeeId']?.toString() ?? '';
+    } else if (reportType == 'post') {
+      // For post reports, the reported item is the post
+      reportedItemId = data['reportedPostId']?.toString() ?? '';
+    } else {
+      // Fallback to old structure if it exists
+      reportedItemId = data['reportedItemId']?.toString() ?? 
+                      data['reportedPostId']?.toString() ?? 
+                      data['reportedEmployeeId']?.toString() ?? '';
+    }
+    
     return ReportModel(
       id: doc.id,
-      reporterId: data['reporterId'] ?? '',
-      reportedItemId: data['reportedItemId'] ?? '',
-      reportType: _parseReportType(data['reportType']),
-      reason: data['reason'] ?? '',
-      description: data['description'],
-      reportedAt: (data['reportedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      reporterId: data['reporterId']?.toString() ?? '',
+      reportedItemId: reportedItemId,
+      reportType: _parseReportType(data['type'] ?? data['reportType']),
+      reason: data['reason']?.toString() ?? '',
+      description: data['description']?.toString(),
+      reportedAt: (data['createdAt'] as Timestamp?)?.toDate() ?? 
+                  (data['reportedAt'] as Timestamp?)?.toDate() ?? 
+                  DateTime.now(),
       status: _parseReportStatus(data['status']),
-      reviewedBy: data['reviewedBy'],
+      reviewedBy: data['reviewedBy']?.toString(),
       reviewedAt: (data['reviewedAt'] as Timestamp?)?.toDate(),
-      reviewNotes: data['reviewNotes'],
-      actionTaken: data['actionTaken'],
+      reviewNotes: data['reviewNotes']?.toString(),
+      actionTaken: data['actionTaken']?.toString(),
+      reportedEmployeeId: data['reportedEmployeeId']?.toString(),
+      reportedEmployerId: data['reportedEmployerId']?.toString(),
+      reportedPostId: data['reportedPostId']?.toString(),
     );
   }
 
   ReportType _parseReportType(dynamic value) {
     if (value == null) return ReportType.other;
     final str = value.toString().toLowerCase();
+    
+    // Map Firestore type values to ReportType enum
+    if (str == 'post') return ReportType.jobPost;
+    if (str == 'employee') return ReportType.user;
     if (str.contains('job') || str.contains('post')) return ReportType.jobPost;
-    if (str.contains('user')) return ReportType.user;
+    if (str.contains('user') || str.contains('employee')) return ReportType.user;
     if (str.contains('message')) return ReportType.message;
     return ReportType.other;
   }

@@ -3,8 +3,6 @@ import 'package:fyp_project/pages/post_moderation/categories_page.dart';
 import 'package:fyp_project/pages/post_moderation/tags_page.dart';
 import 'package:fyp_project/services/category_service.dart';
 import 'package:fyp_project/services/tag_service.dart';
-import 'package:fyp_project/models/category_model.dart';
-import 'package:fyp_project/models/tag_model.dart';
 
 class ManageTagsCategoriesPage extends StatefulWidget {
   const ManageTagsCategoriesPage({super.key});
@@ -28,28 +26,29 @@ class _ManageTagsCategoriesPageState extends State<ManageTagsCategoriesPage> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
 
     try {
       // Load categories count
       final categories = await _categoryService.getAllCategories();
+      if (!mounted) return;
       _categoriesCount = categories.length;
 
       // Load tags count - get all categories with their tags for accurate count
       final tagCategories = await _tagService.getAllTagCategoriesWithTags();
+      if (!mounted) return;
       _tagsCount = tagCategories.fold(0, (sum, category) => sum + category.tags.length);
     } catch (e) {
       // Handle error silently or show a snackbar
-      print('Error loading data: $e');
+      if (mounted) {
+        print('Error loading data: $e');
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
-  }
-
-  // Listen for updates from child pages
-  void _onReturnFromChildPage() async {
-    // Refresh data when returning from child pages to get real-time updates
-    await _loadData();
   }
 
   @override

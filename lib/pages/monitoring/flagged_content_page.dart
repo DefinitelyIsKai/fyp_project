@@ -12,7 +12,7 @@ class FlaggedContentPage extends StatefulWidget {
 
 class _FlaggedContentPageState extends State<FlaggedContentPage> {
   final ReportService _reportService = ReportService();
-  String _selectedStatus = 'pending';
+  String _selectedStatus = 'all';
   String _selectedType = 'all';
   String _searchQuery = '';
 
@@ -152,8 +152,8 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
                         ),
                         items: const [
                           DropdownMenuItem(value: 'all', child: Text('All Types')),
-                          DropdownMenuItem(value: 'jobPost', child: Text('Job Post')),
-                          DropdownMenuItem(value: 'user', child: Text('User')),
+                          DropdownMenuItem(value: 'post', child: Text('Post Report')),
+                          DropdownMenuItem(value: 'employee', child: Text('Employee Report')),
                           DropdownMenuItem(value: 'message', child: Text('Message')),
                           DropdownMenuItem(value: 'other', child: Text('Other')),
                         ],
@@ -277,9 +277,17 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
 
   List<ReportModel> _filterReports(List<ReportModel> reports) {
     return reports.where((report) {
-      // Filter by type
-      final matchesType = _selectedType == 'all' ||
-          report.reportType.toString().split('.').last == _selectedType;
+      // Filter by type - map ReportType enum to Firestore type values
+      bool matchesType = true;
+      if (_selectedType != 'all') {
+        if (_selectedType == 'post') {
+          matchesType = report.reportType == ReportType.jobPost;
+        } else if (_selectedType == 'employee') {
+          matchesType = report.reportType == ReportType.user;
+        } else {
+          matchesType = report.reportType.toString().split('.').last == _selectedType;
+        }
+      }
 
       // Filter by search query
       final matchesSearch = _searchQuery.isEmpty ||
@@ -451,9 +459,9 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
   String _getReportTypeLabel(ReportType type) {
     switch (type) {
       case ReportType.jobPost:
-        return 'Job Post Report';
+        return 'Post Report';
       case ReportType.user:
-        return 'User Report';
+        return 'Employee Report';
       case ReportType.message:
         return 'Message Report';
       default:

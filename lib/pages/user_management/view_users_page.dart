@@ -453,10 +453,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
-  String _formatUserId(String userId) {
-    return userId.length > 8 ? '${userId.substring(0, 8)}...' : userId;
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -746,7 +742,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                                 ),
                                 const SizedBox(height: 8),
 
-                                // Role and ID
+                                // Role and Joined Date
                                 Wrap(
                                   spacing: 8,
                                   runSpacing: 8,
@@ -762,7 +758,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: Text(
-                                        '${_getRoleDisplayName(user.role)} + ID: ${_formatUserId(user.id)}',
+                                        _getRoleDisplayName(user.role),
                                         style: TextStyle(
                                           color: Colors.blue[700],
                                           fontSize: 12,

@@ -794,16 +794,10 @@ class _MapOversightPageState extends State<MapOversightPage> {
                     tooltip: 'All posts in database',
                   ),
                   _StatItem(
-                    icon: Icons.filter_list,
-                    label: 'Filtered',
-                    value: _filteredPosts.length.toString(),
-                    tooltip: 'Posts matching all filters',
-                  ),
-                  _StatItem(
                     icon: Icons.location_on,
                     label: 'On Map',
                     value: _markers.length.toString(),
-                    tooltip: 'Filtered posts with valid locations shown on map',
+                    tooltip: 'Posts with valid locations shown on map',
                   ),
                   _StatItem(
                     icon: Icons.location_off,

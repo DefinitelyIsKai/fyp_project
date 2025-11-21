@@ -99,14 +99,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
     }
   }
 
-  void _selectQuickDateRange(int days) {
-    setState(() {
-      _endDate = DateTime.now();
-      _startDate = DateTime.now().subtract(Duration(days: days));
-    });
-    _loadAnalytics();
-  }
-
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
   }
@@ -149,15 +141,16 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text(
-          'User Analytics Dashboard',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-        ),
+        title: const Text('User Analytics'),
         backgroundColor: Colors.purple[700],
-        elevation: 0,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadAnalytics,
+            tooltip: 'Refresh',
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -195,7 +188,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
             ),
           ),
 
-          // Date Range Selector with Quick Presets
+          // Date Range Selector
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -209,94 +202,50 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
                 ),
               ],
             ),
-            child: Column(
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: InkWell(
-                        onTap: _selectDateRange,
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey[300]!),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.calendar_today, color: Colors.purple[700]),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Date Range',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey[600],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      _getDateRangeText(),
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
+                Expanded(
+                  child: InkWell(
+                    onTap: _selectDateRange,
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.calendar_today, color: Colors.purple[700]),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Date Range',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
                                 ),
-                              ),
-                              Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
-                            ],
+                                const SizedBox(height: 4),
+                                Text(
+                                  _getDateRangeText(),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
+                          Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    ElevatedButton.icon(
-                      onPressed: _loadAnalytics,
-                      icon: const Icon(Icons.refresh, size: 20),
-                      label: const Text('Refresh'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.purple[700],
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // Quick Date Presets
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _QuickDateButton(
-                      label: 'Today',
-                      onTap: () => _selectQuickDateRange(0),
-                      isActive: _endDate.difference(_startDate).inDays == 0,
-                    ),
-                    _QuickDateButton(
-                      label: '7 Days',
-                      onTap: () => _selectQuickDateRange(7),
-                      isActive: _endDate.difference(_startDate).inDays == 7,
-                    ),
-                    _QuickDateButton(
-                      label: '30 Days',
-                      onTap: () => _selectQuickDateRange(30),
-                      isActive: _endDate.difference(_startDate).inDays == 30,
-                    ),
-                    _QuickDateButton(
-                      label: '90 Days',
-                      onTap: () => _selectQuickDateRange(90),
-                      isActive: _endDate.difference(_startDate).inDays == 90,
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
@@ -311,63 +260,30 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
                     : SingleChildScrollView(
                         padding: const EdgeInsets.all(16),
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             // Quick Stats Row
                             _buildQuickStats(),
                             const SizedBox(height: 20),
 
-                            // User Statistics Section
-                            _buildUserStatisticsSection(),
-                            const SizedBox(height: 16),
-
-                            // User Engagement Section
-                            _buildUserEngagementSection(),
-                            const SizedBox(height: 16),
+                            // Period Overview
+                            _buildPeriodOverview(),
+                            const SizedBox(height: 20),
 
                             // User Activity Charts
                             _buildChartsSection(),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 20),
+
+                            // User Statistics Section
+                            _buildUserStatisticsSection(),
+                            const SizedBox(height: 20),
+
+                            // User Engagement Section
+                            _buildUserEngagementSection(),
+                            const SizedBox(height: 20),
 
                             // User Reports Section
                             _buildUserReportsSection(),
-                            const SizedBox(height: 20),
-
-                            // Generate Report Button
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: () async {
-                                  try {
-                                    final result = await _analyticsService.generateComprehensiveReport(
-                                      _startDate,
-                                      _endDate,
-                                    );
-                                    if (mounted) {
-                                      _showSnackBar('Report generated successfully!');
-                                      // You could also show a dialog with the report
-                                      print(result); // For now, just print to console
-                                    }
-                                  } catch (e) {
-                                    if (mounted) {
-                                      _showSnackBar('Error generating report: $e', isError: true);
-                                    }
-                                  }
-                                },
-                                icon: const Icon(Icons.analytics),
-                                label: const Text(
-                                  'Generate Comprehensive User Report',
-                                  style: TextStyle(fontWeight: FontWeight.w600),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.purple[700],
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                              ),
-                            ),
                             const SizedBox(height: 20),
                           ],
                         ),
@@ -379,104 +295,222 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
   }
 
   Widget _buildQuickStats() {
-    return Row(
-      children: [
-        Expanded(
-          child: _QuickStatCard(
-            title: 'Total Users',
-            value: _analytics!.totalUsers.toString(),
-            subtitle: 'All registered',
-            color: Colors.blue,
-            icon: Icons.people,
-            trend: _analytics!.userGrowthRate,
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          SizedBox(
+            width: MediaQuery.of(context).size.width * 0.45,
+            child: _QuickStatCard(
+              title: 'Total Users',
+              value: _analytics!.totalUsers.toString(),
+              subtitle: 'All registered',
+              color: Colors.blue,
+              icon: Icons.people,
+              trend: _analytics!.userGrowthRate,
+            ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _QuickStatCard(
-            title: 'Active Users',
-            value: _analytics!.activeUsers.toString(),
-            subtitle: 'Currently online',
-            color: Colors.green,
-            icon: Icons.online_prediction,
-            trend: _analytics!.activeUserGrowth,
+          const SizedBox(width: 10),
+          SizedBox(
+            width: MediaQuery.of(context).size.width * 0.45,
+            child: _QuickStatCard(
+              title: 'Active Users',
+              value: _analytics!.activeUsers.toString(),
+              subtitle: 'Currently online',
+              color: Colors.green,
+              icon: Icons.online_prediction,
+              trend: _analytics!.activeUserGrowth,
+            ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _QuickStatCard(
-            title: 'New Users',
-            value: _analytics!.newRegistrations.toString(),
-            subtitle: 'This period',
-            color: Colors.orange,
-            icon: Icons.person_add,
-            trend: _analytics!.registrationGrowth,
+          const SizedBox(width: 10),
+          SizedBox(
+            width: MediaQuery.of(context).size.width * 0.45,
+            child: _QuickStatCard(
+              title: 'New Users',
+              value: _analytics!.newRegistrations.toString(),
+              subtitle: 'This period',
+              color: Colors.orange,
+              icon: Icons.person_add,
+              trend: _analytics!.registrationGrowth,
+            ),
           ),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: MediaQuery.of(context).size.width * 0.45,
+            child: _QuickStatCard(
+              title: 'Inactive Users',
+              value: _analytics!.inactiveUsers.toString(),
+              subtitle: 'Not active',
+              color: Colors.grey,
+              icon: Icons.person_off,
+              trend: 0.0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPeriodOverview() {
+    final totalUsers = _analytics!.totalUsers;
+    final newRegistrations = _analytics!.newRegistrations;
+    final periodPercentage = totalUsers > 0 ? (newRegistrations / totalUsers * 100) : 0.0;
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Period Overview',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _ComparisonItem(
+                    label: 'New Users in Period',
+                    value: newRegistrations.toString(),
+                    percentage: periodPercentage,
+                    color: Colors.purple,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _ComparisonItem(
+                    label: 'Total Users (All Time)',
+                    value: totalUsers.toString(),
+                    percentage: 100.0,
+                    color: Colors.grey,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
   Widget _buildUserStatisticsSection() {
-    return _AnalyticsSectionCard(
-      title: 'User Statistics',
-      icon: Icons.people_alt,
-      color: Colors.blue,
-      children: [
-        _MetricRow(
-          label: 'Total Users',
-          value: _analytics!.totalUsers.toString(),
-          trend: _analytics!.userGrowthRate,
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.people_alt, size: 24, color: Colors.blue),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'User Statistics',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _MetricRow(
+              label: 'Total Users',
+              value: _analytics!.totalUsers.toString(),
+              trend: _analytics!.userGrowthRate,
+            ),
+            _MetricRow(
+              label: 'Active Users',
+              value: '${_analytics!.activeUsers.toString()} (${_analytics!.activeUserPercentage.toStringAsFixed(1)}%)',
+              trend: _analytics!.activeUserGrowth,
+              subMetrics: {
+                'Inactive': _analytics!.inactiveUsers.toString(),
+              },
+            ),
+            _MetricRow(
+              label: 'New Registrations',
+              value: _analytics!.newRegistrations.toString(),
+              trend: _analytics!.registrationGrowth,
+            ),
+            _MetricRow(
+              label: 'Average Session Duration',
+              value: '${_analytics!.avgSessionDuration.toStringAsFixed(1)} min',
+              trend: _analytics!.sessionGrowth,
+            ),
+          ],
         ),
-        _MetricRow(
-          label: 'Active Users',
-          value: '${_analytics!.activeUsers.toString()} (${_analytics!.activeUserPercentage.toStringAsFixed(1)}%)',
-          trend: _analytics!.activeUserGrowth,
-          subMetrics: {
-            'Inactive': _analytics!.inactiveUsers.toString(),
-          },
-        ),
-        _MetricRow(
-          label: 'New Registrations',
-          value: _analytics!.newRegistrations.toString(),
-          trend: _analytics!.registrationGrowth,
-        ),
-        _MetricRow(
-          label: 'Average Session Duration',
-          value: '${_analytics!.avgSessionDuration.toStringAsFixed(1)} min',
-          trend: _analytics!.sessionGrowth,
-        ),
-      ],
+      ),
     );
   }
 
   Widget _buildUserEngagementSection() {
-    return _AnalyticsSectionCard(
-      title: 'User Engagement',
-      icon: Icons.trending_up,
-      color: Colors.green,
-      children: [
-        _MetricRow(
-          label: 'Engagement Rate',
-          value: '${_analytics!.engagementRate.toStringAsFixed(1)}%',
-          trend: _analytics!.engagementGrowth,
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.trending_up, size: 24, color: Colors.green),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'User Engagement',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _MetricRow(
+              label: 'Engagement Rate',
+              value: '${_analytics!.engagementRate.toStringAsFixed(1)}%',
+              trend: _analytics!.engagementGrowth,
+            ),
+            _MetricRow(
+              label: 'Profile Views',
+              value: _analytics!.profileViews.toString(),
+              trend: _analytics!.profileViewGrowth,
+            ),
+            _MetricRow(
+              label: 'Messages Sent',
+              value: _analytics!.totalMessages.toString(),
+              trend: _analytics!.messageGrowth,
+            ),
+            _MetricRow(
+              label: 'Job Applications',
+              value: _analytics!.totalApplications.toString(),
+              trend: _analytics!.applicationGrowth,
+            ),
+          ],
         ),
-        _MetricRow(
-          label: 'Profile Views',
-          value: _analytics!.profileViews.toString(),
-          trend: _analytics!.profileViewGrowth,
-        ),
-        _MetricRow(
-          label: 'Messages Sent',
-          value: _analytics!.totalMessages.toString(),
-          trend: _analytics!.messageGrowth,
-        ),
-        _MetricRow(
-          label: 'Job Applications',
-          value: _analytics!.totalApplications.toString(),
-          trend: _analytics!.applicationGrowth,
-        ),
-      ],
+      ),
     );
   }
 
@@ -707,31 +741,57 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
   }
 
   Widget _buildUserReportsSection() {
-    return _AnalyticsSectionCard(
-      title: 'User Reports & Moderation',
-      icon: Icons.flag,
-      color: Colors.red,
-      children: [
-        _MetricRow(
-          label: 'Total Reports',
-          value: _analytics!.totalReports.toString(),
-          trend: _analytics!.reportGrowth,
-          subMetrics: {
-            'Pending': _analytics!.pendingReports.toString(),
-            'Resolved': _analytics!.resolvedReports.toString(),
-          },
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.flag, size: 24, color: Colors.red),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'User Reports & Moderation',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _MetricRow(
+              label: 'Total Reports',
+              value: _analytics!.totalReports.toString(),
+              trend: _analytics!.reportGrowth,
+              subMetrics: {
+                'Pending': _analytics!.pendingReports.toString(),
+                'Resolved': _analytics!.resolvedReports.toString(),
+              },
+            ),
+            _MetricRow(
+              label: 'Reported Messages',
+              value: _analytics!.reportedMessages.toString(),
+              trend: _analytics!.reportedMessageGrowth,
+            ),
+            _MetricRow(
+              label: 'Report Resolution Rate',
+              value: '${_analytics!.reportResolutionRate.toStringAsFixed(1)}%',
+              trend: 0.0,
+            ),
+          ],
         ),
-        _MetricRow(
-          label: 'Reported Messages',
-          value: _analytics!.reportedMessages.toString(),
-          trend: _analytics!.reportedMessageGrowth,
-        ),
-        _MetricRow(
-          label: 'Report Resolution Rate',
-          value: '${_analytics!.reportResolutionRate.toStringAsFixed(1)}%',
-          trend: 0.0,
-        ),
-      ],
+      ),
     );
   }
 
@@ -835,35 +895,7 @@ class _QuickStatCard extends StatelessWidget {
                   child: Icon(icon, size: 20, color: color),
                 ),
                 if (trend != 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: trend > 0 ? Colors.green[50] : Colors.red[50],
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: trend > 0 ? Colors.green[100]! : Colors.red[100]!,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          trend > 0 ? Icons.arrow_upward : Icons.arrow_downward,
-                          size: 12,
-                          color: trend > 0 ? Colors.green[700] : Colors.red[700],
-                        ),
-                        const SizedBox(width: 2),
-                        Text(
-                          '${trend.abs().toStringAsFixed(1)}%',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: trend > 0 ? Colors.green[700] : Colors.red[700],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _TrendBadge(trend),
               ],
             ),
             const SizedBox(height: 12),
@@ -872,25 +904,27 @@ class _QuickStatCard extends StatelessWidget {
               style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: Colors.black87,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 12),
             Text(
               title,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 14,
                 color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
               ),
             ),
+            if (subtitle.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[500],
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -898,53 +932,139 @@ class _QuickStatCard extends StatelessWidget {
   }
 }
 
-class _AnalyticsSectionCard extends StatelessWidget {
-  final String title;
-  final IconData icon;
+class _ComparisonItem extends StatelessWidget {
+  final String label;
+  final String value;
+  final double percentage;
   final Color color;
-  final List<Widget> children;
 
-  const _AnalyticsSectionCard({
-    required this.title,
-    required this.icon,
+  const _ComparisonItem({
+    required this.label,
+    required this.value,
+    required this.percentage,
     required this.color,
-    required this.children,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(icon, size: 24, color: color),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
             ),
-            const SizedBox(height: 16),
-            ...children,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 8),
+          LinearProgressIndicator(
+            value: percentage / 100,
+            backgroundColor: Colors.grey[200],
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${percentage.toStringAsFixed(1)}%',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Helper widget for trend badges
+class _TrendBadge extends StatelessWidget {
+  final double trend;
+
+  const _TrendBadge(this.trend);
+
+  @override
+  Widget build(BuildContext context) {
+    // Special value -999 indicates "new" data (previous was 0, current > 0)
+    const double newDataIndicator = -999.0;
+    
+    if (trend == newDataIndicator) {
+      // Show "New" badge for new data
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.blue[50],
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: Colors.blue[100]!,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.new_releases,
+              size: 12,
+              color: Colors.blue[700],
+            ),
+            const SizedBox(width: 2),
+            Text(
+              'New',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: Colors.blue[700],
+              ),
+            ),
           ],
         ),
+      );
+    }
+    
+    // Regular growth/decline badge
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: trend > 0 ? Colors.green[50] : Colors.red[50],
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: trend > 0 ? Colors.green[100]! : Colors.red[100]!,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            trend > 0 ? Icons.arrow_upward : Icons.arrow_downward,
+            size: 12,
+            color: trend > 0 ? Colors.green[700] : Colors.red[700],
+          ),
+          const SizedBox(width: 2),
+          Text(
+            '${trend.abs().toStringAsFixed(1)}%',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: trend > 0 ? Colors.green[700] : Colors.red[700],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -990,35 +1110,7 @@ class _MetricRow extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 if (trend != 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: trend > 0 ? Colors.green[50] : Colors.red[50],
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: trend > 0 ? Colors.green[100]! : Colors.red[100]!,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          trend > 0 ? Icons.arrow_upward : Icons.arrow_downward,
-                          size: 12,
-                          color: trend > 0 ? Colors.green[700] : Colors.red[700],
-                        ),
-                        const SizedBox(width: 2),
-                        Text(
-                          '${trend.abs().toStringAsFixed(1)}%',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: trend > 0 ? Colors.green[700] : Colors.red[700],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _TrendBadge(trend),
               ],
             ),
           ],
@@ -1049,44 +1141,6 @@ class _MetricRow extends StatelessWidget {
         ],
         const SizedBox(height: 12),
       ],
-    );
-  }
-}
-
-class _QuickDateButton extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-  final bool isActive;
-
-  const _QuickDateButton({
-    required this.label,
-    required this.onTap,
-    required this.isActive,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive ? Colors.purple[700] : Colors.grey[100],
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isActive ? Colors.purple[700]! : Colors.grey[300]!,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isActive ? Colors.white : Colors.grey[700],
-            fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-            fontSize: 12,
-          ),
-        ),
-      ),
     );
   }
 }

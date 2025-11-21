@@ -72,6 +72,21 @@ class AnalyticsService {
       final paymentAnalytics = futures[5] as Map<String, dynamic>;
       final previousAnalytics = futures[6] as Map<String, dynamic>;
 
+      // Calculate engagement rates for both periods
+      final currentEngagementRate = _calculateEngagementRate(
+        activeUsers: userAnalytics['activeUsers'] ?? 0,
+        totalUsers: userAnalytics['totalUsers'] ?? 0,
+        totalApplications: applicationAnalytics['totalApplications'] ?? 0,
+        totalMessages: messageAnalytics['totalMessages'] ?? 0,
+      );
+      
+      final previousEngagementRate = _calculateEngagementRate(
+        activeUsers: previousAnalytics['activeUsers'] ?? 0,
+        totalUsers: previousAnalytics['totalUsers'] ?? 0,
+        totalApplications: previousAnalytics['totalApplications'] ?? 0,
+        totalMessages: previousAnalytics['totalMessages'] ?? 0,
+      );
+
       // Calculate growth rates
       final growthRates = _calculateGrowthRates(
         currentAnalytics: {
@@ -81,8 +96,12 @@ class AnalyticsService {
           ...reportAnalytics,
           ...messageAnalytics,
           ...paymentAnalytics,
+          'engagementRate': currentEngagementRate,
         },
-        previousAnalytics: previousAnalytics,
+        previousAnalytics: {
+          ...previousAnalytics,
+          'engagementRate': previousEngagementRate,
+        },
       );
 
       return AnalyticsModel(
@@ -104,12 +123,7 @@ class AnalyticsService {
         resolvedReports: reportAnalytics['resolvedReports'] ?? 0,
         profileViews: userAnalytics['profileViews'] ?? 0,
         avgSessionDuration: userAnalytics['avgSessionDuration'] ?? 0.0,
-        engagementRate: _calculateEngagementRate(
-          activeUsers: userAnalytics['activeUsers'] ?? 0,
-          totalUsers: userAnalytics['totalUsers'] ?? 0,
-          totalApplications: applicationAnalytics['totalApplications'] ?? 0,
-          totalMessages: messageAnalytics['totalMessages'] ?? 0,
-        ),
+        engagementRate: currentEngagementRate,
         totalCreditsUsed: paymentAnalytics['totalCreditsUsed'] ?? 0,
         activeSubscriptions: paymentAnalytics['activeSubscriptions'] ?? 0,
         revenue: paymentAnalytics['revenue'] ?? 0.0,
@@ -373,8 +387,17 @@ class AnalyticsService {
     required Map<String, dynamic> currentAnalytics,
     required Map<String, dynamic> previousAnalytics,
   }) {
+    // Special value to indicate "new" data (previous was 0, current > 0)
+    // Using -999 as a sentinel value that UI can detect
+    const double newDataIndicator = -999.0;
+    
     double _calculateGrowth(double current, double previous) {
-      if (previous == 0) return current > 0 ? 100.0 : 0.0;
+      if (previous == 0) {
+        // If previous was 0 and current > 0, return special indicator for "new"
+        if (current > 0) return newDataIndicator;
+        // If both are 0, return 0 (no change)
+        return 0.0;
+      }
       return ((current - previous) / previous) * 100;
     }
 
@@ -423,9 +446,13 @@ class AnalyticsService {
         (currentAnalytics['creditPurchases'] ?? 0).toDouble(),
         (previousAnalytics['creditPurchases'] ?? 0).toDouble(),
       ),
+      // Calculate engagement growth from engagement rates
+      'engagementGrowth': _calculateGrowth(
+        (currentAnalytics['engagementRate'] ?? 0).toDouble(),
+        (previousAnalytics['engagementRate'] ?? 0).toDouble(),
+      ),
       // Default values for metrics that need separate tracking
       'sessionGrowth': 5.0,
-      'engagementGrowth': 8.0,
       'profileViewGrowth': 12.0,
       'reportedMessageGrowth': -2.0,
     };
@@ -464,6 +491,21 @@ class AnalyticsService {
       final paymentAnalytics = futures[5] as Map<String, dynamic>;
       final previousAnalytics = futures[6] as Map<String, dynamic>;
 
+      // Calculate engagement rates for both periods
+      final currentEngagementRate = _calculateEngagementRate(
+        activeUsers: userAnalytics['activeUsers'] ?? 0,
+        totalUsers: userAnalytics['totalUsers'] ?? 0,
+        totalApplications: applicationAnalytics['totalApplications'] ?? 0,
+        totalMessages: messageAnalytics['totalMessages'] ?? 0,
+      );
+      
+      final previousEngagementRate = _calculateEngagementRate(
+        activeUsers: previousAnalytics['activeUsers'] ?? 0,
+        totalUsers: previousAnalytics['totalUsers'] ?? 0,
+        totalApplications: previousAnalytics['totalApplications'] ?? 0,
+        totalMessages: previousAnalytics['totalMessages'] ?? 0,
+      );
+
       // Calculate growth rates
       final growthRates = _calculateGrowthRates(
         currentAnalytics: {
@@ -473,16 +515,12 @@ class AnalyticsService {
           ...reportAnalytics,
           ...messageAnalytics,
           ...paymentAnalytics,
+          'engagementRate': currentEngagementRate,
         },
-        previousAnalytics: previousAnalytics,
-      );
-
-      // Calculate engagement rate for the selected period
-      final engagementRate = _calculateEngagementRate(
-        activeUsers: userAnalytics['activeUsers'] ?? 0,
-        totalUsers: userAnalytics['totalUsers'] ?? 0,
-        totalApplications: applicationAnalytics['totalApplications'] ?? 0,
-        totalMessages: messageAnalytics['totalMessages'] ?? 0,
+        previousAnalytics: {
+          ...previousAnalytics,
+          'engagementRate': previousEngagementRate,
+        },
       );
 
       return AnalyticsModel(
@@ -502,7 +540,7 @@ class AnalyticsService {
         resolvedReports: reportAnalytics['resolvedReports'] ?? 0,
         profileViews: userAnalytics['profileViews'] ?? 0,
         avgSessionDuration: userAnalytics['avgSessionDuration'] ?? 0.0,
-        engagementRate: engagementRate,
+        engagementRate: currentEngagementRate,
         totalCreditsUsed: paymentAnalytics['totalCreditsUsed'] ?? 0,
         activeSubscriptions: paymentAnalytics['activeSubscriptions'] ?? 0,
         revenue: paymentAnalytics['revenue'] ?? 0.0,

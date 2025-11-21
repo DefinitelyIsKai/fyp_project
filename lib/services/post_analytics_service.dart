@@ -9,8 +9,9 @@ class PostAnalyticsService {
     required DateTime startDate,
     required DateTime endDate,
   }) async {
-    final start = DateTime(startDate.year, startDate.month, startDate.day);
-    final end = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+    // Use exact date and time from the provided DateTime objects
+    final start = startDate;
+    final end = endDate;
 
     // Get all posts
     final allPostsSnapshot = await _firestore
@@ -92,9 +93,11 @@ class PostAnalyticsService {
       avgBudgetMax = countMax > 0 ? totalMax / countMax : null;
     }
 
-    // Approval rate
-    final totalProcessed = active + rejected;
-    final approvalRate = totalProcessed > 0 ? (active / totalProcessed) * 100 : 0.0;
+    // Approval rate: Pending → Active/Completed (approved) or Rejected
+    // Approved posts = active + completed (both went through approval process)
+    final approvedPosts = active + completed;
+    final totalProcessed = approvedPosts + rejected;
+    final approvalRate = totalProcessed > 0 ? (approvedPosts / totalProcessed) * 100 : 0.0;
 
     // Rejection rate
     final rejectionRate = totalProcessed > 0 ? (rejected / totalProcessed) * 100 : 0.0;
