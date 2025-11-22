@@ -26,6 +26,7 @@ class _DashboardPageState extends State<DashboardPage> {
   bool _isLoading = true;
 
   // Role-based page access
+  // Note: This is a fallback. The permission system in auth_service should be the source of truth.
   final Map<String, List<String>> roleAccess = {
     'manager': [
       'Post Moderation',
@@ -39,7 +40,6 @@ class _DashboardPageState extends State<DashboardPage> {
       'Post Moderation',
       'User Management',
       'Monitoring & Search',
-      'Message Oversight',
       'Analytics & Reporting',
     ],
     'staff': [
@@ -55,24 +55,29 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Future<void> _loadDashboardData() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       final posts = await _dashboardService.getPendingPostsCount();
       final users = await _dashboardService.getActiveUsersCount();
       final messages = await _dashboardService.getMessagesCount();
 
-      setState(() {
-        _pendingPosts = posts;
-        _activeUsers = users;
-        _messages = messages;
-      });
+      if (mounted) {
+        setState(() {
+          _pendingPosts = posts;
+          _activeUsers = users;
+          _messages = messages;
+        });
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Error loading dashboard: $e')));
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 

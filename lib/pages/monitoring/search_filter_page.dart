@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/models/job_post_model.dart';
 import 'package:fyp_project/models/user_model.dart';
 import 'package:fyp_project/services/user_service.dart';
+import 'package:fyp_project/services/category_service.dart';
 import 'package:fyp_project/pages/user_management/user_detail_page.dart';
 import 'package:fyp_project/pages/post_moderation/post_detail_page.dart';
 import 'package:intl/intl.dart';
@@ -16,6 +17,7 @@ class SearchFilterPage extends StatefulWidget {
 
 class _SearchFilterPageState extends State<SearchFilterPage> {
   final UserService _userService = UserService();
+  final CategoryService _categoryService = CategoryService();
   final TextEditingController _searchController = TextEditingController();
   
   String _searchType = 'all'; // 'all', 'users', 'posts'
@@ -45,21 +47,24 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
 
   Future<void> _loadFilterOptions() async {
     try {
-      // Load categories from posts
-      final postsSnapshot = await FirebaseFirestore.instance
-          .collection('posts')
-          .get();
-      final categories = postsSnapshot.docs
-          .map((doc) => doc.data()['category'] as String? ?? '')
-          .where((cat) => cat.isNotEmpty)
-          .toSet()
+      // Load categories from categories collection (only active ones)
+      final categoryModels = await _categoryService.getAllCategories();
+      final categories = categoryModels
+          .where((cat) => cat.isActive == true)
+          .map((cat) => cat.name)
+          .where((name) => name.isNotEmpty)
           .toList();
       categories.sort();
 
-      // Load locations from posts
+      // Load locations from posts and extract states only
+      final postsSnapshot = await FirebaseFirestore.instance
+          .collection('posts')
+          .get();
       final locations = postsSnapshot.docs
           .map((doc) => doc.data()['location'] as String? ?? '')
           .where((loc) => loc.isNotEmpty)
+          .map((loc) => _extractState(loc))
+          .where((state) => state.isNotEmpty)
           .toSet()
           .toList();
       locations.sort();
@@ -74,6 +79,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
       });
     } catch (e) {
       // Handle error silently
+      debugPrint('Error loading filter options: $e');
     }
   }
 
@@ -122,10 +128,12 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
         if (_searchController.text.isNotEmpty) {
           final query = _searchController.text.toLowerCase();
           filteredPosts = filteredPosts.where((post) {
+            final postState = _extractState(post.location).toLowerCase();
             return post.title.toLowerCase().contains(query) ||
                 post.description.toLowerCase().contains(query) ||
                 post.category.toLowerCase().contains(query) ||
-                post.location.toLowerCase().contains(query);
+                post.location.toLowerCase().contains(query) ||
+                postState.contains(query);
           }).toList();
         }
 
@@ -143,7 +151,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
 
         if (_selectedLocation != 'all') {
           filteredPosts = filteredPosts
-              .where((post) => post.location == _selectedLocation)
+              .where((post) => _extractState(post.location) == _selectedLocation)
               .toList();
         }
 
@@ -496,9 +504,14 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                                         const DropdownMenuItem(value: 'all', child: Text('All Locations')),
                                         ..._locations.map((loc) => DropdownMenuItem(
                                               value: loc,
-                                              child: Text(loc),
+                                              child: Text(
+                                                loc,
+                                                overflow: TextOverflow.ellipsis,
+                                                maxLines: 1,
+                                              ),
                                             )),
                                       ],
+                                      isExpanded: true,
                                       onChanged: (value) {
                                         setState(() => _selectedLocation = value ?? 'all');
                                       },
@@ -703,6 +716,33 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
       if (word.isEmpty) return word;
       return word[0].toUpperCase() + word.substring(1).toLowerCase();
     }).join(' ');
+  }
+
+  /// Extract state from location string
+  /// Handles formats like: "City, State", "State", "City State", etc.
+  String _extractState(String location) {
+    if (location.isEmpty) return '';
+    
+    // Remove extra whitespace
+    location = location.trim();
+    
+    // If location contains a comma, take the part after the comma (usually the state)
+    if (location.contains(',')) {
+      final parts = location.split(',');
+      if (parts.length > 1) {
+        return parts.last.trim();
+      }
+    }
+    
+    // If no comma, try to extract the last word (assuming it's the state)
+    final words = location.split(' ');
+    if (words.length > 1) {
+      // Return the last word (likely the state)
+      return words.last.trim();
+    }
+    
+    // If it's a single word, return it as is (might be just a state name)
+    return location;
   }
 
   bool _hasActiveFilters() {

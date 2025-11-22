@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:fyp_project/models/user_model.dart';
+import 'package:fyp_project/models/role_model.dart';
 import 'package:fyp_project/services/user_service.dart';
+import 'package:fyp_project/services/auth_service.dart';
+import 'package:fyp_project/services/role_service.dart';
 import 'package:fyp_project/pages/user_management/user_detail_page.dart';
 
 class ViewUsersPage extends StatefulWidget {
@@ -12,9 +16,11 @@ class ViewUsersPage extends StatefulWidget {
 
 class _ViewUsersPageState extends State<ViewUsersPage> {
   final UserService _userService = UserService();
+  final RoleService _roleService = RoleService();
   List<UserModel> _users = [];
   List<UserModel> _filteredUsers = [];
   List<String> _availableRoles = [];
+  List<RoleModel> _adminRoles = []; // Roles available for admin users
   bool _isLoading = true;
   String _selectedRole = 'all';
   final TextEditingController _searchController = TextEditingController();
@@ -35,23 +41,54 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      final usersFuture = _userService.getAllUsers();
-      final rolesFuture = _userService.getAllRoles();
+      // Load users first (most important)
+      final users = await _userService.getAllUsers();
+      
+      // Load roles separately with error handling
+      List<String> roles = [];
+      List<RoleModel> adminRoles = [];
+      
+      try {
+        roles = await _userService.getAllRoles();
+      } catch (e) {
+        debugPrint('Error loading user roles: $e');
+        // Continue even if this fails
+      }
+      
+      try {
+        final allAdminRoles = await _roleService.getAllRoles();
+        // Filter to only admin roles (manager, HR, staff, and any custom admin roles)
+        adminRoles = allAdminRoles.where((role) {
+          final roleName = role.name.toLowerCase();
+          return roleName == 'manager' || 
+                 roleName == 'hr' || 
+                 roleName == 'staff' || 
+                 roleName == 'admin' ||
+                 role.permissions.contains('all') ||
+                 role.permissions.any((perm) => ['user_management', 'post_moderation', 'analytics'].contains(perm));
+        }).toList();
+      } catch (e) {
+        debugPrint('Error loading admin roles: $e');
+        // Continue even if this fails - users list is more important
+      }
 
-      final users = await usersFuture;
-      final roles = await rolesFuture;
-
-      setState(() {
-        _users = users;
-        _filteredUsers = users;
-        _availableRoles = roles;
-      });
+      if (mounted) {
+        setState(() {
+          _users = users;
+          _availableRoles = roles;
+          _adminRoles = adminRoles;
+        });
+        // Apply current filters to update filtered list
+        _filterUsers();
+      }
     } catch (e) {
       if (mounted) {
         _showSnackBar('Error loading data: $e', isError: true);
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -98,6 +135,12 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
       if (word.isEmpty) return word;
       return word[0].toUpperCase() + word.substring(1).toLowerCase();
     }).join(' ');
+  }
+
+  bool _canAddAdmin() {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentRole = authService.currentAdmin?.role.toLowerCase() ?? '';
+    return currentRole == 'manager' || currentRole == 'hr';
   }
 
   Widget _buildActionButtons(UserModel user) {
@@ -743,10 +786,8 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                                 const SizedBox(height: 8),
 
                                 // Role and Joined Date
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     Container(
                                       padding: const EdgeInsets.symmetric(
@@ -766,7 +807,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                                         ),
                                       ),
                                     ),
-                                    const Spacer(),
                                     Text(
                                       'Joined: ${_formatDate(user.createdAt)}',
                                       style: TextStyle(
@@ -793,6 +833,366 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
           ],
         ),
       ),
+      floatingActionButton: _canAddAdmin()
+          ? FloatingActionButton.extended(
+              onPressed: () => _showAddAdminDialog(),
+              backgroundColor: Colors.blue[700],
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.person_add),
+              label: const Text('Add Admin'),
+              tooltip: 'Add New Admin User',
+            )
+          : null,
     );
+  }
+
+  void _showAddAdminDialog() {
+    final nameController = TextEditingController();
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    String selectedRole = _adminRoles.isNotEmpty ? _adminRoles.first.name : 'staff';
+    bool obscurePassword = true;
+    bool obscureConfirmPassword = true;
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.person_add, color: Colors.blue),
+              SizedBox(width: 8),
+              Text('Add New Admin User'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Full Name *',
+                      hintText: 'Enter full name',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.person),
+                    ),
+                    textCapitalization: TextCapitalization.words,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: emailController,
+                    decoration: const InputDecoration(
+                      labelText: 'Email *',
+                      hintText: 'Enter email address',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.email),
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                    textCapitalization: TextCapitalization.none,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: passwordController,
+                    decoration: InputDecoration(
+                      labelText: 'Password *',
+                      hintText: 'Enter password',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.lock),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscurePassword ? Icons.visibility : Icons.visibility_off),
+                        onPressed: () {
+                          setDialogState(() => obscurePassword = !obscurePassword);
+                        },
+                      ),
+                    ),
+                    obscureText: obscurePassword,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: confirmPasswordController,
+                    decoration: InputDecoration(
+                      labelText: 'Confirm Password *',
+                      hintText: 'Confirm password',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscureConfirmPassword ? Icons.visibility : Icons.visibility_off),
+                        onPressed: () {
+                          setDialogState(() => obscureConfirmPassword = !obscureConfirmPassword);
+                        },
+                      ),
+                    ),
+                    obscureText: obscureConfirmPassword,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Role *',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey[300]!),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: selectedRole,
+                        isExpanded: true,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        items: _adminRoles.map((role) {
+                          return DropdownMenuItem(
+                            value: role.name,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  _getRoleDisplayName(role.name),
+                                  style: const TextStyle(fontWeight: FontWeight.w500),
+                                ),
+                                if (role.description.isNotEmpty)
+                                  Text(
+                                    role.description,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey[600],
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() => selectedRole = value);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'The new admin will be able to log in immediately with the provided credentials.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final name = nameController.text.trim();
+                final email = emailController.text.trim();
+                final password = passwordController.text;
+                final confirmPassword = confirmPasswordController.text.trim();
+
+                // Validation
+                if (name.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter a name'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                if (email.isEmpty || !email.contains('@')) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter a valid email address'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                if (password.isEmpty || password.length < 6) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Password must be at least 6 characters'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                if (password != confirmPassword) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Passwords do not match'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                // Validate that the role exists and has permissions before creating
+                // This prevents creating users with roles that don't exist
+                try {
+                  final roleService = RoleService();
+                  final roleModel = await roleService.getRoleByName(selectedRole.toLowerCase());
+                  if (roleModel == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error: Role "$selectedRole" not found. Please select a valid role.'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+                  
+                  if (roleModel.permissions.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error: Role "$selectedRole" has no permissions assigned. Please assign permissions to this role first.'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error validating role: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+                
+                Navigator.pop(context);
+                await _createAdminUser(name, email, password, selectedRole);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue[700],
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Create Admin'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _createAdminUser(String name, String email, String password, String role) async {
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      final result = await authService.register(name, email, password, role: role);
+
+      if (!mounted) return;
+      
+      Navigator.pop(context); // Close loading dialog
+
+      if (result.success) {
+        // If re-authentication is required, show a dialog and redirect to login
+        // DO NOT call _loadData() or _showSnackBar() as we're signed out
+        if (result.requiresReauth) {
+          if (!mounted) return;
+          await showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blue),
+                  SizedBox(width: 8),
+                  Text('Admin Created Successfully'),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    result.message ?? 'Admin user "$name" created successfully.',
+                  ),
+                  if (result.originalUserEmail != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue[200]!),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'You were logged in as: ${result.originalUserEmail}\nUse that email to log back in.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.blue[900],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(); // Close dialog
+                    Navigator.of(context).pushNamedAndRemoveUntil(
+                      '/login',
+                      (route) => false,
+                    );
+                  },
+                  child: const Text('Go to Login'),
+                ),
+              ],
+            ),
+          );
+        } else {
+          // Only refresh if we're still authenticated
+          _showSnackBar(result.message ?? 'Admin user "$name" created successfully');
+          _loadData();
+        }
+      } else {
+        _showSnackBar(result.error ?? 'Failed to create admin user.', isError: true);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog if still open
+      _showSnackBar('Error creating admin user: $e', isError: true);
+    }
   }
 }

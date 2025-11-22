@@ -21,9 +21,22 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
   DateTime _startDate = DateTime.now().subtract(const Duration(days: 30));
   DateTime _endDate = DateTime.now();
 
+  // Helper to set start of day
+  DateTime _startOfDay(DateTime date) {
+    return DateTime(date.year, date.month, date.day, 0, 0, 0);
+  }
+  
+  // Helper to set end of day
+  DateTime _endOfDay(DateTime date) {
+    return DateTime(date.year, date.month, date.day, 23, 59, 59);
+  }
+
   @override
   void initState() {
     super.initState();
+    // Normalize initial dates
+    _startDate = _startOfDay(_startDate);
+    _endDate = _endOfDay(_endDate);
     _loadAnalytics();
   }
 
@@ -52,16 +65,14 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
   Future<void> _selectDateTimeRange() async {
     final result = await showDialog<Map<String, DateTime>>(
       context: context,
-      builder: (context) => _DateTimeRangePickerDialog(
-        startDate: _startDate,
-        endDate: _endDate,
-      ),
+      builder: (context) =>
+          _DateTimeRangePickerDialog(startDate: _startDate, endDate: _endDate),
     );
 
     if (result != null) {
       setState(() {
-        _startDate = result['start']!;
-        _endDate = result['end']!;
+        _startDate = _startOfDay(result['start']!);
+        _endDate = _endOfDay(result['end']!);
       });
       _loadAnalytics();
     }
@@ -96,44 +107,44 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           build: (pw.Context context) {
             return [
               // Header
-              pw.Header(
-                level: 0,
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text(
-                      'Content Analytics Report',
-                      style: pw.TextStyle(
-                        fontSize: 24,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.blue700,
-                      ),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'Content Analytics Report',
+                    style: pw.TextStyle(
+                      fontSize: 20,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.blue700,
                     ),
-                    pw.Text(
-                      DateFormat('dd MMM yyyy HH:mm').format(DateTime.now()),
-                      style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700),
-                    ),
-                  ],
-                ),
+                  ),
+                  pw.Text(
+                    DateFormat('dd MMM yyyy HH:mm').format(DateTime.now()),
+                    style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                  ),
+                ],
               ),
-              pw.SizedBox(height: 20),
-              
+              pw.SizedBox(height: 15),
+
               // Date Range
               pw.Container(
-                padding: const pw.EdgeInsets.all(12),
+                padding: const pw.EdgeInsets.all(10),
                 decoration: pw.BoxDecoration(
                   color: PdfColors.grey100,
-                  borderRadius: pw.BorderRadius.circular(8),
+                  borderRadius: pw.BorderRadius.circular(6),
                 ),
                 child: pw.Row(
                   children: [
                     pw.Text(
                       'Period: ',
-                      style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                      style: pw.TextStyle(
+                        fontSize: 12,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
                     ),
                     pw.Text(
                       '${_formatDateTime(_startDate)} - ${_formatDateTime(_endDate)}',
-                      style: pw.TextStyle(fontSize: 14),
+                      style: pw.TextStyle(fontSize: 12),
                     ),
                   ],
                 ),
@@ -143,159 +154,356 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
               // Overview Statistics
               pw.Text(
                 'Overview Statistics',
-                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
               ),
               pw.SizedBox(height: 10),
-              pw.Table(
-                border: pw.TableBorder.all(color: PdfColors.grey400),
-                columnWidths: {
-                  0: const pw.FlexColumnWidth(1),
-                  1: const pw.FlexColumnWidth(1),
-                  2: const pw.FlexColumnWidth(1),
-                },
-                children: [
-                  _buildPDFTableRow('Total Posts', analytics['totalPosts'].toString(), 'All Time'),
-                  _buildPDFTableRow('Posts in Period', analytics['postsInPeriod'].toString(), 'Selected Period'),
-                  _buildPDFTableRow('Pending', analytics['pending'].toString(), analytics['pendingInPeriod'].toString()),
-                  _buildPDFTableRow('Active', analytics['active'].toString(), analytics['activeInPeriod'].toString()),
-                  _buildPDFTableRow('Completed', analytics['completed'].toString(), analytics['completedInPeriod'].toString()),
-                  _buildPDFTableRow('Rejected', analytics['rejected'].toString(), analytics['rejectedInPeriod'].toString()),
-                  _buildPDFTableRow('Approval Rate', '${(analytics['approvalRate'] as double).toStringAsFixed(1)}%', ''),
-                  _buildPDFTableRow('Rejection Rate', '${(analytics['rejectionRate'] as double).toStringAsFixed(1)}%', ''),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey400,
+                  width: 0.5,
+                ),
+                cellAlignment: pw.Alignment.centerLeft,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                headerStyle: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                cellStyle: pw.TextStyle(fontSize: 9),
+                rowDecoration: pw.BoxDecoration(
+                  border: pw.Border(
+                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  ),
+                ),
+                headers: ['Metric', 'All Time', 'Selected Period'],
+                data: [
+                  [
+                    'Total Posts',
+                    analytics['totalPosts'].toString(),
+                    analytics['postsInPeriod'].toString(),
+                  ],
+                  [
+                    'Pending',
+                    analytics['pending'].toString(),
+                    analytics['pendingInPeriod'].toString(),
+                  ],
+                  [
+                    'Active',
+                    analytics['active'].toString(),
+                    analytics['activeInPeriod'].toString(),
+                  ],
+                  [
+                    'Completed',
+                    analytics['completed'].toString(),
+                    analytics['completedInPeriod'].toString(),
+                  ],
+                  [
+                    'Rejected',
+                    analytics['rejected'].toString(),
+                    analytics['rejectedInPeriod'].toString(),
+                  ],
+                  [
+                    'Approval Rate',
+                    '${(analytics['approvalRate'] as double).toStringAsFixed(1)}%',
+                    '',
+                  ],
+                  [
+                    'Rejection Rate',
+                    '${(analytics['rejectionRate'] as double).toStringAsFixed(1)}%',
+                    '',
+                  ],
                 ],
               ),
               pw.SizedBox(height: 20),
 
               // Budget Analysis
-              if (analytics['avgBudgetMin'] != null || analytics['avgBudgetMax'] != null) ...[
+              if (analytics['avgBudgetMin'] != null ||
+                  analytics['avgBudgetMax'] != null) ...[
                 pw.Text(
                   'Budget Analysis',
-                  style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
                 ),
                 pw.SizedBox(height: 10),
-                pw.Table(
-                  border: pw.TableBorder.all(color: PdfColors.grey400),
-                  columnWidths: {
-                    0: const pw.FlexColumnWidth(1),
-                    1: const pw.FlexColumnWidth(1),
-                  },
-                  children: [
+                pw.TableHelper.fromTextArray(
+                  context: context,
+                  border: pw.TableBorder.all(
+                    color: PdfColors.grey400,
+                    width: 0.5,
+                  ),
+                  cellAlignment: pw.Alignment.centerLeft,
+                  headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                  headerStyle: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                  cellStyle: pw.TextStyle(fontSize: 9),
+                  rowDecoration: pw.BoxDecoration(
+                    border: pw.Border(
+                      bottom: pw.BorderSide(
+                        color: PdfColors.grey300,
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
+                  headers: ['Metric', 'Value'],
+                  data: [
                     if (analytics['avgBudgetMin'] != null)
-                      _buildPDFTableRow2Col('Average Budget Min', 'RM ${(analytics['avgBudgetMin'] as double).toStringAsFixed(2)}'),
+                      [
+                        'Average Budget Min',
+                        'RM ${(analytics['avgBudgetMin'] as double).toStringAsFixed(2)}',
+                      ],
                     if (analytics['avgBudgetMax'] != null)
-                      _buildPDFTableRow2Col('Average Budget Max', 'RM ${(analytics['avgBudgetMax'] as double).toStringAsFixed(2)}'),
-                  ],
+                      [
+                        'Average Budget Max',
+                        'RM ${(analytics['avgBudgetMax'] as double).toStringAsFixed(2)}',
+                      ],
+                  ].whereType<List<String>>().toList(),
                 ),
                 pw.SizedBox(height: 20),
               ],
 
               // Category Breakdown
-              if (analytics['categoryBreakdown'] != null && (analytics['categoryBreakdown'] as Map).isNotEmpty) ...[
+              if (analytics['categoryBreakdown'] != null &&
+                  (analytics['categoryBreakdown'] as Map).isNotEmpty) ...[
                 pw.Text(
                   'Category Breakdown (Top 10)',
-                  style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
                 ),
                 pw.SizedBox(height: 10),
-                pw.Table(
-                  border: pw.TableBorder.all(color: PdfColors.grey400),
-                  columnWidths: {
-                    0: const pw.FlexColumnWidth(2),
-                    1: const pw.FlexColumnWidth(1),
-                  },
-                  children: () {
-                    final entries = (analytics['categoryBreakdown'] as Map<String, dynamic>).entries.toList();
+                pw.TableHelper.fromTextArray(
+                  context: context,
+                  border: pw.TableBorder.all(
+                    color: PdfColors.grey400,
+                    width: 0.5,
+                  ),
+                  cellAlignment: pw.Alignment.centerLeft,
+                  headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                  headerStyle: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                  cellStyle: pw.TextStyle(fontSize: 9),
+                  rowDecoration: pw.BoxDecoration(
+                    border: pw.Border(
+                      bottom: pw.BorderSide(
+                        color: PdfColors.grey300,
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
+                  headers: ['Category', 'Posts'],
+                  data: () {
+                    final entries =
+                        (analytics['categoryBreakdown'] as Map<String, dynamic>)
+                            .entries
+                            .toList();
                     entries.sort((a, b) => b.value.compareTo(a.value));
-                    return entries.take(10).map((entry) => _buildPDFTableRow2Col(entry.key, entry.value.toString())).toList();
+                    return entries
+                        .take(10)
+                        .map((entry) => [entry.key, entry.value.toString()])
+                        .toList();
                   }(),
                 ),
                 pw.SizedBox(height: 20),
               ],
 
               // Industry Breakdown
-              if (analytics['industryBreakdown'] != null && (analytics['industryBreakdown'] as Map).isNotEmpty) ...[
+              if (analytics['industryBreakdown'] != null &&
+                  (analytics['industryBreakdown'] as Map).isNotEmpty) ...[
                 pw.Text(
                   'Industry Breakdown (Top 10)',
-                  style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
                 ),
                 pw.SizedBox(height: 10),
-                pw.Table(
-                  border: pw.TableBorder.all(color: PdfColors.grey400),
-                  columnWidths: {
-                    0: const pw.FlexColumnWidth(2),
-                    1: const pw.FlexColumnWidth(1),
-                  },
-                  children: () {
-                    final entries = (analytics['industryBreakdown'] as Map<String, dynamic>).entries.toList();
+                pw.TableHelper.fromTextArray(
+                  context: context,
+                  border: pw.TableBorder.all(
+                    color: PdfColors.grey400,
+                    width: 0.5,
+                  ),
+                  cellAlignment: pw.Alignment.centerLeft,
+                  headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                  headerStyle: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                  cellStyle: pw.TextStyle(fontSize: 9),
+                  rowDecoration: pw.BoxDecoration(
+                    border: pw.Border(
+                      bottom: pw.BorderSide(
+                        color: PdfColors.grey300,
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
+                  headers: ['Industry', 'Posts'],
+                  data: () {
+                    final entries =
+                        (analytics['industryBreakdown'] as Map<String, dynamic>)
+                            .entries
+                            .toList();
                     entries.sort((a, b) => b.value.compareTo(a.value));
-                    return entries.take(10).map((entry) => _buildPDFTableRow2Col(entry.key, entry.value.toString())).toList();
+                    return entries
+                        .take(10)
+                        .map((entry) => [entry.key, entry.value.toString()])
+                        .toList();
                   }(),
                 ),
                 pw.SizedBox(height: 20),
               ],
 
               // Job Type Breakdown
-              if (analytics['jobTypeBreakdown'] != null && (analytics['jobTypeBreakdown'] as Map).isNotEmpty) ...[
+              if (analytics['jobTypeBreakdown'] != null &&
+                  (analytics['jobTypeBreakdown'] as Map).isNotEmpty) ...[
                 pw.Text(
                   'Job Type Breakdown',
-                  style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
                 ),
                 pw.SizedBox(height: 10),
-                pw.Table(
-                  border: pw.TableBorder.all(color: PdfColors.grey400),
-                  columnWidths: {
-                    0: const pw.FlexColumnWidth(2),
-                    1: const pw.FlexColumnWidth(1),
-                  },
-                  children: () {
-                    final entries = (analytics['jobTypeBreakdown'] as Map<String, dynamic>).entries.toList();
+                pw.TableHelper.fromTextArray(
+                  context: context,
+                  border: pw.TableBorder.all(
+                    color: PdfColors.grey400,
+                    width: 0.5,
+                  ),
+                  cellAlignment: pw.Alignment.centerLeft,
+                  headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                  headerStyle: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                  cellStyle: pw.TextStyle(fontSize: 9),
+                  rowDecoration: pw.BoxDecoration(
+                    border: pw.Border(
+                      bottom: pw.BorderSide(
+                        color: PdfColors.grey300,
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
+                  headers: ['Job Type', 'Posts'],
+                  data: () {
+                    final entries =
+                        (analytics['jobTypeBreakdown'] as Map<String, dynamic>)
+                            .entries
+                            .toList();
                     entries.sort((a, b) => b.value.compareTo(a.value));
-                    return entries.map((entry) => _buildPDFTableRow2Col(entry.key, entry.value.toString())).toList();
+                    return entries
+                        .map((entry) => [entry.key, entry.value.toString()])
+                        .toList();
                   }(),
                 ),
                 pw.SizedBox(height: 20),
               ],
 
               // Location Breakdown
-              if (analytics['locationBreakdown'] != null && (analytics['locationBreakdown'] as Map).isNotEmpty) ...[
+              if (analytics['locationBreakdown'] != null &&
+                  (analytics['locationBreakdown'] as Map).isNotEmpty) ...[
                 pw.Text(
                   'Location Breakdown (Top 10)',
-                  style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
                 ),
                 pw.SizedBox(height: 10),
-                pw.Table(
-                  border: pw.TableBorder.all(color: PdfColors.grey400),
-                  columnWidths: {
-                    0: const pw.FlexColumnWidth(2),
-                    1: const pw.FlexColumnWidth(1),
-                  },
-                  children: () {
-                    final entries = (analytics['locationBreakdown'] as Map<String, dynamic>).entries.toList();
+                pw.TableHelper.fromTextArray(
+                  context: context,
+                  border: pw.TableBorder.all(
+                    color: PdfColors.grey400,
+                    width: 0.5,
+                  ),
+                  cellAlignment: pw.Alignment.centerLeft,
+                  headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                  headerStyle: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                  cellStyle: pw.TextStyle(fontSize: 9),
+                  rowDecoration: pw.BoxDecoration(
+                    border: pw.Border(
+                      bottom: pw.BorderSide(
+                        color: PdfColors.grey300,
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
+                  headers: ['Location', 'Posts'],
+                  data: () {
+                    final entries =
+                        (analytics['locationBreakdown'] as Map<String, dynamic>)
+                            .entries
+                            .toList();
                     entries.sort((a, b) => b.value.compareTo(a.value));
-                    return entries.take(10).map((entry) => _buildPDFTableRow2Col(entry.key, entry.value.toString())).toList();
+                    return entries
+                        .take(10)
+                        .map((entry) => [entry.key, entry.value.toString()])
+                        .toList();
                   }(),
                 ),
                 pw.SizedBox(height: 20),
               ],
 
               // Daily Breakdown
-              if (analytics['dailyBreakdown'] != null && (analytics['dailyBreakdown'] as Map).isNotEmpty) ...[
+              if (analytics['dailyBreakdown'] != null &&
+                  (analytics['dailyBreakdown'] as Map).isNotEmpty) ...[
                 pw.Text(
                   'Daily Post Activity',
-                  style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
                 ),
                 pw.SizedBox(height: 10),
-                pw.Table(
-                  border: pw.TableBorder.all(color: PdfColors.grey400),
-                  columnWidths: {
-                    0: const pw.FlexColumnWidth(2),
-                    1: const pw.FlexColumnWidth(1),
-                  },
-                  children: () {
-                    final entries = (analytics['dailyBreakdown'] as Map<String, dynamic>).entries.toList();
+                pw.TableHelper.fromTextArray(
+                  context: context,
+                  border: pw.TableBorder.all(
+                    color: PdfColors.grey400,
+                    width: 0.5,
+                  ),
+                  cellAlignment: pw.Alignment.centerLeft,
+                  headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                  headerStyle: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                  cellStyle: pw.TextStyle(fontSize: 9),
+                  rowDecoration: pw.BoxDecoration(
+                    border: pw.Border(
+                      bottom: pw.BorderSide(
+                        color: PdfColors.grey300,
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
+                  headers: ['Date', 'Posts'],
+                  data: () {
+                    final entries =
+                        (analytics['dailyBreakdown'] as Map<String, dynamic>)
+                            .entries
+                            .toList();
                     entries.sort((a, b) => a.key.compareTo(b.key));
                     return entries.map((entry) {
                       final date = DateTime.parse(entry.key);
-                      return _buildPDFTableRow2Col(DateFormat('dd MMM yyyy').format(date), entry.value.toString());
+                      return [
+                        DateFormat('dd MMM yyyy').format(date),
+                        entry.value.toString(),
+                      ];
                     }).toList();
                   }(),
                 ),
@@ -319,63 +527,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
         );
       }
     }
-  }
-
-  pw.TableRow _buildPDFTableRow(String label, String value, String period) {
-    return pw.TableRow(
-      children: [
-        pw.Padding(
-          padding: const pw.EdgeInsets.all(8),
-          child: pw.Text(
-            label,
-            style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
-            maxLines: 2,
-          ),
-        ),
-        pw.Padding(
-          padding: const pw.EdgeInsets.all(8),
-          child: pw.Text(
-            value,
-            style: pw.TextStyle(fontSize: 11),
-            textAlign: pw.TextAlign.center,
-            maxLines: 1,
-          ),
-        ),
-        pw.Padding(
-          padding: const pw.EdgeInsets.all(8),
-          child: pw.Text(
-            period,
-            style: pw.TextStyle(fontSize: 11, color: PdfColors.grey700),
-            textAlign: pw.TextAlign.center,
-            maxLines: 1,
-          ),
-        ),
-      ],
-    );
-  }
-
-  pw.TableRow _buildPDFTableRow2Col(String label, String value) {
-    return pw.TableRow(
-      children: [
-        pw.Padding(
-          padding: const pw.EdgeInsets.all(8),
-          child: pw.Text(
-            label,
-            style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
-            maxLines: 2,
-          ),
-        ),
-        pw.Padding(
-          padding: const pw.EdgeInsets.all(8),
-          child: pw.Text(
-            value,
-            style: pw.TextStyle(fontSize: 11),
-            textAlign: pw.TextAlign.center,
-            maxLines: 1,
-          ),
-        ),
-      ],
-    );
   }
 
   @override
@@ -462,14 +613,14 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.access_time, color: Colors.blue[700]),
+                          Icon(Icons.calendar_today, color: Colors.blue[700]),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Date & Time Range',
+                                  'Date Range',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Colors.grey[600],
@@ -503,53 +654,53 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _analytics == null
-                    ? const Center(child: Text('No data available'))
-                    : SingleChildScrollView(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Quick Stats
-                            _buildQuickStats(),
-                            const SizedBox(height: 20),
+                ? const Center(child: Text('No data available'))
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Quick Stats
+                        _buildQuickStats(),
+                        const SizedBox(height: 20),
 
-                            // Period Comparison
-                            _buildPeriodComparison(),
-                            const SizedBox(height: 20),
+                        // Period Comparison
+                        _buildPeriodComparison(),
+                        const SizedBox(height: 20),
 
-                            // Daily Trend Chart
-                            _buildDailyTrendChart(),
-                            const SizedBox(height: 20),
+                        // Daily Trend Chart
+                        _buildDailyTrendChart(),
+                        const SizedBox(height: 20),
 
-                            // Status Distribution Chart
-                            _buildStatusChart(),
-                            const SizedBox(height: 20),
+                        // Status Distribution Chart
+                        _buildStatusChart(),
+                        const SizedBox(height: 20),
 
-                            // Category Breakdown
-                            _buildCategoryChart(),
-                            const SizedBox(height: 20),
+                        // Category Breakdown
+                        _buildCategoryChart(),
+                        const SizedBox(height: 20),
 
-                            // Industry Breakdown
-                            _buildIndustryChart(),
-                            const SizedBox(height: 20),
+                        // Industry Breakdown
+                        _buildIndustryChart(),
+                        const SizedBox(height: 20),
 
-                            // Job Type Breakdown
-                            _buildJobTypeChart(),
-                            const SizedBox(height: 20),
+                        // Job Type Breakdown
+                        _buildJobTypeChart(),
+                        const SizedBox(height: 20),
 
-                            // Location Breakdown
-                            _buildLocationChart(),
-                            const SizedBox(height: 20),
+                        // Location Breakdown
+                        _buildLocationChart(),
+                        const SizedBox(height: 20),
 
-                            // Budget Analysis
-                            _buildBudgetAnalysis(),
-                            const SizedBox(height: 20),
+                        // Budget Analysis
+                        _buildBudgetAnalysis(),
+                        const SizedBox(height: 20),
 
-                            // Detailed Statistics
-                            _buildDetailedStats(),
-                          ],
-                        ),
-                      ),
+                        // Detailed Statistics
+                        _buildDetailedStats(),
+                      ],
+                    ),
+                  ),
           ),
         ],
       ),
@@ -614,7 +765,9 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
     final analytics = _analytics!;
     final totalPosts = analytics['totalPosts'] as int;
     final postsInPeriod = analytics['postsInPeriod'] as int;
-    final periodPercentage = totalPosts > 0 ? (postsInPeriod / totalPosts * 100) : 0.0;
+    final periodPercentage = totalPosts > 0
+        ? (postsInPeriod / totalPosts * 100)
+        : 0.0;
 
     return Card(
       elevation: 2,
@@ -626,10 +779,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           children: [
             const Text(
               'Period Overview',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             Row(
@@ -662,14 +812,14 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
   Widget _buildDailyTrendChart() {
     final analytics = _analytics!;
     final dailyBreakdown = analytics['dailyBreakdown'] as Map<String, dynamic>?;
-    
+
     if (dailyBreakdown == null || dailyBreakdown.isEmpty) {
       return const SizedBox.shrink();
     }
 
     final sortedDaily = dailyBreakdown.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
-    
+
     final chartData = sortedDaily.map((entry) {
       final date = DateTime.parse(entry.key);
       return ChartData(
@@ -689,10 +839,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           children: [
             const Text(
               'Daily Post Activity Trend',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             SizedBox(
@@ -752,10 +899,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           children: [
             const Text(
               'Status Distribution (All Time)',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             SizedBox(
@@ -784,17 +928,23 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
 
   Widget _buildCategoryChart() {
     final analytics = _analytics!;
-    final categoryBreakdown = analytics['categoryBreakdown'] as Map<String, dynamic>?;
-    
+    final categoryBreakdown =
+        analytics['categoryBreakdown'] as Map<String, dynamic>?;
+
     if (categoryBreakdown == null || categoryBreakdown.isEmpty) {
       return const SizedBox.shrink();
     }
 
     // Filter out empty keys and ensure values are valid
     final validCategories = categoryBreakdown.entries
-        .where((entry) => entry.key.isNotEmpty && entry.value != null && (entry.value as int) > 0)
+        .where(
+          (entry) =>
+              entry.key.isNotEmpty &&
+              entry.value != null &&
+              (entry.value as int) > 0,
+        )
         .toList();
-    
+
     if (validCategories.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -814,18 +964,12 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           children: [
             const Text(
               'Top Categories',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
               'Top 10 categories by post count',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
             // Statistics List
@@ -837,8 +981,10 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                 itemBuilder: (context, index) {
                   final entry = topCategories[index];
                   final count = entry.value as int;
-                  final percentage = totalPosts > 0 ? (count / totalPosts * 100) : 0.0;
-                  
+                  final percentage = totalPosts > 0
+                      ? (count / totalPosts * 100)
+                      : 0.0;
+
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Row(
@@ -895,7 +1041,8 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                   ColumnSeries<MapEntry<String, dynamic>, String>(
                     name: 'Posts',
                     dataSource: topCategories,
-                    xValueMapper: (entry, _) => entry.key.isNotEmpty ? entry.key : 'Unknown',
+                    xValueMapper: (entry, _) =>
+                        entry.key.isNotEmpty ? entry.key : 'Unknown',
                     yValueMapper: (entry, _) => (entry.value as int? ?? 0),
                     color: Colors.blue,
                     dataLabelSettings: DataLabelSettings(
@@ -915,17 +1062,23 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
 
   Widget _buildIndustryChart() {
     final analytics = _analytics!;
-    final industryBreakdown = analytics['industryBreakdown'] as Map<String, dynamic>?;
-    
+    final industryBreakdown =
+        analytics['industryBreakdown'] as Map<String, dynamic>?;
+
     if (industryBreakdown == null || industryBreakdown.isEmpty) {
       return const SizedBox.shrink();
     }
 
     // Filter out empty keys and ensure values are valid
     final validIndustries = industryBreakdown.entries
-        .where((entry) => entry.key.isNotEmpty && entry.value != null && (entry.value as int) > 0)
+        .where(
+          (entry) =>
+              entry.key.isNotEmpty &&
+              entry.value != null &&
+              (entry.value as int) > 0,
+        )
         .toList();
-    
+
     if (validIndustries.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -944,10 +1097,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           children: [
             const Text(
               'Top Industries',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             SizedBox(
@@ -963,7 +1113,8 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                   ColumnSeries<MapEntry<String, dynamic>, String>(
                     name: 'Posts',
                     dataSource: topIndustries,
-                    xValueMapper: (entry, _) => entry.key.isNotEmpty ? entry.key : 'Unknown',
+                    xValueMapper: (entry, _) =>
+                        entry.key.isNotEmpty ? entry.key : 'Unknown',
                     yValueMapper: (entry, _) => (entry.value as int? ?? 0),
                     color: Colors.purple,
                     dataLabelSettings: DataLabelSettings(
@@ -983,17 +1134,23 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
 
   Widget _buildJobTypeChart() {
     final analytics = _analytics!;
-    final jobTypeBreakdown = analytics['jobTypeBreakdown'] as Map<String, dynamic>?;
-    
+    final jobTypeBreakdown =
+        analytics['jobTypeBreakdown'] as Map<String, dynamic>?;
+
     if (jobTypeBreakdown == null || jobTypeBreakdown.isEmpty) {
       return const SizedBox.shrink();
     }
 
     // Filter out empty keys and ensure values are valid
     final validJobTypes = jobTypeBreakdown.entries
-        .where((entry) => entry.key.isNotEmpty && entry.value != null && (entry.value as int) > 0)
+        .where(
+          (entry) =>
+              entry.key.isNotEmpty &&
+              entry.value != null &&
+              (entry.value as int) > 0,
+        )
         .toList();
-    
+
     if (validJobTypes.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -1011,10 +1168,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           children: [
             const Text(
               'Job Type Distribution',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             SizedBox(
@@ -1028,7 +1182,8 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                   ColumnSeries<MapEntry<String, dynamic>, String>(
                     name: 'Posts',
                     dataSource: sortedJobTypes,
-                    xValueMapper: (entry, _) => entry.key.isNotEmpty ? entry.key : 'Unknown',
+                    xValueMapper: (entry, _) =>
+                        entry.key.isNotEmpty ? entry.key : 'Unknown',
                     yValueMapper: (entry, _) => (entry.value as int? ?? 0),
                     color: Colors.teal,
                     dataLabelSettings: DataLabelSettings(
@@ -1048,8 +1203,9 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
 
   Widget _buildLocationChart() {
     final analytics = _analytics!;
-    final locationBreakdown = analytics['locationBreakdown'] as Map<String, dynamic>?;
-    
+    final locationBreakdown =
+        analytics['locationBreakdown'] as Map<String, dynamic>?;
+
     if (locationBreakdown == null || locationBreakdown.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -1068,18 +1224,12 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           children: [
             const Text(
               'Top Locations',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
               'Top 10 locations by post count',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
             Container(
@@ -1090,7 +1240,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                 itemBuilder: (context, index) {
                   final entry = topLocations[index];
                   final count = entry.value as int;
-                  
+
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Row(
@@ -1162,10 +1312,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           children: [
             const Text(
               'Budget Analysis',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             Row(
@@ -1210,18 +1357,33 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           children: [
             const Text(
               'Detailed Statistics',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            _buildStatRow('Approval Rate', '${(analytics['approvalRate'] as double).toStringAsFixed(1)}%'),
-            _buildStatRow('Rejection Rate', '${(analytics['rejectionRate'] as double).toStringAsFixed(1)}%'),
-            _buildStatRow('Active Posts (Period)', analytics['activeInPeriod'].toString()),
-            _buildStatRow('Pending Posts (Period)', analytics['pendingInPeriod'].toString()),
-            _buildStatRow('Completed Posts (Period)', analytics['completedInPeriod'].toString()),
-            _buildStatRow('Rejected Posts (Period)', analytics['rejectedInPeriod'].toString()),
+            _buildStatRow(
+              'Approval Rate',
+              '${(analytics['approvalRate'] as double).toStringAsFixed(1)}%',
+            ),
+            _buildStatRow(
+              'Rejection Rate',
+              '${(analytics['rejectionRate'] as double).toStringAsFixed(1)}%',
+            ),
+            _buildStatRow(
+              'Active Posts (Period)',
+              analytics['activeInPeriod'].toString(),
+            ),
+            _buildStatRow(
+              'Pending Posts (Period)',
+              analytics['pendingInPeriod'].toString(),
+            ),
+            _buildStatRow(
+              'Completed Posts (Period)',
+              analytics['completedInPeriod'].toString(),
+            ),
+            _buildStatRow(
+              'Rejected Posts (Period)',
+              analytics['rejectedInPeriod'].toString(),
+            ),
           ],
         ),
       ),
@@ -1234,19 +1396,10 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[700],
-            ),
-          ),
+          Text(label, style: TextStyle(fontSize: 14, color: Colors.grey[700])),
           Text(
             value,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -1312,10 +1465,7 @@ class _StatCard extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 subtitle,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[500],
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
               ),
             ],
           ],
@@ -1350,13 +1500,7 @@ class _ComparisonItem extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
-          ),
+          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
           const SizedBox(height: 8),
           Text(
             value,
@@ -1375,10 +1519,7 @@ class _ComparisonItem extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             '${percentage.toStringAsFixed(1)}%',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
           ),
         ],
       ),
@@ -1418,10 +1559,7 @@ class _BudgetCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ),
             ],
@@ -1459,22 +1597,21 @@ class _DateTimeRangePickerDialog extends StatefulWidget {
   });
 
   @override
-  State<_DateTimeRangePickerDialog> createState() => _DateTimeRangePickerDialogState();
+  State<_DateTimeRangePickerDialog> createState() =>
+      _DateTimeRangePickerDialogState();
 }
 
-class _DateTimeRangePickerDialogState extends State<_DateTimeRangePickerDialog> {
+class _DateTimeRangePickerDialogState
+    extends State<_DateTimeRangePickerDialog> {
   late DateTime _tempStartDate;
   late DateTime _tempEndDate;
-  late TimeOfDay _tempStartTime;
-  late TimeOfDay _tempEndTime;
 
   @override
   void initState() {
     super.initState();
-    _tempStartDate = widget.startDate;
-    _tempEndDate = widget.endDate;
-    _tempStartTime = TimeOfDay.fromDateTime(widget.startDate);
-    _tempEndTime = TimeOfDay.fromDateTime(widget.endDate);
+    // Extract just the date part (remove time)
+    _tempStartDate = DateTime(widget.startDate.year, widget.startDate.month, widget.startDate.day);
+    _tempEndDate = DateTime(widget.endDate.year, widget.endDate.month, widget.endDate.day);
   }
 
   Future<void> _selectStartDate() async {
@@ -1486,32 +1623,7 @@ class _DateTimeRangePickerDialogState extends State<_DateTimeRangePickerDialog> 
     );
     if (picked != null) {
       setState(() {
-        _tempStartDate = DateTime(
-          picked.year,
-          picked.month,
-          picked.day,
-          _tempStartTime.hour,
-          _tempStartTime.minute,
-        );
-      });
-    }
-  }
-
-  Future<void> _selectStartTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: _tempStartTime,
-    );
-    if (picked != null) {
-      setState(() {
-        _tempStartTime = picked;
-        _tempStartDate = DateTime(
-          _tempStartDate.year,
-          _tempStartDate.month,
-          _tempStartDate.day,
-          picked.hour,
-          picked.minute,
-        );
+        _tempStartDate = DateTime(picked.year, picked.month, picked.day);
       });
     }
   }
@@ -1525,202 +1637,75 @@ class _DateTimeRangePickerDialogState extends State<_DateTimeRangePickerDialog> 
     );
     if (picked != null) {
       setState(() {
-        _tempEndDate = DateTime(
-          picked.year,
-          picked.month,
-          picked.day,
-          _tempEndTime.hour,
-          _tempEndTime.minute,
-        );
+        _tempEndDate = DateTime(picked.year, picked.month, picked.day);
       });
     }
-  }
-
-  Future<void> _selectEndTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: _tempEndTime,
-    );
-    if (picked != null) {
-      setState(() {
-        _tempEndTime = picked;
-        _tempEndDate = DateTime(
-          _tempEndDate.year,
-          _tempEndDate.month,
-          _tempEndDate.day,
-          picked.hour,
-          picked.minute,
-        );
-      });
-    }
-  }
-
-  String _formatTime(TimeOfDay time) {
-    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Select Date & Time Range'),
+      title: const Text('Select Date Range'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // Start Date
             const Text(
-              'Start Date & Time',
+              'Start Date',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: _selectStartDate,
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Date',
-                                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                DateFormat('dd/MM/yyyy').format(_tempStartDate),
-                                style: const TextStyle(fontSize: 14),
-                              ),
-                            ],
-                          ),
-                          const Icon(Icons.calendar_today, size: 18),
-                        ],
-                      ),
-                    ),
-                  ),
+            InkWell(
+              onTap: _selectStartDate,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: InkWell(
-                    onTap: _selectStartTime,
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Time',
-                                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _formatTime(_tempStartTime),
-                                style: const TextStyle(fontSize: 14),
-                              ),
-                            ],
-                          ),
-                          const Icon(Icons.access_time, size: 18),
-                        ],
-                      ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      DateFormat('dd/MM/yyyy').format(_tempStartDate),
+                      style: const TextStyle(fontSize: 14),
                     ),
-                  ),
+                    const Icon(Icons.calendar_today, size: 18),
+                  ],
                 ),
-              ],
+              ),
             ),
             const SizedBox(height: 16),
-            
+
             // End Date
             const Text(
-              'End Date & Time',
+              'End Date',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: _selectEndDate,
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Date',
-                                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                DateFormat('dd/MM/yyyy').format(_tempEndDate),
-                                style: const TextStyle(fontSize: 14),
-                              ),
-                            ],
-                          ),
-                          const Icon(Icons.calendar_today, size: 18),
-                        ],
-                      ),
-                    ),
-                  ),
+            InkWell(
+              onTap: _selectEndDate,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: InkWell(
-                    onTap: _selectEndTime,
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Time',
-                                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _formatTime(_tempEndTime),
-                                style: const TextStyle(fontSize: 14),
-                              ),
-                            ],
-                          ),
-                          const Icon(Icons.access_time, size: 18),
-                        ],
-                      ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      DateFormat('dd/MM/yyyy').format(_tempEndDate),
+                      style: const TextStyle(fontSize: 14),
                     ),
-                  ),
+                    const Icon(Icons.calendar_today, size: 18),
+                  ],
                 ),
-              ],
+              ),
             ),
             const SizedBox(height: 16),
-            
+
             // Quick Presets
             const Text(
               'Quick Presets',
@@ -1736,10 +1721,8 @@ class _DateTimeRangePickerDialogState extends State<_DateTimeRangePickerDialog> 
                   onTap: () {
                     final now = DateTime.now();
                     setState(() {
-                      _tempStartDate = DateTime(now.year, now.month, now.day, 0, 0);
-                      _tempEndDate = now;
-                      _tempStartTime = const TimeOfDay(hour: 0, minute: 0);
-                      _tempEndTime = TimeOfDay.fromDateTime(now);
+                      _tempStartDate = DateTime(now.year, now.month, now.day);
+                      _tempEndDate = DateTime(now.year, now.month, now.day);
                     });
                   },
                 ),
@@ -1747,11 +1730,10 @@ class _DateTimeRangePickerDialogState extends State<_DateTimeRangePickerDialog> 
                   label: 'Last 7 Days',
                   onTap: () {
                     final now = DateTime.now();
+                    final startDate = now.subtract(const Duration(days: 7));
                     setState(() {
-                      _tempStartDate = now.subtract(const Duration(days: 7));
-                      _tempEndDate = now;
-                      _tempStartTime = TimeOfDay.fromDateTime(_tempStartDate);
-                      _tempEndTime = TimeOfDay.fromDateTime(_tempEndDate);
+                      _tempStartDate = DateTime(startDate.year, startDate.month, startDate.day);
+                      _tempEndDate = DateTime(now.year, now.month, now.day);
                     });
                   },
                 ),
@@ -1759,11 +1741,10 @@ class _DateTimeRangePickerDialogState extends State<_DateTimeRangePickerDialog> 
                   label: 'Last 30 Days',
                   onTap: () {
                     final now = DateTime.now();
+                    final startDate = now.subtract(const Duration(days: 30));
                     setState(() {
-                      _tempStartDate = now.subtract(const Duration(days: 30));
-                      _tempEndDate = now;
-                      _tempStartTime = TimeOfDay.fromDateTime(_tempStartDate);
-                      _tempEndTime = TimeOfDay.fromDateTime(_tempEndDate);
+                      _tempStartDate = DateTime(startDate.year, startDate.month, startDate.day);
+                      _tempEndDate = DateTime(now.year, now.month, now.day);
                     });
                   },
                 ),
@@ -1772,10 +1753,8 @@ class _DateTimeRangePickerDialogState extends State<_DateTimeRangePickerDialog> 
                   onTap: () {
                     final now = DateTime.now();
                     setState(() {
-                      _tempStartDate = DateTime(now.year, now.month, 1, 0, 0);
-                      _tempEndDate = now;
-                      _tempStartTime = const TimeOfDay(hour: 0, minute: 0);
-                      _tempEndTime = TimeOfDay.fromDateTime(_tempEndDate);
+                      _tempStartDate = DateTime(now.year, now.month, 1);
+                      _tempEndDate = DateTime(now.year, now.month, now.day);
                     });
                   },
                 ),
@@ -1816,10 +1795,7 @@ class _QuickDateButton extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
 
-  const _QuickDateButton({
-    required this.label,
-    required this.onTap,
-  });
+  const _QuickDateButton({required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {

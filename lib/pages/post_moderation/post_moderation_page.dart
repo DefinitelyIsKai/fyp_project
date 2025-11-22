@@ -25,6 +25,17 @@ class PostModerationPage extends StatelessWidget {
         .map((snap) => snap.size);
   }
 
+  // Real-time stream: counts all posts with status = "rejected"
+  // This represents the total number of job posts that have been rejected by moderators
+  // Useful for quality control and monitoring moderation effectiveness
+  Stream<int> _rejectedPostsCountStream() {
+    return FirebaseFirestore.instance
+        .collection('posts')
+        .where('status', isEqualTo: 'rejected')
+        .snapshots()
+        .map((snap) => snap.size);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -99,17 +110,20 @@ class PostModerationPage extends StatelessWidget {
         children: [
           // Pending Posts
           Expanded(
-            child: StreamBuilder<int>(
-              stream: _pendingPostsCountStream(),
-              builder: (context, snapshot) {
-                final pendingCount = snapshot.data ?? 0;
-                return _StatCard(
-                  title: 'Pending Posts',
-                  value: pendingCount.toString(),
-                  icon: Icons.article_outlined,
-                  color: Colors.orange,
-                );
-              },
+            child: SizedBox(
+              height: 120, // Fixed height for consistency
+              child: StreamBuilder<int>(
+                stream: _pendingPostsCountStream(),
+                builder: (context, snapshot) {
+                  final pendingCount = snapshot.data ?? 0;
+                  return _StatCard(
+                    title: 'Pending',
+                    value: pendingCount.toString(),
+                    icon: Icons.article_outlined,
+                    color: Colors.orange,
+                  );
+                },
+              ),
             ),
           ),
 
@@ -117,38 +131,43 @@ class PostModerationPage extends StatelessWidget {
 
           // Total Categories
           Expanded(
-            child: StreamBuilder<int>(
-              stream: _categoryCountStream(),
-              builder: (context, snapshot) {
-                final categoryCount = snapshot.data ?? 0;
-                return _StatCard(
-                  title: 'Categories',
-                  value: categoryCount.toString(),
-                  icon: Icons.category,
-                  color: Colors.purple,
-                );
-              },
+            child: SizedBox(
+              height: 120, // Fixed height for consistency
+              child: StreamBuilder<int>(
+                stream: _categoryCountStream(),
+                builder: (context, snapshot) {
+                  final categoryCount = snapshot.data ?? 0;
+                  return _StatCard(
+                    title: 'Categories',
+                    value: categoryCount.toString(),
+                    icon: Icons.category,
+                    color: Colors.purple,
+                  );
+                },
+              ),
             ),
           ),
 
           const SizedBox(width: 12),
 
-          // Approved Posts
+          // Rejected Posts
+          // This shows the total count of job posts that have been rejected by moderators
+          // Useful for quality control and monitoring moderation effectiveness
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('posts')
-                  .where('status', isEqualTo: 'approved')
-                  .snapshots(),
-              builder: (context, snapshot) {
-                final approvedCount = snapshot.hasData ? snapshot.data!.docs.length : 0;
-                return _StatCard(
-                  title: 'Approved',
-                  value: approvedCount.toString(),
-                  icon: Icons.check_circle_outline,
-                  color: Colors.green,
-                );
-              },
+            child: SizedBox(
+              height: 120, // Fixed height for consistency
+              child: StreamBuilder<int>(
+                stream: _rejectedPostsCountStream(),
+                builder: (context, snapshot) {
+                  final rejectedCount = snapshot.data ?? 0;
+                  return _StatCard(
+                    title: 'Rejected',
+                    value: rejectedCount.toString(),
+                    icon: Icons.cancel_outlined,
+                    color: Colors.red,
+                  );
+                },
+              ),
             ),
           ),
         ],
@@ -408,6 +427,7 @@ class _StatCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

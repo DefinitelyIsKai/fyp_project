@@ -43,24 +43,47 @@ class _RegisterPageState extends State<RegisterPage> {
       
       try {
         final authService = Provider.of<AuthService>(context, listen: false);
-        final success = await authService.register(
+        final result = await authService.register(
           _nameController.text.trim(),
           _emailController.text.trim(),
           _passwordController.text,
           role: _selectedRole,
         );
 
-        if (success && mounted) {
-          Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
-        } else if (mounted) {
+        if (!mounted) return;
+
+        if (result.success) {
+          // Show success message
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Registration failed. Please try again.')),
+            SnackBar(
+              content: Text(result.message ?? 'Registration successful!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          
+          // If re-authentication is required, redirect to login
+          if (result.requiresReauth) {
+            Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+          } else {
+            // Otherwise, go to dashboard
+            Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
+          }
+        } else {
+          // Show error message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.error ?? 'Registration failed. Please try again.'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e')),
+            SnackBar(
+              content: Text('Error: $e'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       } finally {

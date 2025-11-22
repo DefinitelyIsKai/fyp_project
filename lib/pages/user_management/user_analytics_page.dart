@@ -19,9 +19,22 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
   DateTime _startDate = DateTime.now().subtract(const Duration(days: 30));
   DateTime _endDate = DateTime.now();
 
+  // Helper to set start of day
+  DateTime _startOfDay(DateTime date) {
+    return DateTime(date.year, date.month, date.day, 0, 0, 0);
+  }
+  
+  // Helper to set end of day
+  DateTime _endOfDay(DateTime date) {
+    return DateTime(date.year, date.month, date.day, 23, 59, 59);
+  }
+
   @override
   void initState() {
     super.initState();
+    // Normalize initial dates
+    _startDate = _startOfDay(_startDate);
+    _endDate = _endOfDay(_endDate);
     _loadAnalytics();
   }
 
@@ -92,47 +105,25 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
 
     if (result != null && mounted) {
       setState(() {
-        _startDate = result['start']!;
-        _endDate = result['end']!;
+        _startDate = _startOfDay(result['start']!);
+        _endDate = _endOfDay(result['end']!);
       });
       _loadAnalytics();
     }
   }
 
   String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
+    return DateFormat('dd/MM/yyyy').format(date);
   }
 
   String _getDateRangeText() {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    final startDay = DateTime(_startDate.year, _startDate.month, _startDate.day);
-    final endDay = DateTime(_endDate.year, _endDate.month, _endDate.day);
     final daysDiff = _endDate.difference(_startDate).inDays;
-    
-    // Check if it's actually today
-    if (startDay == today && endDay == today) {
-      return 'Today';
+    if (daysDiff == 0) {
+      return 'Today (${_formatDate(_startDate)})';
     }
-    
-    // Check if it's actually yesterday
-    if (startDay == yesterday && endDay == yesterday) {
-      return 'Yesterday';
-    }
-    
-    // Check for common ranges only if they match the actual date range
-    if (daysDiff == 6 && endDay == today) {
-      return 'Last 7 days';
-    }
-    if (daysDiff == 29 && endDay == today) {
+    if (daysDiff == 29 && _endDate.day == DateTime.now().day) {
       return 'Last 30 days';
     }
-    if (daysDiff == 89 && endDay == today) {
-      return 'Last 3 months';
-    }
-    
-    // For custom ranges, show the actual dates
     return '${_formatDate(_startDate)} - ${_formatDate(_endDate)}';
   }
 
@@ -142,7 +133,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text('User Analytics'),
-        backgroundColor: Colors.purple[700],
+        backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -159,7 +150,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
             width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.purple[700],
+              color: Colors.blue[700],
               borderRadius: const BorderRadius.only(
                 bottomLeft: Radius.circular(20),
                 bottomRight: Radius.circular(20),
@@ -215,7 +206,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.calendar_today, color: Colors.purple[700]),
+                          Icon(Icons.calendar_today, color: Colors.blue[700]),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
@@ -379,7 +370,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
                     label: 'New Users in Period',
                     value: newRegistrations.toString(),
                     percentage: periodPercentage,
-                    color: Colors.purple,
+                    color: Colors.blue,
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -640,10 +631,10 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.purple.withOpacity(0.1),
+                    color: Colors.blue.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(Icons.pie_chart, size: 24, color: Colors.purple),
+                  child: Icon(Icons.pie_chart, size: 24, color: Colors.blue),
                 ),
                 const SizedBox(width: 12),
                 const Text(
@@ -1165,8 +1156,9 @@ class _DateRangePickerDialogState extends State<_DateRangePickerDialog> {
   @override
   void initState() {
     super.initState();
-    _tempStartDate = widget.startDate;
-    _tempEndDate = widget.endDate;
+    // Extract just the date part (remove time)
+    _tempStartDate = DateTime(widget.startDate.year, widget.startDate.month, widget.startDate.day);
+    _tempEndDate = DateTime(widget.endDate.year, widget.endDate.month, widget.endDate.day);
   }
 
   Future<void> _selectStartDate() async {
@@ -1177,7 +1169,9 @@ class _DateRangePickerDialogState extends State<_DateRangePickerDialog> {
       lastDate: _tempEndDate,
     );
     if (picked != null) {
-      setState(() => _tempStartDate = picked);
+      setState(() {
+        _tempStartDate = DateTime(picked.year, picked.month, picked.day);
+      });
     }
   }
 
@@ -1189,95 +1183,132 @@ class _DateRangePickerDialogState extends State<_DateRangePickerDialog> {
       lastDate: DateTime.now(),
     );
     if (picked != null) {
-      setState(() => _tempEndDate = picked);
+      setState(() {
+        _tempEndDate = DateTime(picked.year, picked.month, picked.day);
+      });
     }
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Select Date Range'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          InkWell(
-            onTap: _selectStartDate,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey[300]!),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Start Date',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Icon(Icons.calendar_today, size: 18),
-                          const SizedBox(width: 8),
-                          Text(
-                            _formatDate(_tempStartDate),
-                            style: const TextStyle(fontSize: 16),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const Icon(Icons.arrow_drop_down),
-                ],
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Start Date
+            const Text(
+              'Start Date',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: _selectStartDate,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      DateFormat('dd/MM/yyyy').format(_tempStartDate),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const Icon(Icons.calendar_today, size: 18),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          InkWell(
-            onTap: _selectEndDate,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey[300]!),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'End Date',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Icon(Icons.calendar_today, size: 18),
-                          const SizedBox(width: 8),
-                          Text(
-                            _formatDate(_tempEndDate),
-                            style: const TextStyle(fontSize: 16),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const Icon(Icons.arrow_drop_down),
-                ],
+            const SizedBox(height: 16),
+
+            // End Date
+            const Text(
+              'End Date',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: _selectEndDate,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      DateFormat('dd/MM/yyyy').format(_tempEndDate),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const Icon(Icons.calendar_today, size: 18),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+
+            // Quick Presets
+            const Text(
+              'Quick Presets',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _QuickDateButton(
+                  label: 'Today',
+                  onTap: () {
+                    final now = DateTime.now();
+                    setState(() {
+                      _tempStartDate = DateTime(now.year, now.month, now.day);
+                      _tempEndDate = DateTime(now.year, now.month, now.day);
+                    });
+                  },
+                ),
+                _QuickDateButton(
+                  label: 'Last 7 Days',
+                  onTap: () {
+                    final now = DateTime.now();
+                    final startDate = now.subtract(const Duration(days: 7));
+                    setState(() {
+                      _tempStartDate = DateTime(startDate.year, startDate.month, startDate.day);
+                      _tempEndDate = DateTime(now.year, now.month, now.day);
+                    });
+                  },
+                ),
+                _QuickDateButton(
+                  label: 'Last 30 Days',
+                  onTap: () {
+                    final now = DateTime.now();
+                    final startDate = now.subtract(const Duration(days: 30));
+                    setState(() {
+                      _tempStartDate = DateTime(startDate.year, startDate.month, startDate.day);
+                      _tempEndDate = DateTime(now.year, now.month, now.day);
+                    });
+                  },
+                ),
+                _QuickDateButton(
+                  label: 'This Month',
+                  onTap: () {
+                    final now = DateTime.now();
+                    setState(() {
+                      _tempStartDate = DateTime(now.year, now.month, 1);
+                      _tempEndDate = DateTime(now.year, now.month, now.day);
+                    });
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
@@ -1286,18 +1317,53 @@ class _DateRangePickerDialogState extends State<_DateRangePickerDialog> {
         ),
         ElevatedButton(
           onPressed: () {
+            if (_tempStartDate.isAfter(_tempEndDate)) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Start date must be before end date'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              return;
+            }
             Navigator.pop(context, {
               'start': _tempStartDate,
               'end': _tempEndDate,
             });
           },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.purple[700],
-            foregroundColor: Colors.white,
-          ),
           child: const Text('Apply'),
         ),
       ],
+    );
+  }
+}
+
+class _QuickDateButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _QuickDateButton({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.blue[50],
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.blue[200]!),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.blue[700],
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
     );
   }
 }

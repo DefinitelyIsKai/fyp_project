@@ -13,7 +13,6 @@ class TagsPage extends StatefulWidget {
 class _TagsPageState extends State<TagsPage> {
   final TextEditingController _searchController = TextEditingController();
   final TagService _tagService = TagService();
-  final RefreshController _refreshController = RefreshController();
   List<TagCategoryModel> _categories = [];
   List<TagCategoryModel> _filteredCategories = [];
   String _filterStatus = 'all';
@@ -301,12 +300,12 @@ class _TagsPageState extends State<TagsPage> {
                             if (formKey.currentState!.validate()) {
                               try {
                                 final newCategory = TagCategoryModel(
-                                  id: isEdit ? category!.id : Random().nextInt(999999).toString(),
+                                  id: isEdit ? category.id : Random().nextInt(999999).toString(),
                                   title: titleController.text.trim(),
                                   description: descController.text.trim(),
                                   allowMultiple: true,
                                   isActive: true,
-                                  tags: isEdit ? category!.tags : [],
+                                  tags: isEdit ? category.tags : [],
                                 );
 
                                 if (isEdit) {
@@ -523,7 +522,7 @@ class _TagsPageState extends State<TagsPage> {
                               try {
                                 if (isEdit) {
                                   await _tagService.updateTag(
-                                      tag!.id,
+                                      tag.id,
                                       nameController.text.trim()
                                   );
                                 } else {

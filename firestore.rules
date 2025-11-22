@@ -2,42 +2,282 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper function to check if user is authenticated
+    // ============================================
+    // HELPER FUNCTIONS (MUST BE DEFINED FIRST)
+    // ============================================
+    
+    // Check if user is authenticated
     function isAuthenticated() {
       return request.auth != null;
     }
     
-    // Check if authenticated user has HR or manager role stored in admins collection
-    // This requires Firebase Authentication and an admins collection in Firestore
-    function hasHRorManagerRole() {
+    // Get current user's document from users collection
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    // Check if user document exists and is active
+    function userExistsAndActive() {
       return isAuthenticated() && 
-             exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
-             (get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'HR' ||
-              get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'manager');
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             getUserData().isActive == true;
     }
     
-    // Users collection - Only HR and Manager roles can access
+    // Check if user is a manager
+    function isManager() {
+      return userExistsAndActive() && getUserData().role == 'manager';
+    }
+    
+    // Check if user is HR
+    function isHR() {
+      return userExistsAndActive() && getUserData().role == 'HR';
+    }
+    
+    // Check if user is staff
+    function isStaff() {
+      return userExistsAndActive() && getUserData().role == 'staff';
+    }
+    
+    // Check if user is an admin (has admin role OR has any admin permissions)
+    // This allows dynamic roles to work without updating rules
+    function isAdmin() {
+      return userExistsAndActive() && (
+        // System roles (backward compatibility)
+        getUserData().role in ['manager', 'HR', 'staff', 'admin'] ||
+        // OR has any admin permissions (for dynamic roles)
+        (getUserData().permissions is list && 
+         getUserData().permissions.hasAny(['all', 'post_moderation', 'user_management', 'analytics', 'monitoring', 'system_config', 'message_oversight', 'role_management']))
+      );
+    }
+    
+    // Check if user has a specific permission
+    // Note: Firestore rules use hasAny() to check if array contains value
+    // This works for both system roles and dynamically created roles
+    function hasPermission(permission) {
+      return userExistsAndActive() && 
+             getUserData().permissions is list &&
+             (getUserData().permissions.hasAny([permission, 'all']));
+    }
+    
+    // Check if user has role management permission
+    function hasRoleManagementPermission() {
+      return hasPermission('role_management');
+    }
+    
+    // ============================================
+    // ROLES COLLECTION
+    // ============================================
+    match /roles/{roleId} {
+      // Read: Allow any authenticated user to read roles
+      // This is needed for:
+      // 1. Login validation (checking if custom roles have admin permissions)
+      // 2. Creating users, assigning roles, and viewing role information
+      // Roles are permission definitions, not sensitive data, so it's safe to allow all authenticated users to read
+      allow read: if isAuthenticated();
+      
+      // Create: 
+      // 1. Users with role_management permission can create custom roles (non-system)
+      // 2. Managers can create system roles for initialization
+      // Staff role is explicitly blocked from creating roles
+      allow create: if (
+                     // Staff cannot create roles, even if they have the permission
+                     !isStaff() &&
+                     (
+                       // Option 1: Has role_management permission and creating custom role
+                       (hasRoleManagementPermission() && request.resource.data.isSystemRole == false) ||
+                       // Option 2: Manager creating system role (for initialization)
+                       (isManager() && request.resource.data.isSystemRole == true)
+                     )
+                     ) &&
+                     request.resource.data.keys().hasAll(['name', 'description', 'permissions', 'createdAt', 'isSystemRole']) &&
+                     request.resource.data.name is string &&
+                     request.resource.data.description is string &&
+                     request.resource.data.permissions is list &&
+                     request.resource.data.isSystemRole is bool;
+      
+      // Update: 
+      // 1. Users with role_management permission can update custom roles (non-system)
+      // 2. Managers can update system roles (for initialization/syncing permissions)
+      // Staff role is explicitly blocked from updating roles
+      allow update: if (
+                     // Staff cannot update roles, even if they have the permission
+                     !isStaff() &&
+                     (
+                       // Option 1: Has role_management permission and updating custom role
+                       (hasRoleManagementPermission() && resource.data.isSystemRole == false) ||
+                       // Option 2: Manager updating system role (for initialization)
+                       (isManager() && resource.data.isSystemRole == true)
+                     )
+                     ) &&
+                     request.resource.data.isSystemRole == resource.data.isSystemRole &&
+                     request.resource.data.keys().hasAll(['name', 'description', 'permissions', 'updatedAt']) &&
+                     request.resource.data.name is string &&
+                     request.resource.data.description is string &&
+                     request.resource.data.permissions is list;
+      
+      // Delete: Only users with role_management permission or 'all' permission
+      // Cannot delete system roles
+      // Staff role is explicitly blocked from deleting roles
+      allow delete: if !isStaff() &&
+                     hasRoleManagementPermission() &&
+                     resource.data.isSystemRole == false;
+    }
+    
+    // Allow listing all roles (collection queries) for any authenticated admin user
+    // This is needed for dropdowns, role selection, and listing roles
+    // Using isAdmin() which checks both system roles and permissions
+    match /roles/{document=**} {
+      // Allow any authenticated user to read roles (needed for login and role queries)
+      allow read: if isAuthenticated();
+    }
+    
+    // ============================================
+    // USERS COLLECTION
+    // ============================================
     match /users/{userId} {
-      // Allow read and write only if user has HR or manager role
-      allow read, write: if hasHRorManagerRole();
+      // Allow users to read their own document (needed for login)
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Permission-based: users with user_management permission can read/write
+      // Backward compatibility: system roles (manager, HR, staff) also have access
+      allow read, write: if hasPermission('user_management') || isManager() || isHR() || isStaff();
     }
     
-    // Allow HR and Manager to list all users (for queries)
+    // Allow listing all users (for queries)
     match /users/{document=**} {
-      allow read: if hasHRorManagerRole();
+      allow read: if hasPermission('user_management') || isManager() || isHR() || isStaff();
     }
     
-    // Admins collection - Allow admins to read their own data
+    // ============================================
+    // POSTS COLLECTION
+    // ============================================
+    match /posts/{postId} {
+      // Permission-based: users with post_moderation permission can read/write
+      allow read, write: if hasPermission('post_moderation') || isManager() || isHR() || isStaff();
+    }
+    
+    // ============================================
+    // JOB POSTS COLLECTION (for analytics)
+    // ============================================
+    match /job_posts/{postId} {
+      // Permission-based: users with post_moderation or analytics permission can read/write
+      allow read, write: if hasPermission('post_moderation') || hasPermission('analytics') || isManager() || isHR() || isStaff();
+    }
+    
+    // ============================================
+    // CATEGORIES COLLECTION
+    // ============================================
+    match /categories/{categoryId} {
+      // All authenticated users can read categories
+      allow read: if isSignedIn();
+      
+      // Permission-based: users with post_moderation permission can create categories
+      allow create: if hasPermission('post_moderation') || isManager() || isHR() || isStaff();
+      
+      // Update rules
+      allow update: if isSignedIn() && (
+        // Allow users with post_moderation permission to update any field
+        hasPermission('post_moderation') || isManager() || isHR() || isStaff() ||
+        // Allow any authenticated user to update only jobCount and updatedAt
+        // Verify all other fields remain unchanged
+        (request.resource.data.name == resource.data.name &&
+         request.resource.data.description == resource.data.description &&
+         request.resource.data.isActive == resource.data.isActive &&
+         request.resource.data.jobCount is int &&
+         request.resource.data.updatedAt is timestamp)
+      );
+      
+      // Permission-based: users with post_moderation permission can delete
+      allow delete: if hasPermission('post_moderation') || isManager() || isHR() || isStaff();
+    }
+    
+    // ============================================
+    // ANALYTICS / REPORTING
+    // ============================================
+    match /analytics/{docId} {
+      // Permission-based: users with analytics permission can read/write
+      allow read, write: if hasPermission('analytics') || isManager() || isHR();
+    }
+    
+    // ============================================
+    // MESSAGES COLLECTION
+    // ============================================
+    // Note: Regular messages are in conversations/{id}/messages subcollection
+    // This rule only applies if there's a top-level messages collection
+    match /messages/{msgId} {
+      // Permission-based: users with message_oversight permission can read/write
+      allow read, write: if hasPermission('message_oversight') || isManager() || isHR() || isStaff();
+    }
+    
+    // ============================================
+    // APPLICATIONS COLLECTION (for job applications)
+    // ============================================
+    match /applications/{applicationId} {
+      // Permission-based: users with post_moderation permission can read/write
+      allow read, write: if hasPermission('post_moderation') || isManager() || isHR() || isStaff();
+    }
+    
+    // ============================================
+    // REPORTS COLLECTION (for user/content reports)
+    // ============================================
+    match /reports/{reportId} {
+      // Permission-based: users with user_management or post_moderation permission can read/write
+      allow read, write: if hasPermission('user_management') || hasPermission('post_moderation') || isManager() || isHR() || isStaff();
+    }
+    
+    // ============================================
+    // PENDING PAYMENTS COLLECTION (for credit/revenue analytics)
+    // ============================================
+    match /pending_payments/{paymentId} {
+      // Permission-based: users with analytics permission can read/write
+      allow read, write: if hasPermission('analytics') || isManager() || isHR();
+    }
+    
+    // ============================================
+    // NOTIFICATIONS COLLECTION
+    // ============================================
+    match /notifications/{notificationId} {
+      // Permission-based: users with user_management permission can read/write
+      allow write: if hasPermission('user_management') || isManager() || isHR() || isStaff();
+      // All authenticated users can read their own notifications
+      allow read: if isAuthenticated();
+    }
+    
+    // ============================================
+    // TAG CATEGORIES COLLECTION
+    // ============================================
+    match /tagCategories/{tagCategoryId} {
+      // All authenticated users can read tag categories
+      allow read: if isSignedIn();
+      // Permission-based: users with post_moderation permission can write
+      allow write: if hasPermission('post_moderation') || isManager() || isHR() || isStaff();
+    }
+    
+    // ============================================
+    // TAGS COLLECTION
+    // ============================================
+    match /tags/{tagId} {
+      // All authenticated users can read tags
+      allow read: if isSignedIn();
+      // Permission-based: users with post_moderation permission can write
+      allow write: if hasPermission('post_moderation') || isManager() || isHR() || isStaff();
+    }
+    
+    // ============================================
+    // ADMINS COLLECTION (if still used)
+    // ============================================
     match /admins/{adminId} {
+      // Allow admins to read their own data
       allow read: if isAuthenticated() && request.auth.uid == adminId;
       // Only allow writes by authenticated users (you may want to restrict this further)
       allow write: if isAuthenticated();
     }
     
-    // Default: Deny all other access
+    // ============================================
+    // DEFAULT: Deny all other access
+    // ============================================
     match /{document=**} {
       allow read, write: if false;
     }
   }
 }
-

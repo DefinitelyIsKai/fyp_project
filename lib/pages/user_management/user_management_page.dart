@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/pages/user_management/view_users_page.dart';
 import 'package:fyp_project/pages/user_management/user_actions_page.dart';
 import 'package:fyp_project/pages/user_management/user_analytics_page.dart';
+import 'package:fyp_project/pages/user_management/role_management_page.dart';
+import 'package:fyp_project/services/auth_service.dart';
 
 
 class UserManagementPage extends StatelessWidget {
@@ -151,6 +154,79 @@ class UserManagementPage extends StatelessWidget {
   // Grid options
   // -------------------------------------------------------
   Widget _buildOptionsGrid(BuildContext context) {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentAdmin = authService.currentAdmin;
+    final userRole = currentAdmin?.role.toLowerCase() ?? '';
+    final userPermissions = currentAdmin?.permissions ?? [];
+    
+    // Check if user can access role management (all admins can view, but only those with role_management permission can modify)
+    final canAccessRoleManagement = userRole == 'manager' || 
+                                    userRole == 'hr' || 
+                                    userRole == 'staff' ||
+                                    userPermissions.contains('role_management') ||
+                                    userPermissions.contains('all');
+
+    final cards = <Widget>[
+      _ManagementCard(
+        title: 'View User Profiles',
+        description: 'Access account information',
+        icon: Icons.people_alt,
+        iconColor: Colors.blue[700]!,
+        backgroundColor: Colors.blue[50]!,
+        onTap: () {
+          Navigator.push(context,
+              MaterialPageRoute(builder: (_) => const ViewUsersPage()));
+        },
+        stats: 'View all users',
+      ),
+      _ManagementCard(
+        title: 'Account Actions',
+        description: 'Suspend, delete, or modify user accounts',
+        icon: Icons.admin_panel_settings,
+        iconColor: Colors.red[700]!,
+        backgroundColor: Colors.red[50]!,
+        onTap: () {
+          Navigator.push(context,
+              MaterialPageRoute(builder: (_) => const UserActionsPage()));
+        },
+        stats: 'Manage accounts',
+      ),
+      _ManagementCard(
+        title: 'User Analytics',
+        description: 'View user growth and engagement statistics',
+        icon: Icons.analytics,
+        iconColor: Colors.purple[700]!,
+        backgroundColor: Colors.purple[50]!,
+        onTap: () {
+          Navigator.push(context,
+              MaterialPageRoute(builder: (_) => const UserAnalyticsPage()));
+        },
+        stats: 'View Analytics',
+      ),
+    ];
+
+    // Add Role Management card if user has access
+    if (canAccessRoleManagement) {
+      cards.add(
+        _ManagementCard(
+          title: 'Role Management',
+          description: 'Manage roles and control access to system modules',
+          icon: Icons.admin_panel_settings,
+          iconColor: Colors.indigo[700]!,
+          backgroundColor: Colors.indigo[50]!,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const RoleManagementPage(),
+              ),
+            );
+          },
+          stats: 'Manage roles',
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: GridView(
@@ -159,54 +235,7 @@ class UserManagementPage extends StatelessWidget {
           mainAxisSpacing: 16,
           childAspectRatio: 0.9,
         ),
-        children: [
-          _ManagementCard(
-            title: 'View User Profiles',
-            description: 'Access account information',
-            icon: Icons.people_alt,
-            iconColor: Colors.blue[700]!,
-            backgroundColor: Colors.blue[50]!,
-            onTap: () {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const ViewUsersPage()));
-            },
-            stats: 'View all users',
-          ),
-          _ManagementCard(
-            title: 'Account Actions',
-            description: 'Suspend, delete, or modify user accounts',
-            icon: Icons.admin_panel_settings,
-            iconColor: Colors.red[700]!,
-            backgroundColor: Colors.red[50]!,
-            onTap: () {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const UserActionsPage()));
-            },
-            stats: 'Manage accounts',
-          ),
-          _ManagementCard(
-            title: 'User Analytics',
-            description: 'View user growth and engagement statistics',
-            icon: Icons.analytics,
-            iconColor: Colors.purple[700]!,
-            backgroundColor: Colors.purple[50]!,
-            onTap: () {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const UserAnalyticsPage()));
-            },
-            stats: 'View Analytics',
-          ),
-
-          _ManagementCard(
-            title: 'Bulk Operations',
-            description: 'Perform batch actions on multiple users',
-            icon: Icons.playlist_add_check,
-            iconColor: Colors.green[700]!,
-            backgroundColor: Colors.green[50]!,
-            onTap: () {},
-            stats: 'Bulk tools',
-          ),
-        ],
+        children: cards,
       ),
     );
   }
