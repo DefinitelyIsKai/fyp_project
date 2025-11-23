@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:fyp_project/pages/authentication/login_page.dart';
-import 'package:fyp_project/pages/authentication/register_page.dart';
-import 'package:fyp_project/pages/dashboard/dashboard_page.dart';
+import 'package:fyp_project/pages/admin/authentication/login_page.dart';
+import 'package:fyp_project/pages/admin/authentication/register_page.dart';
+import 'package:fyp_project/pages/admin/dashboard/dashboard_page.dart';
 
 class AppRoutes {
   static const String login = '/login';

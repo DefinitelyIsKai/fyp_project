@@ -69,65 +69,7 @@ service cloud.firestore {
     // ============================================
     match /roles/{roleId} {
       // Read: Allow any authenticated user to read roles
-      // This is needed for:
-      // 1. Login validation (checking if custom roles have admin permissions)
-      // 2. Creating users, assigning roles, and viewing role information
-      // Roles are permission definitions, not sensitive data, so it's safe to allow all authenticated users to read
-      allow read: if isAuthenticated();
-      
-      // Create: 
-      // 1. Users with role_management permission can create custom roles (non-system)
-      // 2. Managers can create system roles for initialization
-      // Staff role is explicitly blocked from creating roles
-      allow create: if (
-                     // Staff cannot create roles, even if they have the permission
-                     !isStaff() &&
-                     (
-                       // Option 1: Has role_management permission and creating custom role
-                       (hasRoleManagementPermission() && request.resource.data.isSystemRole == false) ||
-                       // Option 2: Manager creating system role (for initialization)
-                       (isManager() && request.resource.data.isSystemRole == true)
-                     )
-                     ) &&
-                     request.resource.data.keys().hasAll(['name', 'description', 'permissions', 'createdAt', 'isSystemRole']) &&
-                     request.resource.data.name is string &&
-                     request.resource.data.description is string &&
-                     request.resource.data.permissions is list &&
-                     request.resource.data.isSystemRole is bool;
-      
-      // Update: 
-      // 1. Users with role_management permission can update custom roles (non-system)
-      // 2. Managers can update system roles (for initialization/syncing permissions)
-      // Staff role is explicitly blocked from updating roles
-      allow update: if (
-                     // Staff cannot update roles, even if they have the permission
-                     !isStaff() &&
-                     (
-                       // Option 1: Has role_management permission and updating custom role
-                       (hasRoleManagementPermission() && resource.data.isSystemRole == false) ||
-                       // Option 2: Manager updating system role (for initialization)
-                       (isManager() && resource.data.isSystemRole == true)
-                     )
-                     ) &&
-                     request.resource.data.isSystemRole == resource.data.isSystemRole &&
-                     request.resource.data.keys().hasAll(['name', 'description', 'permissions', 'updatedAt']) &&
-                     request.resource.data.name is string &&
-                     request.resource.data.description is string &&
-                     request.resource.data.permissions is list;
-      
-      // Delete: Only users with role_management permission or 'all' permission
-      // Cannot delete system roles
-      // Staff role is explicitly blocked from deleting roles
-      allow delete: if !isStaff() &&
-                     hasRoleManagementPermission() &&
-                     resource.data.isSystemRole == false;
-    }
-    
-    // Allow listing all roles (collection queries) for any authenticated admin user
-    // This is needed for dropdowns, role selection, and listing roles
-    // Using isAdmin() which checks both system roles and permissions
-    match /roles/{document=**} {
-      // Allow any authenticated user to read roles (needed for login and role queries)
+      // This is needed for login validation, creating users, assigning roles, and viewing role information
       allow read: if isAuthenticated();
     }
     
@@ -174,7 +116,6 @@ service cloud.firestore {
       // Permission-based: users with post_moderation permission can create categories
       allow create: if hasPermission('post_moderation') || isManager() || isHR() || isStaff();
       
-      // Update rules
       allow update: if isSignedIn() && (
         // Allow users with post_moderation permission to update any field
         hasPermission('post_moderation') || isManager() || isHR() || isStaff() ||
@@ -202,8 +143,6 @@ service cloud.firestore {
     // ============================================
     // MESSAGES COLLECTION
     // ============================================
-    // Note: Regular messages are in conversations/{id}/messages subcollection
-    // This rule only applies if there's a top-level messages collection
     match /messages/{msgId} {
       // Permission-based: users with message_oversight permission can read/write
       allow read, write: if hasPermission('message_oversight') || isManager() || isHR() || isStaff();
@@ -231,6 +170,72 @@ service cloud.firestore {
     match /pending_payments/{paymentId} {
       // Permission-based: users with analytics permission can read/write
       allow read, write: if hasPermission('analytics') || isManager() || isHR();
+    }
+    
+    // ============================================
+    // WALLETS COLLECTION
+    // ============================================
+    match /wallets/{walletId} {
+      // Allow users to read their own wallet
+      allow read: if isAuthenticated() && request.auth.uid == walletId;
+      // Permission-based: users with user_management permission can read/write
+      // Also allow managers and HR to access wallets
+      allow read, write: if hasPermission('user_management') || isManager() || isHR();
+    }
+    
+    // ============================================
+    // LOGS COLLECTION (for tracking warnings, deductions, etc.)
+    // ============================================
+    match /logs/{logId} {
+      // Permission-based: users with user_management, post_moderation, analytics, monitoring permissions, managers, or HR can read/write
+      allow read, write: if hasPermission('user_management') || hasPermission('post_moderation') || hasPermission('analytics') || hasPermission('monitoring') || isManager() || isHR();
+    }
+    
+    // Allow listing all logs (for queries)
+    match /logs/{document=**} {
+      allow read: if hasPermission('user_management') || hasPermission('post_moderation') || hasPermission('analytics') || hasPermission('monitoring') || isManager() || isHR();
+    }
+    
+    // ============================================
+    // REVIEWS COLLECTION (for ratings/reviews)
+    // ============================================
+    match /reviews/{reviewId} {
+      // Read: 
+      // 1. Users can read their own reviews (as employer or employee)
+      // 2. Admins with message_oversight permission can read all reviews
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.employerId ||
+        request.auth.uid == resource.data.employeeId ||
+        hasPermission('message_oversight') || isManager() || isHR() || isStaff()
+      );
+      
+      // Create:
+      // 1. Authenticated users can create reviews (employers rating employees)
+      // 2. Must be the employer creating the review
+      allow create: if isAuthenticated() && 
+                     request.auth.uid == request.resource.data.employerId &&
+                     request.resource.data.keys().hasAll(['employerId', 'employeeId', 'postId', 'rating', 'createdAt']) &&
+                     request.resource.data.employerId is string &&
+                     request.resource.data.employeeId is string &&
+                     request.resource.data.postId is string &&
+                     request.resource.data.rating is number &&
+                     request.resource.data.rating >= 1 &&
+                     request.resource.data.rating <= 5 &&
+                     request.resource.data.createdAt is timestamp;
+      
+      // Update:
+      // 1. Only admins with message_oversight permission can update reviews (for moderation)
+      // 2. Users cannot update their own reviews after creation
+      allow update: if hasPermission('message_oversight') || isManager() || isHR() || isStaff();
+      
+      // Delete:
+      // 1. Only admins with message_oversight permission can delete reviews
+      allow delete: if hasPermission('message_oversight') || isManager() || isHR() || isStaff();
+    }
+    
+    // Allow listing all reviews (for queries)
+    match /reviews/{document=**} {
+      allow read: if hasPermission('message_oversight') || isManager() || isHR() || isStaff();
     }
     
     // ============================================

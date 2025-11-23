@@ -1,0 +1,574 @@
+// services/user_service.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:fyp_project/models/admin/user_model.dart';
+
+class UserService {
+  UserService()
+      : _usersRef = FirebaseFirestore.instance.collection('users'),
+        _notificationsRef = FirebaseFirestore.instance.collection('notifications'),
+        _walletsRef = FirebaseFirestore.instance.collection('wallets'),
+        _logsRef = FirebaseFirestore.instance.collection('logs');
+
+  final CollectionReference<Map<String, dynamic>> _usersRef;
+  final CollectionReference<Map<String, dynamic>> _notificationsRef;
+  final CollectionReference<Map<String, dynamic>> _walletsRef;
+  final CollectionReference<Map<String, dynamic>> _logsRef;
+
+  List<UserModel> _mapUsers(QuerySnapshot<Map<String, dynamic>> snapshot) {
+    return snapshot.docs
+        .map((doc) => UserModel.fromJson(doc.data(), doc.id))
+        .toList();
+  }
+
+  Future<List<UserModel>> getAllUsers() async {
+    final snapshot = await _usersRef.get();
+    final users = _mapUsers(snapshot);
+    users.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return users;
+  }
+
+  // Get all unique roles from users collection
+  Future<List<String>> getAllRoles() async {
+    final snapshot = await _usersRef.get();
+    final roles = snapshot.docs
+        .map((doc) => doc.data()['role'] as String? ?? 'unknown')
+        .where((role) => role.isNotEmpty)
+        .toSet()
+        .toList();
+
+    // Sort roles for consistent ordering
+    roles.sort();
+    return roles;
+  }
+
+  Future<List<UserModel>> searchUsers(String query) async {
+    query = query.trim();
+    if (query.isEmpty) return getAllUsers();
+
+    final snapshot = await _usersRef.get();
+    final lower = query.toLowerCase();
+
+    return _mapUsers(snapshot).where((u) {
+      return u.fullName.toLowerCase().contains(lower) ||
+          u.email.toLowerCase().contains(lower);
+    }).toList();
+  }
+
+  Future<List<UserModel>> getSuspendedUsers() async {
+    final snap = await _usersRef.where('status', isEqualTo: 'Suspended').get();
+    final users = _mapUsers(snap);
+    users.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return users;
+  }
+
+  Future<List<UserModel>> getReportedUsers() async {
+    final snap = await _usersRef.where('reportCount', isGreaterThan: 0).get();
+    final users = _mapUsers(snap);
+    users.sort((a, b) => b.reportCount.compareTo(a.reportCount));
+    return users;
+  }
+
+  // Warning system methods
+  Future<int> getStrikeCount(String userId) async {
+    try {
+      final userDoc = await _usersRef.doc(userId).get();
+      return userDoc.data()?['strikeCount'] ?? 0;
+    } catch (e) {
+      print('Error getting strike count: $e');
+      return 0;
+    }
+  }
+
+  // Wallet methods
+  Future<double> getWalletBalance(String userId) async {
+    try {
+      print('Fetching wallet balance for userId: $userId');
+      
+      // First, try to get by document ID (userId)
+      var walletDoc = await _walletsRef.doc(userId).get();
+      print('Wallet document exists (by doc ID): ${walletDoc.exists}');
+      
+      // If not found by document ID, try querying by userId field
+      if (!walletDoc.exists) {
+        print('Document not found by ID, querying by userId field...');
+        final querySnapshot = await _walletsRef.where('userId', isEqualTo: userId).limit(1).get();
+        if (querySnapshot.docs.isNotEmpty) {
+          walletDoc = querySnapshot.docs.first;
+          print('Found wallet document by userId field query');
+        }
+      }
+      
+      if (walletDoc.exists) {
+        final data = walletDoc.data();
+        print('Wallet data: $data');
+        
+        // Handle both int and double types for balance
+        final balanceValue = data?['balance'];
+        print('Balance value (raw): $balanceValue, type: ${balanceValue.runtimeType}');
+        
+        double balance = 0.0;
+        if (balanceValue != null) {
+          if (balanceValue is num) {
+            balance = balanceValue.toDouble();
+          } else if (balanceValue is String) {
+            balance = double.tryParse(balanceValue) ?? 0.0;
+          }
+        }
+        
+        print('Parsed balance: $balance');
+        return balance;
+      }
+      
+      print('Wallet document does not exist for userId: $userId');
+      // If wallet doesn't exist, create it with 0 balance and return 0.0
+      await _walletsRef.doc(userId).set({
+        'userId': userId,
+        'balance': 0.0,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      return 0.0;
+    } catch (e, stackTrace) {
+      print('Error getting wallet balance: $e');
+      print('Stack trace: $stackTrace');
+      return 0.0;
+    }
+  }
+
+  Future<Map<String, dynamic>> deductMarks({
+    required String userId,
+    required double amount,
+    required String reason,
+  }) async {
+    try {
+      // Get current admin user ID for logging
+      final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
+      
+      // Get user info for logging
+      final userDoc = await _usersRef.doc(userId).get();
+      final userData = userDoc.data();
+      final userName = userData?['fullName'] ?? 'Unknown User';
+      
+      // Ensure wallet exists first
+      final walletDoc = await _walletsRef.doc(userId).get();
+      double currentBalance = 0.0;
+      
+      if (walletDoc.exists) {
+        final data = walletDoc.data();
+        currentBalance = (data?['balance'] as num?)?.toDouble() ?? 0.0;
+      } else {
+        // Create wallet with 0 balance if it doesn't exist
+        await _walletsRef.doc(userId).set({
+          'userId': userId,
+          'balance': 0.0,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        currentBalance = 0.0;
+      }
+
+      // Allow negative balances - just deduct the amount regardless of current balance
+      final newBalance = currentBalance - amount;
+
+      await _walletsRef.doc(userId).set({
+        'userId': userId,
+        'balance': newBalance,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // Create log entry
+      try {
+        await _logsRef.add({
+          'actionType': 'deduct_marks',
+          'userId': userId,
+          'userName': userName,
+          'amount': amount,
+          'previousBalance': currentBalance,
+          'newBalance': newBalance,
+          'reason': reason,
+          'createdAt': FieldValue.serverTimestamp(),
+          'createdBy': currentAdminId,
+        });
+      } catch (logError) {
+        print('Error creating log entry: $logError');
+        // Don't fail the operation if logging fails
+      }
+
+      return {
+        'success': true,
+        'amountDeducted': amount,
+        'previousBalance': currentBalance,
+        'newBalance': newBalance,
+      };
+    } catch (e) {
+      print('Error deducting marks: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  // Complete warning system with notifications
+  Future<Map<String, dynamic>> issueWarning({
+    required String userId,
+    required String violationReason,
+    double? deductMarksAmount,
+  }) async {
+    try {
+      // Get user data first
+      final userDoc = await _usersRef.doc(userId).get();
+      final userData = userDoc.data();
+      if (userData == null) {
+        throw Exception('User not found');
+      }
+
+      final currentStrikes = await getStrikeCount(userId);
+      final newStrikes = currentStrikes + 1;
+
+      // Add strike to user
+      await _usersRef.doc(userId).update({
+        'strikeCount': newStrikes,
+        'lastStrikeReason': violationReason,
+        'lastStrikeAt': FieldValue.serverTimestamp(),
+      });
+
+      // Get current admin user ID for logging
+      final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
+
+      // Deduct marks if specified
+      Map<String, dynamic>? deductionResult;
+      if (deductMarksAmount != null && deductMarksAmount > 0) {
+        deductionResult = await deductMarks(
+          userId: userId,
+          amount: deductMarksAmount,
+          reason: 'Warning issued: $violationReason',
+        );
+      }
+
+      // Create log entry for warning
+      try {
+        await _logsRef.add({
+          'actionType': 'warning_issued',
+          'userId': userId,
+          'userName': userData['fullName'] ?? 'User',
+          'violationReason': violationReason,
+          'strikeCount': newStrikes,
+          'wasSuspended': false, // Will be updated if suspended
+          'deductedMarks': deductMarksAmount,
+          'createdAt': FieldValue.serverTimestamp(),
+          'createdBy': currentAdminId,
+        });
+      } catch (logError) {
+        print('Error creating warning log entry: $logError');
+        // Don't fail the operation if logging fails
+      }
+
+      // Send warning notification
+      await _sendWarningNotification(
+        userId: userId,
+        violationReason: violationReason,
+        strikeCount: newStrikes,
+        userName: userData['fullName'] ?? 'User',
+        userEmail: userData['email'] ?? '',
+      );
+
+      // Check if this is the 3rd strike and auto-suspend
+      bool wasSuspended = false;
+      if (newStrikes >= 3) {
+        await suspendUser(
+          userId,
+          violationReason: 'Automatic suspension: Reached 3 strikes. Final violation: $violationReason',
+          durationDays: 7,
+        );
+        wasSuspended = true;
+
+        // Update log entry to reflect suspension
+        try {
+          final logsQuery = await _logsRef
+              .where('actionType', isEqualTo: 'warning_issued')
+              .where('userId', isEqualTo: userId)
+              .orderBy('createdAt', descending: true)
+              .limit(1)
+              .get();
+          
+          if (logsQuery.docs.isNotEmpty) {
+            await logsQuery.docs.first.reference.update({
+              'wasSuspended': true,
+              'suspensionReason': 'Automatic suspension: Reached 3 strikes',
+            });
+          }
+        } catch (logError) {
+          print('Error updating warning log entry: $logError');
+        }
+
+        // Send suspension notification
+        await _sendSuspensionNotification(
+          userId: userId,
+          violationReason: violationReason,
+          durationDays: 7,
+          userName: userData['fullName'] ?? 'User',
+          userEmail: userData['email'] ?? '',
+        );
+      }
+
+      return {
+        'success': true,
+        'strikeCount': newStrikes,
+        'wasSuspended': wasSuspended,
+        'userName': userData['fullName'] ?? 'User',
+        'deductionResult': deductionResult,
+      };
+    } catch (e) {
+      print('Error issuing warning: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  Future<void> resetStrikes(String userId) async {
+    try {
+      await _usersRef.doc(userId).update({
+        'strikeCount': 0,
+        'lastStrikeReason': null,
+        'lastStrikeAt': null,
+      });
+    } catch (e) {
+      print('Error resetting strikes: $e');
+      throw e;
+    }
+  }
+
+  Future<Map<String, dynamic>> unsuspendUserWithReset(String userId) async {
+    try {
+      // Get user data first
+      final userDoc = await _usersRef.doc(userId).get();
+      final userData = userDoc.data();
+      if (userData == null) {
+        throw Exception('User not found');
+      }
+
+      final userName = userData['fullName'] ?? 'User';
+      final userEmail = userData['email'] ?? '';
+      final previousStatus = userData['status'] ?? 'unknown';
+      final previousStrikeCount = userData['strikeCount'] ?? 0;
+      final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
+
+      // Unsuspend user
+      await unsuspendUser(userId);
+
+      // Reset strikes
+      await resetStrikes(userId);
+
+      // Create log entry
+      try {
+        await _logsRef.add({
+          'actionType': 'user_unsuspended',
+          'userId': userId,
+          'userName': userName,
+          'userEmail': userEmail,
+          'previousStatus': previousStatus,
+          'newStatus': 'Active',
+          'previousStrikeCount': previousStrikeCount,
+          'newStrikeCount': 0,
+          'createdAt': FieldValue.serverTimestamp(),
+          'createdBy': currentAdminId,
+        });
+      } catch (logError) {
+        print('Error creating unsuspend log entry: $logError');
+        // Don't fail the operation if logging fails
+      }
+
+      // Send unsuspension notification
+      await _sendUnsuspensionNotification(
+        userId: userId,
+        userName: userName,
+        userEmail: userEmail,
+      );
+
+      return {
+        'success': true,
+        'userName': userName,
+      };
+    } catch (e) {
+      print('Error unsuspending user: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  Future<void> suspendUser(String userId, {String? violationReason, int? durationDays}) async {
+    await _usersRef.doc(userId).update({
+      'status': 'Suspended',
+      'isActive': false,
+      'suspendedAt': FieldValue.serverTimestamp(),
+      'suspensionReason': violationReason,
+      'suspensionDuration': durationDays,
+    });
+  }
+
+  Future<void> unsuspendUser(String userId) async {
+    await _usersRef.doc(userId).update({
+      'status': 'Active',
+      'isActive': true,
+      'suspendedAt': null,
+      'suspensionReason': null,
+      'suspensionDuration': null,
+    });
+  }
+
+  Future<Map<String, dynamic>> deleteUserWithNotification({
+    required String userId,
+    required String deletionReason,
+  }) async {
+    try {
+      // Get user data first
+      final userDoc = await _usersRef.doc(userId).get();
+      final userData = userDoc.data();
+      if (userData == null) {
+        throw Exception('User not found');
+      }
+
+      // Send deletion notification
+      await _sendDeletionNotification(
+        userId: userId,
+        userName: userData['fullName'] ?? 'User',
+        userEmail: userData['email'] ?? '',
+        deletionReason: deletionReason,
+      );
+
+      // Delete the user
+      await deleteUser(userId, deletionReason: deletionReason);
+
+      return {
+        'success': true,
+        'userName': userData['fullName'] ?? 'User',
+      };
+    } catch (e) {
+      print('Error deleting user: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  Future<void> deleteUser(String userId, {String? deletionReason}) async {
+    await _usersRef.doc(userId).update({
+      'status': 'Deleted',
+      'isActive': false,
+      'deletedAt': FieldValue.serverTimestamp(),
+      'deletionReason': deletionReason,
+    });
+  }
+
+  // Notification methods
+  Future<void> _sendWarningNotification({
+    required String userId,
+    required String violationReason,
+    required int strikeCount,
+    required String userName,
+    required String userEmail,
+  }) async {
+    try {
+      await _notificationsRef.add({
+        'body': 'You have received a warning for violating community guidelines. Reason: $violationReason. This is strike $strikeCount/3. After 3 strikes, your account will be suspended.',
+        'category': 'account_warning',
+        'createdAt': FieldValue.serverTimestamp(),
+        'isRead': false,
+        'metadata': {
+          'violationReason': violationReason,
+          'strikeCount': strikeCount,
+          'userName': userName,
+          'userEmail': userEmail,
+          'actionType': 'warning',
+        },
+        'title': 'Account Warning',
+        'userId': userId,
+      });
+    } catch (e) {
+      print('Error sending warning notification: $e');
+    }
+  }
+
+  Future<void> _sendSuspensionNotification({
+    required String userId,
+    required String violationReason,
+    required int durationDays,
+    required String userName,
+    required String userEmail,
+  }) async {
+    try {
+      await _notificationsRef.add({
+        'body': 'Your account has been suspended for $durationDays days due to reaching 3 strikes for violating community guidelines. Final violation: $violationReason',
+        'category': 'account_suspension',
+        'createdAt': FieldValue.serverTimestamp(),
+        'isRead': false,
+        'metadata': {
+          'violationReason': violationReason,
+          'suspensionDuration': durationDays,
+          'userName': userName,
+          'userEmail': userEmail,
+          'actionType': 'suspension',
+        },
+        'title': 'Account Suspended - 3 Strikes',
+        'userId': userId,
+      });
+    } catch (e) {
+      print('Error sending suspension notification: $e');
+    }
+  }
+
+  Future<void> _sendUnsuspensionNotification({
+    required String userId,
+    required String userName,
+    required String userEmail,
+  }) async {
+    try {
+      await _notificationsRef.add({
+        'body': 'Your account suspension has been lifted. You can now access all features normally.',
+        'category': 'account_unsuspension',
+        'createdAt': FieldValue.serverTimestamp(),
+        'isRead': false,
+        'metadata': {
+          'userName': userName,
+          'userEmail': userEmail,
+          'actionType': 'unsuspension',
+        },
+        'title': 'Account Access Restored',
+        'userId': userId,
+      });
+    } catch (e) {
+      print('Error sending unsuspension notification: $e');
+    }
+  }
+
+  Future<void> _sendDeletionNotification({
+    required String userId,
+    required String userName,
+    required String userEmail,
+    required String deletionReason,
+  }) async {
+    try {
+      await _notificationsRef.add({
+        'body': 'Your account has been permanently deleted due to severe violations of our community guidelines. Reason: $deletionReason',
+        'category': 'account_deletion',
+        'createdAt': FieldValue.serverTimestamp(),
+        'isRead': false,
+        'metadata': {
+          'deletionReason': deletionReason,
+          'userName': userName,
+          'userEmail': userEmail,
+          'actionType': 'deletion',
+        },
+        'title': 'Account Deletion Notice',
+        'userId': userId,
+      });
+    } catch (e) {
+      print('Error sending deletion notification: $e');
+    }
+  }
+}
