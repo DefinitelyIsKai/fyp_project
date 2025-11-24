@@ -52,7 +52,10 @@ class _RulesSettingsPageState extends State<RulesSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Rules & Settings')),
+      appBar: AppBar(
+        title: const Text('Rules & Settings'),
+        foregroundColor: Colors.white,
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _configs.isEmpty

@@ -1,12 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fyp_project/models/admin/job_post_model.dart';
+import 'package:fyp_project/services/admin/notification_service.dart';
 
 class PostService {
   final CollectionReference _postsCollection =
   FirebaseFirestore.instance.collection('posts');
   final CollectionReference<Map<String, dynamic>> _logsRef =
       FirebaseFirestore.instance.collection('logs');
+  final NotificationService _notificationService = NotificationService();
 
   /// Stream all posts in real-time
   Stream<List<JobPostModel>> streamAllPosts() {
@@ -59,6 +61,20 @@ class PostService {
       print('Error creating approval log entry: $logError');
       // Don't fail the operation if logging fails
     }
+
+    // Send notification to user if ownerId exists
+    if (ownerId.isNotEmpty) {
+      try {
+        await _notificationService.sendPostApprovalNotification(
+          userId: ownerId,
+          postId: postId,
+          postTitle: postTitle,
+        );
+      } catch (notifError) {
+        print('Error sending approval notification: $notifError');
+        // Don't fail the operation if notification fails
+      }
+    }
   }
 
   /// Reject a post with reason (pending -> rejected)
@@ -94,6 +110,21 @@ class PostService {
     } catch (logError) {
       print('Error creating rejection log entry: $logError');
       // Don't fail the operation if logging fails
+    }
+
+    // Send notification to user if ownerId exists
+    if (ownerId.isNotEmpty) {
+      try {
+        await _notificationService.sendPostRejectionNotification(
+          userId: ownerId,
+          postId: postId,
+          postTitle: postTitle,
+          rejectionReason: reason,
+        );
+      } catch (notifError) {
+        print('Error sending rejection notification: $notifError');
+        // Don't fail the operation if notification fails
+      }
     }
   }
 

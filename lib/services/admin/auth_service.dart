@@ -19,14 +19,12 @@ class AuthService extends ChangeNotifier {
   /// Register User (for creating new admin users)
   /// IMPORTANT: This method creates a new user but does NOT automatically log them in.
   /// However, Firebase Auth's createUserWithEmailAndPassword automatically signs in
-  /// the newly created user, so we immediately sign them out.
+  /// the newly created user, so we immediately sign them out and restore the original user's session.
   /// 
-  /// NOTE: The current user's session will be lost because we can't re-authenticate
-  /// without their password. The calling code should handle this by showing a message
-  /// or redirecting to login. For a production app, consider using a Cloud Function
-  /// with Firebase Admin SDK to create users without affecting the current session.
+  /// If originalUserPassword is provided, the original user's session will be restored.
+  /// If not provided, the user will need to log in again.
   /// --------------------
-  Future<RegisterResult> register(String name, String email, String password, {required String role}) async{
+  Future<RegisterResult> register(String name, String email, String password, {required String role, String? originalUserPassword}) async{
     // Store the current user's info before creating new user
     final originalUser = _auth.currentUser;
     final originalUserEmail = originalUser?.email;
@@ -69,6 +67,7 @@ class AuthService extends ChangeNotifier {
         'permissions': permissions,
         'createdAt': FieldValue.serverTimestamp(),
         'isActive': true,
+        'status': 'Active',
       });
       
       debugPrint('User document created with role: $normalizedRole, permissions: $permissions');
@@ -77,8 +76,33 @@ class AuthService extends ChangeNotifier {
       // (since createUserWithEmailAndPassword automatically signed them in)
       await _auth.signOut();
       
-      // Clear the current admin state since we're signed out
-      // We can't restore the session without the original user's password
+      // Try to restore the original user's session if password is provided
+      if (originalUserEmail != null && originalUserPassword != null && originalUserPassword.isNotEmpty) {
+        try {
+          // Sign back in as the original user using the login method
+          // This will properly restore the admin state
+          final loginResult = await login(originalUserEmail, originalUserPassword);
+          
+          if (loginResult.success) {
+            debugPrint('Original user session restored: $originalUserEmail');
+            
+            return RegisterResult(
+              success: true,
+              requiresReauth: false,
+              message: 'Admin user "$name" created successfully.',
+              originalUserEmail: originalUserEmail,
+            );
+          } else {
+            debugPrint('Failed to restore original user session: ${loginResult.error}');
+            // Continue to return requiresReauth: true
+          }
+        } catch (e) {
+          debugPrint('Failed to restore original user session: $e');
+          // Continue to return requiresReauth: true
+        }
+      }
+      
+      // If we couldn't restore the session, clear the admin state
       _currentAdmin = null;
       _isAuthenticated = false;
       notifyListeners();

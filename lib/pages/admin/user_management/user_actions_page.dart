@@ -104,6 +104,7 @@ class _UserActionsPageState extends State<UserActionsPage> {
           ),
         ),
         backgroundColor: AppColors.primaryDark,
+        foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: _isLoading
@@ -506,8 +507,58 @@ class _UserActionsPageState extends State<UserActionsPage> {
   }
 
   Future<void> _unsuspendUser(UserModel user) async {
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => WillPopScope(
+        onWillPop: () async => false,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          content: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryDark),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Unsuspending user...',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[800],
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Please wait a moment',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
     try {
       final result = await _userService.unsuspendUserWithReset(user.id);
+      
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
       if (!mounted) return;
       if (result['success'] == true) {
         _showSnackBar('${user.fullName} unsuspended successfully. Strikes reset to 0.');
@@ -516,6 +567,10 @@ class _UserActionsPageState extends State<UserActionsPage> {
       }
       _loadUsers();
     } catch (e) {
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
       if (!mounted) return;
       _showSnackBar('Failed to unsuspend user: $e', isError: true);
     }

@@ -24,8 +24,8 @@ class UserManagementPage extends StatelessWidget {
           ),
         ),
         backgroundColor: AppColors.primaryDark,
+        foregroundColor: Colors.white,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

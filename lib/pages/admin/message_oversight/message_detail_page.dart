@@ -167,6 +167,7 @@ class _MessageDetailPageState extends State<MessageDetailPage> {
           style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
         backgroundColor: AppColors.primaryDark,
+        foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: SingleChildScrollView(

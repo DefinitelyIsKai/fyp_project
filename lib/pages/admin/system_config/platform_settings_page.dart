@@ -84,6 +84,7 @@ class _PlatformSettingsPageState extends State<PlatformSettingsPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Platform Settings'),
+        foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: _isLoading

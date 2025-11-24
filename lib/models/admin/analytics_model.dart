@@ -15,6 +15,7 @@ class AnalyticsModel {
   final int newRegistrations;
   final int rejectedJobPosts;
   final int resolvedReports;
+  final int dismissedReports;
   final int profileViews;
   final double avgSessionDuration; // in minutes
   final double engagementRate; // percentage
@@ -57,6 +58,7 @@ class AnalyticsModel {
     this.newRegistrations = 0,
     this.rejectedJobPosts = 0,
     this.resolvedReports = 0,
+    this.dismissedReports = 0,
     this.profileViews = 0,
     this.avgSessionDuration = 0.0,
     this.engagementRate = 0.0,
@@ -90,7 +92,7 @@ class AnalyticsModel {
   double get jobPostApprovalRate =>
       totalJobPostsProcessed == 0 ? 0 : (approvedJobPosts / totalJobPostsProcessed) * 100;
 
-  int get totalReportsProcessed => resolvedReports + pendingReports;
+  int get totalReportsProcessed => resolvedReports + dismissedReports + pendingReports;
   double get reportResolutionRate =>
       totalReports == 0 ? 0 : (resolvedReports / totalReports) * 100;
 
@@ -125,6 +127,7 @@ class AnalyticsModel {
       newRegistrations: json['newRegistrations'] ?? 0,
       rejectedJobPosts: json['rejectedJobPosts'] ?? 0,
       resolvedReports: json['resolvedReports'] ?? 0,
+      dismissedReports: json['dismissedReports'] ?? 0,
       profileViews: json['profileViews'] ?? 0,
       avgSessionDuration: (json['avgSessionDuration'] ?? 0).toDouble(),
       engagementRate: (json['engagementRate'] ?? 0).toDouble(),
@@ -172,6 +175,7 @@ class AnalyticsModel {
       'newRegistrations': newRegistrations,
       'rejectedJobPosts': rejectedJobPosts,
       'resolvedReports': resolvedReports,
+      'dismissedReports': dismissedReports,
       'profileViews': profileViews,
       'avgSessionDuration': avgSessionDuration,
       'engagementRate': engagementRate,
@@ -216,6 +220,7 @@ class AnalyticsModel {
     int? newRegistrations,
     int? rejectedJobPosts,
     int? resolvedReports,
+    int? dismissedReports,
     int? profileViews,
     double? avgSessionDuration,
     double? engagementRate,
@@ -255,6 +260,7 @@ class AnalyticsModel {
       newRegistrations: newRegistrations ?? this.newRegistrations,
       rejectedJobPosts: rejectedJobPosts ?? this.rejectedJobPosts,
       resolvedReports: resolvedReports ?? this.resolvedReports,
+      dismissedReports: dismissedReports ?? this.dismissedReports,
       profileViews: profileViews ?? this.profileViews,
       avgSessionDuration: avgSessionDuration ?? this.avgSessionDuration,
       engagementRate: engagementRate ?? this.engagementRate,

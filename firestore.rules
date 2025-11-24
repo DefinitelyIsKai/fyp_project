@@ -30,7 +30,7 @@ service cloud.firestore {
     
     // Check if user is HR
     function isHR() {
-      return userExistsAndActive() && getUserData().role == 'HR';
+      return userExistsAndActive() && getUserData().role == 'hr';
     }
     
     // Check if user is staff
@@ -43,7 +43,7 @@ service cloud.firestore {
     function isAdmin() {
       return userExistsAndActive() && (
         // System roles (backward compatibility)
-        getUserData().role in ['manager', 'HR', 'staff', 'admin'] ||
+        getUserData().role in ['manager', 'hr', 'staff', 'admin'] ||
         // OR has any admin permissions (for dynamic roles)
         (getUserData().permissions is list && 
          getUserData().permissions.hasAny(['all', 'post_moderation', 'user_management', 'analytics', 'monitoring', 'system_config', 'message_oversight', 'role_management']))
@@ -79,6 +79,10 @@ service cloud.firestore {
     match /users/{userId} {
       // Allow users to read their own document (needed for login)
       allow read: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Allow users to create their own document (needed during registration/admin creation)
+      // This is needed because createUserWithEmailAndPassword signs in the new user
+      allow create: if isAuthenticated() && request.auth.uid == userId;
       
       // Permission-based: users with user_management permission can read/write
       // Backward compatibility: system roles (manager, HR, staff) also have access

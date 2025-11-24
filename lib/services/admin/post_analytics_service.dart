@@ -44,16 +44,37 @@ class PostAnalyticsService {
     final completedInPeriod = postsInRange.where((p) => p.status == 'completed').length;
     final rejectedInPeriod = postsInRange.where((p) => p.status == 'rejected').length;
 
-    // Category breakdown
-    final categoryBreakdown = <String, int>{};
+    // Event breakdown (using event field instead of category)
+    final eventBreakdown = <String, int>{};
     for (final post in allPosts) {
-      categoryBreakdown[post.category] = (categoryBreakdown[post.category] ?? 0) + 1;
+      final event = post.event ?? 'No Event';
+      eventBreakdown[event] = (eventBreakdown[event] ?? 0) + 1;
     }
 
-    // Location breakdown
+    // Location breakdown - extract state only
     final locationBreakdown = <String, int>{};
     for (final post in allPosts) {
-      locationBreakdown[post.location] = (locationBreakdown[post.location] ?? 0) + 1;
+      if (post.location.isNotEmpty) {
+        // Extract state from location (format: "Address, City, State, Country")
+        // State is usually the second to last part
+        final parts = post.location.split(',').map((p) => p.trim()).toList();
+        String state = post.location; // fallback to full location
+        if (parts.length >= 2) {
+          // Try to get the state (second to last part before country)
+          state = parts.length >= 3 ? parts[parts.length - 2] : parts.last;
+        }
+        locationBreakdown[state] = (locationBreakdown[state] ?? 0) + 1;
+      }
+    }
+
+    // Tags breakdown
+    final tagsBreakdown = <String, int>{};
+    for (final post in allPosts) {
+      for (final tag in post.tags) {
+        if (tag.isNotEmpty) {
+          tagsBreakdown[tag] = (tagsBreakdown[tag] ?? 0) + 1;
+        }
+      }
     }
 
     // Industry breakdown
@@ -116,8 +137,10 @@ class PostAnalyticsService {
       'activeInPeriod': activeInPeriod,
       'completedInPeriod': completedInPeriod,
       'rejectedInPeriod': rejectedInPeriod,
-      'categoryBreakdown': categoryBreakdown,
+      'eventBreakdown': eventBreakdown,
+      'categoryBreakdown': eventBreakdown, // Keep for backward compatibility
       'locationBreakdown': locationBreakdown,
+      'tagsBreakdown': tagsBreakdown,
       'industryBreakdown': industryBreakdown,
       'jobTypeBreakdown': jobTypeBreakdown,
       'dailyBreakdown': dailyBreakdown,

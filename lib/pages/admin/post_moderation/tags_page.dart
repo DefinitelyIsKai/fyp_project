@@ -659,6 +659,7 @@ class _TagsPageState extends State<TagsPage> {
           ),
         ),
         backgroundColor: AppColors.primaryDark,
+        foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: Column(

@@ -6,7 +6,6 @@ class CategoryModel {
   final String? description;
   final int jobCount;
 
-  // NEW FIELDS
   final bool isActive;
   final DateTime? createdAt;
   final DateTime? updatedAt;

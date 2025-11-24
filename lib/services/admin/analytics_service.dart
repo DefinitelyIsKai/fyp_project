@@ -121,6 +121,7 @@ class AnalyticsService {
         newRegistrations: userAnalytics['newRegistrations'] ?? 0,
         rejectedJobPosts: jobPostAnalytics['rejectedJobPosts'] ?? 0,
         resolvedReports: reportAnalytics['resolvedReports'] ?? 0,
+        dismissedReports: reportAnalytics['dismissedReports'] ?? 0,
         profileViews: userAnalytics['profileViews'] ?? 0,
         avgSessionDuration: userAnalytics['avgSessionDuration'] ?? 0.0,
         engagementRate: currentEngagementRate,
@@ -287,11 +288,15 @@ class AnalyticsService {
       final resolvedReports = reportsInPeriod
           .where((doc) => (doc.data()['status'] ?? 'pending') == 'resolved')
           .length;
+      final dismissedReports = reportsInPeriod
+          .where((doc) => (doc.data()['status'] ?? 'pending') == 'dismissed')
+          .length;
       
       return {
         'totalReports': totalReports,
         'pendingReports': pendingReports,
         'resolvedReports': resolvedReports,
+        'dismissedReports': dismissedReports,
         'newReports': totalReports,
       };
     } catch (e) {
@@ -313,6 +318,7 @@ class AnalyticsService {
         'totalReports': totalReports,
         'pendingReports': 0,
         'resolvedReports': 0,
+        'dismissedReports': 0,
         'newReports': 0,
       };
     }
@@ -666,6 +672,7 @@ class AnalyticsService {
         newRegistrations: userAnalytics['newRegistrations'] ?? 0,
         rejectedJobPosts: jobPostAnalytics['rejectedJobPosts'] ?? 0,
         resolvedReports: reportAnalytics['resolvedReports'] ?? 0,
+        dismissedReports: reportAnalytics['dismissedReports'] ?? 0,
         profileViews: userAnalytics['profileViews'] ?? 0,
         avgSessionDuration: userAnalytics['avgSessionDuration'] ?? 0.0,
         engagementRate: currentEngagementRate,

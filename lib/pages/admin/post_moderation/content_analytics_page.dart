@@ -269,11 +269,11 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                 pw.SizedBox(height: 20),
               ],
 
-              // Category Breakdown
-              if (analytics['categoryBreakdown'] != null &&
-                  (analytics['categoryBreakdown'] as Map).isNotEmpty) ...[
+              // Event Breakdown (using event field)
+              if (analytics['eventBreakdown'] != null &&
+                  (analytics['eventBreakdown'] as Map).isNotEmpty) ...[
                 pw.Text(
-                  'Category Breakdown (Top 10)',
+                  'Event Breakdown (Top 10)',
                   style: pw.TextStyle(
                     fontSize: 16,
                     fontWeight: pw.FontWeight.bold,
@@ -301,58 +301,10 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                       ),
                     ),
                   ),
-                  headers: ['Category', 'Posts'],
+                  headers: ['Event', 'Posts'],
                   data: () {
                     final entries =
-                        (analytics['categoryBreakdown'] as Map<String, dynamic>)
-                            .entries
-                            .toList();
-                    entries.sort((a, b) => b.value.compareTo(a.value));
-                    return entries
-                        .take(10)
-                        .map((entry) => [entry.key, entry.value.toString()])
-                        .toList();
-                  }(),
-                ),
-                pw.SizedBox(height: 20),
-              ],
-
-              // Industry Breakdown
-              if (analytics['industryBreakdown'] != null &&
-                  (analytics['industryBreakdown'] as Map).isNotEmpty) ...[
-                pw.Text(
-                  'Industry Breakdown (Top 10)',
-                  style: pw.TextStyle(
-                    fontSize: 16,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-                pw.SizedBox(height: 10),
-                pw.TableHelper.fromTextArray(
-                  context: context,
-                  border: pw.TableBorder.all(
-                    color: PdfColors.grey400,
-                    width: 0.5,
-                  ),
-                  cellAlignment: pw.Alignment.centerLeft,
-                  headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
-                  headerStyle: pw.TextStyle(
-                    fontSize: 10,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                  cellStyle: pw.TextStyle(fontSize: 9),
-                  rowDecoration: pw.BoxDecoration(
-                    border: pw.Border(
-                      bottom: pw.BorderSide(
-                        color: PdfColors.grey300,
-                        width: 0.5,
-                      ),
-                    ),
-                  ),
-                  headers: ['Industry', 'Posts'],
-                  data: () {
-                    final entries =
-                        (analytics['industryBreakdown'] as Map<String, dynamic>)
+                        (analytics['eventBreakdown'] as Map<String, dynamic>)
                             .entries
                             .toList();
                     entries.sort((a, b) => b.value.compareTo(a.value));
@@ -412,11 +364,11 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                 pw.SizedBox(height: 20),
               ],
 
-              // Location Breakdown
+              // Location Breakdown (State only)
               if (analytics['locationBreakdown'] != null &&
                   (analytics['locationBreakdown'] as Map).isNotEmpty) ...[
                 pw.Text(
-                  'Location Breakdown (Top 10)',
+                  'Location Breakdown by State (Top 10)',
                   style: pw.TextStyle(
                     fontSize: 16,
                     fontWeight: pw.FontWeight.bold,
@@ -444,7 +396,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                       ),
                     ),
                   ),
-                  headers: ['Location', 'Posts'],
+                  headers: ['State', 'Posts'],
                   data: () {
                     final entries =
                         (analytics['locationBreakdown'] as Map<String, dynamic>)
@@ -460,11 +412,11 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                 pw.SizedBox(height: 20),
               ],
 
-              // Daily Breakdown
-              if (analytics['dailyBreakdown'] != null &&
-                  (analytics['dailyBreakdown'] as Map).isNotEmpty) ...[
+              // Tags Breakdown
+              if (analytics['tagsBreakdown'] != null &&
+                  (analytics['tagsBreakdown'] as Map).isNotEmpty) ...[
                 pw.Text(
-                  'Daily Post Activity',
+                  'Tags Breakdown (Top 10)',
                   style: pw.TextStyle(
                     fontSize: 16,
                     fontWeight: pw.FontWeight.bold,
@@ -492,22 +444,20 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                       ),
                     ),
                   ),
-                  headers: ['Date', 'Posts'],
+                  headers: ['Tag', 'Posts'],
                   data: () {
                     final entries =
-                        (analytics['dailyBreakdown'] as Map<String, dynamic>)
+                        (analytics['tagsBreakdown'] as Map<String, dynamic>)
                             .entries
                             .toList();
-                    entries.sort((a, b) => a.key.compareTo(b.key));
-                    return entries.map((entry) {
-                      final date = DateTime.parse(entry.key);
-                      return [
-                        DateFormat('dd MMM yyyy').format(date),
-                        entry.value.toString(),
-                      ];
-                    }).toList();
+                    entries.sort((a, b) => b.value.compareTo(a.value));
+                    return entries
+                        .take(10)
+                        .map((entry) => [entry.key, entry.value.toString()])
+                        .toList();
                   }(),
                 ),
+                pw.SizedBox(height: 20),
               ],
             ];
           },
@@ -534,7 +484,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Content Analytics'),
         backgroundColor: AppColors.primaryDark,
         foregroundColor: Colors.white,
         actions: [
@@ -558,7 +507,14 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
             width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.blue[700],
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.primaryDark,
+                  AppColors.primaryMedium,
+                ],
+              ),
               borderRadius: const BorderRadius.only(
                 bottomLeft: Radius.circular(20),
                 bottomRight: Radius.circular(20),
@@ -677,8 +633,12 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                         _buildStatusChart(),
                         const SizedBox(height: 20),
 
-                        // Category Breakdown
-                        _buildCategoryChart(),
+                        // Event Breakdown
+                        _buildEventChart(),
+                        const SizedBox(height: 20),
+
+                        // Tags Breakdown
+                        _buildTagsChart(),
                         const SizedBox(height: 20),
 
                         // Industry Breakdown
@@ -927,17 +887,17 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
     );
   }
 
-  Widget _buildCategoryChart() {
+  Widget _buildEventChart() {
     final analytics = _analytics!;
-    final categoryBreakdown =
-        analytics['categoryBreakdown'] as Map<String, dynamic>?;
+    final eventBreakdown =
+        analytics['eventBreakdown'] as Map<String, dynamic>?;
 
-    if (categoryBreakdown == null || categoryBreakdown.isEmpty) {
+    if (eventBreakdown == null || eventBreakdown.isEmpty) {
       return const SizedBox.shrink();
     }
 
     // Filter out empty keys and ensure values are valid
-    final validCategories = categoryBreakdown.entries
+    final validEvents = eventBreakdown.entries
         .where(
           (entry) =>
               entry.key.isNotEmpty &&
@@ -946,13 +906,13 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
         )
         .toList();
 
-    if (validCategories.isEmpty) {
+    if (validEvents.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    final sortedCategories = validCategories
+    final sortedEvents = validEvents
       ..sort((a, b) => (b.value as int).compareTo(a.value as int));
-    final topCategories = sortedCategories.take(10).toList();
+    final topEvents = sortedEvents.take(10).toList();
     final totalPosts = analytics['totalPosts'] as int;
 
     return Card(
@@ -964,76 +924,121 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Top Categories',
+              'Top Events',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
-              'Top 10 categories by post count',
+              'Top 10 events by post count',
               style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
-            // Statistics List
-            Container(
-              constraints: const BoxConstraints(maxHeight: 200),
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: topCategories.length,
-                itemBuilder: (context, index) {
-                  final entry = topCategories[index];
-                  final count = entry.value as int;
-                  final percentage = totalPosts > 0
-                      ? (count / totalPosts * 100)
-                      : 0.0;
+            // Statistics List with scroll indicator
+            Stack(
+              children: [
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: topEvents.length,
+                    itemBuilder: (context, index) {
+                      final entry = topEvents[index];
+                      final count = entry.value as int;
+                      final percentage = totalPosts > 0
+                          ? (count / totalPosts * 100)
+                          : 0.0;
 
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            entry.key,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                entry.key,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Text(
-                            '$count posts',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[700],
+                            Expanded(
+                              child: Text(
+                                '$count posts',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[700],
+                                ),
+                                textAlign: TextAlign.right,
+                              ),
                             ),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                        SizedBox(
-                          width: 60,
-                          child: Text(
-                            '${percentage.toStringAsFixed(1)}%',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.blue[700],
-                              fontWeight: FontWeight.w600,
+                            SizedBox(
+                              width: 60,
+                              child: Text(
+                                '${percentage.toStringAsFixed(1)}%',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.blue[700],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                textAlign: TextAlign.right,
+                              ),
                             ),
-                            textAlign: TextAlign.right,
-                          ),
+                          ],
                         ),
-                      ],
+                      );
+                    },
+                  ),
+                ),
+                if (topEvents.length > 3)
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      height: 40,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.white.withOpacity(0),
+                            Colors.white.withOpacity(0.8),
+                            Colors.white,
+                          ],
+                        ),
+                      ),
+                      child: Center(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.keyboard_arrow_down,
+                              size: 16,
+                              color: Colors.grey[600],
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Scroll for more',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  );
-                },
-              ),
+                  ),
+              ],
             ),
             const SizedBox(height: 16),
             SizedBox(
               height: 300,
               child: SfCartesianChart(
                 primaryXAxis: CategoryAxis(
-                  labelRotation: topCategories.length > 5 ? -45 : 0,
+                  isVisible: false,
                 ),
                 primaryYAxis: NumericAxis(),
                 legend: const Legend(isVisible: false),
@@ -1041,11 +1046,190 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                 series: <CartesianSeries>[
                   ColumnSeries<MapEntry<String, dynamic>, String>(
                     name: 'Posts',
-                    dataSource: topCategories,
+                    dataSource: topEvents,
                     xValueMapper: (entry, _) =>
                         entry.key.isNotEmpty ? entry.key : 'Unknown',
                     yValueMapper: (entry, _) => (entry.value as int? ?? 0),
                     color: Colors.blue,
+                    dataLabelSettings: DataLabelSettings(
+                      isVisible: true,
+                      labelPosition: ChartDataLabelPosition.outside,
+                      textStyle: const TextStyle(fontSize: 10),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTagsChart() {
+    final analytics = _analytics!;
+    final tagsBreakdown =
+        analytics['tagsBreakdown'] as Map<String, dynamic>?;
+
+    if (tagsBreakdown == null || tagsBreakdown.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Filter out empty keys and ensure values are valid
+    final validTags = tagsBreakdown.entries
+        .where(
+          (entry) =>
+              entry.key.isNotEmpty &&
+              entry.value != null &&
+              (entry.value as int) > 0,
+        )
+        .toList();
+
+    if (validTags.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final sortedTags = validTags
+      ..sort((a, b) => (b.value as int).compareTo(a.value as int));
+    final topTags = sortedTags.take(10).toList();
+    final totalPosts = analytics['totalPosts'] as int;
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Top Tags',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Top 10 tags by post count',
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 16),
+            // Statistics List with scroll indicator
+            Stack(
+              children: [
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: topTags.length,
+                    itemBuilder: (context, index) {
+                      final entry = topTags[index];
+                      final count = entry.value as int;
+                      final percentage = totalPosts > 0
+                          ? (count / totalPosts * 100)
+                          : 0.0;
+
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                entry.key,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                '$count posts',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[700],
+                                ),
+                                textAlign: TextAlign.right,
+                              ),
+                            ),
+                            SizedBox(
+                              width: 60,
+                              child: Text(
+                                '${percentage.toStringAsFixed(1)}%',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.orange[700],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                textAlign: TextAlign.right,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                if (topTags.length > 3)
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      height: 40,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.white.withOpacity(0),
+                            Colors.white.withOpacity(0.8),
+                            Colors.white,
+                          ],
+                        ),
+                      ),
+                      child: Center(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.keyboard_arrow_down,
+                              size: 16,
+                              color: Colors.grey[600],
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Scroll for more',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 300,
+              child: SfCartesianChart(
+                primaryXAxis: CategoryAxis(
+                  isVisible: false,
+                ),
+                primaryYAxis: NumericAxis(),
+                legend: const Legend(isVisible: false),
+                tooltipBehavior: TooltipBehavior(enable: true),
+                series: <CartesianSeries>[
+                  ColumnSeries<MapEntry<String, dynamic>, String>(
+                    name: 'Posts',
+                    dataSource: topTags,
+                    xValueMapper: (entry, _) =>
+                        entry.key.isNotEmpty ? entry.key : 'Unknown',
+                    yValueMapper: (entry, _) => (entry.value as int? ?? 0),
+                    color: Colors.orange,
                     dataLabelSettings: DataLabelSettings(
                       isVisible: true,
                       labelPosition: ChartDataLabelPosition.outside,

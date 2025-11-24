@@ -28,8 +28,8 @@ class MessageOversightMainPage extends StatelessWidget {
           ),
         ),
         backgroundColor: AppColors.cardRed,
+        foregroundColor: Colors.white,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

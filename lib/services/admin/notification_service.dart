@@ -71,4 +71,48 @@ class NotificationService {
       'userId': userId,
     });
   }
+
+  /// Send notification when a post is approved
+  Future<void> sendPostApprovalNotification({
+    required String userId,
+    required String postId,
+    required String postTitle,
+  }) async {
+    await _notificationsRef.add({
+      'title': 'Post Approved',
+      'body': 'Your job post "$postTitle" has been approved and is now active.',
+      'category': 'post_approval',
+      'createdAt': FieldValue.serverTimestamp(),
+      'isRead': false,
+      'userId': userId,
+      'metadata': {
+        'postId': postId,
+        'postTitle': postTitle,
+        'actionType': 'post_approved',
+      },
+    });
+  }
+
+  /// Send notification when a post is rejected
+  Future<void> sendPostRejectionNotification({
+    required String userId,
+    required String postId,
+    required String postTitle,
+    required String rejectionReason,
+  }) async {
+    await _notificationsRef.add({
+      'title': 'Post Rejected',
+      'body': 'Your job post "$postTitle" has been rejected. Reason: $rejectionReason',
+      'category': 'post_rejection',
+      'createdAt': FieldValue.serverTimestamp(),
+      'isRead': false,
+      'userId': userId,
+      'metadata': {
+        'postId': postId,
+        'postTitle': postTitle,
+        'rejectionReason': rejectionReason,
+        'actionType': 'post_rejected',
+      },
+    });
+  }
 }

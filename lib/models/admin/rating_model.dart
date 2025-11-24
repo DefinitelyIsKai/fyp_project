@@ -10,10 +10,10 @@ enum RatingStatus {
 
 class RatingModel {
   final String id;
-  final String employerId; // User who gave the rating (employer)
-  final String employeeId; // User who received the rating (employee)
-  final String postId; // Post ID associated with the review
-  final double rating; // 1-5 stars
+  final String employerId;
+  final String employeeId;
+  final String postId;
+  final double rating;
   final String? comment;
   final DateTime createdAt;
   final RatingStatus status;
@@ -21,7 +21,7 @@ class RatingModel {
   final String? reviewedBy;
   final DateTime? reviewedAt;
   final String? reviewNotes;
-  final String? reviewAction; // 'approved', 'removed', 'warning'
+  final String? reviewAction;
 
   RatingModel({
     required this.id,

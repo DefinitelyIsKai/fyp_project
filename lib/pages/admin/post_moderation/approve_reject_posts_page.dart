@@ -158,6 +158,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
           ),
         ),
         backgroundColor: AppColors.primaryDark,
+        foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: Column(

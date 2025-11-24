@@ -26,12 +26,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   DateTime _startDate = DateTime.now().subtract(const Duration(days: 30));
   DateTime _endDate = DateTime.now();
 
-  // Helper to set start of day
   DateTime _startOfDay(DateTime date) {
     return DateTime(date.year, date.month, date.day, 0, 0, 0);
   }
   
-  // Helper to set end of day
   DateTime _endOfDay(DateTime date) {
     return DateTime(date.year, date.month, date.day, 23, 59, 59);
   }
@@ -49,14 +47,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      // Load all-time analytics (from beginning to now)
       final allTimeStart = DateTime(2020, 1, 1);
       final allTimeAnalytics = await _analyticsService.getAnalyticsForRange(allTimeStart, DateTime.now());
       
-      // Load period analytics (selected date range)
       final periodAnalytics = await _analyticsService.getAnalyticsForRange(_startDate, _endDate);
       
-      // Load trend data for charts (daily breakdown)
       List<AnalyticsModel> trendData = [];
       final daysDiff = _endDate.difference(_startDate).inDays;
       final daysToLoad = daysDiff > 30 ? 30 : daysDiff;
@@ -66,11 +61,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         final dayStart = DateTime(day.year, day.month, day.day);
         final dayEnd = DateTime(day.year, day.month, day.day, 23, 59, 59);
         final dayAnalytics = await _analyticsService.getAnalyticsForRange(dayStart, dayEnd);
-        // Update the date to the specific day for chart display
         trendData.add(dayAnalytics.copyWith(date: dayStart));
       }
       
-      // Load credit logs
       final creditLogs = await _analyticsService.getCreditLogs(_startDate, _endDate);
       
       if (mounted) {
@@ -151,7 +144,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           margin: const pw.EdgeInsets.all(40),
           build: (pw.Context context) {
             return [
-              // Header
               pw.Header(
                 level: 0,
                 child: pw.Row(
@@ -294,6 +286,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           ),
         ),
         backgroundColor: AppColors.primaryDark,
+        foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           IconButton(
@@ -311,7 +304,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       ),
       body: Column(
         children: [
-          // Header Section
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -437,15 +429,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  // Quick Stats Row
                   _buildQuickStats(),
                   const SizedBox(height: 20),
 
-                  // Visual Dashboards
                   _buildTrendCharts(),
                   const SizedBox(height: 20),
 
-                  // Main Analytics Cards
                   _buildAnalyticsCards(),
                   const SizedBox(height: 20),
 
@@ -1515,7 +1504,6 @@ class _DateRangePickerDialogState extends State<_DateRangePickerDialog> {
   @override
   void initState() {
     super.initState();
-    // Extract just the date part (remove time)
     _tempStartDate = DateTime(widget.startDate.year, widget.startDate.month, widget.startDate.day);
     _tempEndDate = DateTime(widget.endDate.year, widget.endDate.month, widget.endDate.day);
   }

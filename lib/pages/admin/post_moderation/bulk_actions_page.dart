@@ -29,7 +29,6 @@ class _BulkActionsPageState extends State<BulkActionsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Bulk Actions'),
         backgroundColor: AppColors.primaryDark,
         foregroundColor: Colors.white,
       ),
@@ -40,7 +39,14 @@ class _BulkActionsPageState extends State<BulkActionsPage> {
             width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.blue[700],
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.primaryDark,
+                  AppColors.primaryMedium,
+                ],
+              ),
               borderRadius: const BorderRadius.only(
                 bottomLeft: Radius.circular(20),
                 bottomRight: Radius.circular(20),
@@ -121,45 +127,54 @@ class _BulkActionsPageState extends State<BulkActionsPage> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Filter Chips (Horizontal Scroll)
-                SizedBox(
-                  width: MediaQuery.of(context).size.width * 0.5,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _buildFilterChip('all', 'All', Colors.grey),
-                        const SizedBox(width: 6),
-                        _buildFilterChip('pending', 'Pending', Colors.orange),
-                        const SizedBox(width: 6),
-                        _buildFilterChip('active', 'Active', Colors.green),
-                        const SizedBox(width: 6),
-                        _buildFilterChip('completed', 'Completed', Colors.blue),
-                        const SizedBox(width: 6),
-                        _buildFilterChip('rejected', 'Rejected', Colors.red),
-                        if (_filterStatus != 'all' || _searchQuery.isNotEmpty) ...[
-                          const SizedBox(width: 6),
-                          TextButton(
-                            onPressed: () {
-                              setState(() {
-                                _filterStatus = 'all';
-                                _searchQuery = '';
-                                _searchController.clear();
-                              });
-                            },
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.blue[700],
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            child: const Text('Clear', style: TextStyle(fontSize: 12)),
-                          ),
-                        ],
-                      ],
-                    ),
+                // Status Filter Dropdown
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey[300]!),
+                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.white,
+                  ),
+                  child: DropdownButton<String>(
+                    value: _filterStatus,
+                    isDense: true,
+                    underline: const SizedBox.shrink(),
+                    icon: Icon(Icons.arrow_drop_down, color: Colors.grey[700], size: 20),
+                    style: TextStyle(fontSize: 13, color: Colors.grey[800]),
+                    items: const [
+                      DropdownMenuItem(value: 'all', child: Text('All Status')),
+                      DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                      DropdownMenuItem(value: 'active', child: Text('Active')),
+                      DropdownMenuItem(value: 'completed', child: Text('Completed')),
+                      DropdownMenuItem(value: 'rejected', child: Text('Rejected')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          _filterStatus = value;
+                          _selectedPostIds.clear();
+                        });
+                      }
+                    },
                   ),
                 ),
+                if (_filterStatus != 'all' || _searchQuery.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: () {
+                      setState(() {
+                        _filterStatus = 'all';
+                        _searchQuery = '';
+                        _searchController.clear();
+                      });
+                    },
+                    icon: const Icon(Icons.clear, size: 18),
+                    color: Colors.grey[600],
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    tooltip: 'Clear filters',
+                  ),
+                ],
               ],
             ),
           ),
@@ -375,9 +390,13 @@ class _BulkActionsPageState extends State<BulkActionsPage> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _searchQuery.isNotEmpty
-                              ? 'Try adjusting your search or filter'
-                              : 'No posts match the current filter',
+                          _searchQuery.isNotEmpty || _filterStatus != 'all'
+                              ? _searchQuery.isNotEmpty && _filterStatus != 'all'
+                                  ? 'No posts match your search and status filter'
+                                  : _searchQuery.isNotEmpty
+                                      ? 'Try adjusting your search query'
+                                      : 'No posts match the selected status filter'
+                              : 'No posts available',
                           style: TextStyle(color: Colors.grey[500]),
                         ),
                       ],
@@ -502,6 +521,7 @@ class _BulkActionsPageState extends State<BulkActionsPage> {
           ? FloatingActionButton.extended(
               onPressed: _showBulkActionDialog,
               backgroundColor: AppColors.primaryDark,
+              foregroundColor: Colors.white,
               icon: const Icon(Icons.play_arrow),
               label: Text('${_selectedPostIds.length} Selected'),
             )
@@ -530,22 +550,30 @@ class _BulkActionsPageState extends State<BulkActionsPage> {
   }
 
   Stream<List<JobPostModel>> _getPostsStream() {
-    if (_filterStatus == 'all') {
-      return _postService.streamAllPosts();
-    } else {
-      return _postService.streamPostsByStatus(_filterStatus);
-    }
+    // Always get all posts, then filter by status and search in _filterPosts
+    return _postService.streamAllPosts();
   }
 
   List<JobPostModel> _filterPosts(List<JobPostModel> posts) {
-    if (_searchQuery.isEmpty) return posts;
+    var filtered = posts;
 
-    final query = _searchQuery.toLowerCase();
-    return posts.where((post) {
-      return post.title.toLowerCase().contains(query) ||
-          post.category.toLowerCase().contains(query) ||
-          post.location.toLowerCase().contains(query);
-    }).toList();
+    // Apply status filter
+    if (_filterStatus != 'all') {
+      filtered = filtered.where((post) => post.status == _filterStatus).toList();
+    }
+
+    // Apply search filter
+    if (_searchQuery.isNotEmpty) {
+      final query = _searchQuery.toLowerCase();
+      filtered = filtered.where((post) {
+        return post.title.toLowerCase().contains(query) ||
+            post.category.toLowerCase().contains(query) ||
+            post.location.toLowerCase().contains(query) ||
+            (post.description.isNotEmpty && post.description.toLowerCase().contains(query));
+      }).toList();
+    }
+
+    return filtered;
   }
 
   Widget _buildStatusChip(String status) {
@@ -598,32 +626,6 @@ class _BulkActionsPageState extends State<BulkActionsPage> {
     );
   }
 
-  Widget _buildFilterChip(String value, String label, Color color) {
-    final isSelected = _filterStatus == value;
-    return FilterChip(
-      selected: isSelected,
-      label: Text(label),
-      onSelected: (selected) {
-        setState(() {
-          _filterStatus = value;
-          _selectedPostIds.clear();
-        });
-      },
-      selectedColor: color,
-      checkmarkColor: Colors.white,
-      labelStyle: TextStyle(
-        color: isSelected ? Colors.white : Colors.grey[700],
-        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-        fontSize: 12,
-      ),
-      side: BorderSide(
-        color: isSelected ? color : Colors.grey[300]!,
-        width: isSelected ? 1.5 : 1,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-    );
-  }
 
   Widget _buildQuickActionButton({
     required String label,
@@ -768,15 +770,15 @@ class _BulkActionsPageState extends State<BulkActionsPage> {
                   onPressed: () => Navigator.pop(context),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    side: BorderSide(color: Colors.grey[300]!),
+                    side: BorderSide(color: Colors.black.withOpacity(0.5)),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: Text(
+                  child: const Text(
                     'Cancel',
                     style: TextStyle(
-                      color: Colors.grey[700],
+                      color: Colors.black,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -887,9 +889,9 @@ class _BulkActionsPageState extends State<BulkActionsPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(
+            child: const Text(
               'Cancel',
-              style: TextStyle(color: Colors.grey[700]),
+              style: TextStyle(color: Colors.white),
             ),
           ),
           ElevatedButton(
@@ -983,10 +985,17 @@ class _BulkActionsPageState extends State<BulkActionsPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryDark,
+                foregroundColor: Colors.white,
+              ),
               child: const Text('Proceed'),
             ),
           ],

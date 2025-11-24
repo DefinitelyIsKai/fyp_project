@@ -13,19 +13,16 @@ class UserModel {
   final bool isActive;
   final bool isSuspended;
 
-  // Profile metadata
   final bool profileCompleted;
   final bool acceptedTerms;
   final String? photoUrl;
   final String? cvUrl;
 
-  // Professional info
   final String professionalSummary;
   final String professionalProfile;
   final String workExperience;
   final String seeking;
 
-  // File maps
   final Map<String, dynamic>? image;
   final Map<String, dynamic>? resume;
 
@@ -58,9 +55,14 @@ class UserModel {
     this.resume,
   });
 
-  // Firestore → Model
   factory UserModel.fromJson(Map<String, dynamic> json, String docId) {
     String status = json['status'] ?? 'Active';
+    
+    // Check if user is deleted
+    bool isDeleted = status == 'Deleted';
+    
+    // Get isActive from JSON, but if status is 'Deleted', force it to false
+    bool isActive = isDeleted ? false : (json['isActive'] ?? (status != 'Non-active'));
 
     DateTime parseCreatedAt(dynamic v) {
       if (v is Timestamp) return v.toDate();
@@ -79,7 +81,7 @@ class UserModel {
       role: json['role'] ?? 'employee',
 
       status: status,
-      isActive: status != 'Non-active',
+      isActive: isActive,
       isSuspended: status == 'Suspended',
 
       profileCompleted: json['profileCompleted'] ?? false,
@@ -101,7 +103,6 @@ class UserModel {
     );
   }
 
-  // Model → Firestore
   Map<String, dynamic> toJson() {
     return {
       'email': email,
