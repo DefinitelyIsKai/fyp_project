@@ -151,61 +151,138 @@ class _MatchesTabState extends State<_MatchesTab> {
     }
   }
 
+  /// Convert MatchingStrategy enum to Firestore string value
+  String _strategyToFirestoreString(MatchingStrategy strategy) {
+    switch (strategy) {
+      case MatchingStrategy.embeddingsAnn:
+        return 'embedding_ann';
+      case MatchingStrategy.stableOptimal:
+        return 'stable_optimal';
+    }
+  }
+
+  /// Filter matches by selected strategy
+  List<JobMatch> _filterMatchesByStrategy(List<JobMatch> matches, MatchingStrategy strategy) {
+    final strategyString = _strategyToFirestoreString(strategy);
+    return matches.where((match) {
+      // If match has no strategy field, include it (backward compatibility)
+      if (match.matchingStrategy == null) return true;
+      // Filter by matching strategy
+      return match.matchingStrategy == strategyString;
+    }).toList();
+  }
+
   void _showStrategySelector() {
+    MatchingStrategy tempStrategy = _selectedStrategy;
+    
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Select Matching Strategy',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: Colors.black,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Select Matching Strategy',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Choose how you want to find candidates for your jobs',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
+              const SizedBox(height: 8),
+              Text(
+                'Choose how you want to find candidates for your jobs',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            _StrategyOption(
-              title: 'Quick Recommendation',
-              description: 'Fast matching with multiple candidates per job',
-              strategy: MatchingStrategy.embeddingsAnn,
-              selected: _selectedStrategy == MatchingStrategy.embeddingsAnn,
-              icon: Icons.auto_awesome,
-              onTap: () {
-                setState(() => _selectedStrategy = MatchingStrategy.embeddingsAnn);
-                Navigator.pop(context);
-              },
-            ),
-            const SizedBox(height: 12),
-            _StrategyOption(
-              title: 'Precise Matching',
-              description: 'Optimal one-to-one assignment (Gale-Shapley + Hungarian)',
-              strategy: MatchingStrategy.stableOptimal,
-              selected: _selectedStrategy == MatchingStrategy.stableOptimal,
-              icon: Icons.precision_manufacturing,
-              onTap: () {
-                setState(() => _selectedStrategy = MatchingStrategy.stableOptimal);
-                Navigator.pop(context);
-              },
-            ),
-            const SizedBox(height: 24),
-          ],
+              const SizedBox(height: 24),
+              _StrategyOption(
+                title: 'Quick Recommendation',
+                description: 'Fast matching with multiple candidates per job',
+                strategy: MatchingStrategy.embeddingsAnn,
+                selected: tempStrategy == MatchingStrategy.embeddingsAnn,
+                icon: Icons.auto_awesome,
+                onTap: () {
+                  setModalState(() {
+                    tempStrategy = MatchingStrategy.embeddingsAnn;
+                  });
+                },
+              ),
+              const SizedBox(height: 12),
+              _StrategyOption(
+                title: 'Precise Matching',
+                description: 'Optimal one-to-one assignment (Gale-Shapley + Hungarian)',
+                strategy: MatchingStrategy.stableOptimal,
+                selected: tempStrategy == MatchingStrategy.stableOptimal,
+                icon: Icons.precision_manufacturing,
+                onTap: () {
+                  setModalState(() {
+                    tempStrategy = MatchingStrategy.stableOptimal;
+                  });
+                },
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _recomputing
+                      ? null
+                      : () {
+                          Navigator.pop(context);
+                          setState(() {
+                            _selectedStrategy = tempStrategy;
+                          });
+                          _handleRecompute();
+                        },
+                  style: ButtonStyles.primaryFilled(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: Text(
+                    _recomputing
+                        ? 'Running...'
+                        : 'Run Matching with Selected Strategy',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (tempStrategy != _selectedStrategy)
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      setState(() {
+                        _selectedStrategy = tempStrategy;
+                      });
+                    },
+                    style: ButtonStyles.primaryOutlined(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: const Text(
+                      'Switch View (Show Existing Results)',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              if (tempStrategy != _selectedStrategy) const SizedBox(height: 12),
+            ],
+          ),
         ),
       ),
     );
@@ -308,6 +385,45 @@ class _MatchesTabState extends State<_MatchesTab> {
                     ],
                   ),
                 ),
+              if (widget.isRecruiter)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _recomputing ? null : _handleRecompute,
+                      style: ButtonStyles.primaryFilled(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (_recomputing)
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          else
+                            const Icon(Icons.refresh, size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            _recomputing
+                                ? 'Running Matching...'
+                                : 'Run Matching',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -354,7 +470,12 @@ class _MatchesTabState extends State<_MatchesTab> {
                 );
               }
 
-              final matches = snapshot.data ?? [];
+              final allMatches = snapshot.data ?? [];
+              
+              // Filter matches by selected strategy (for recruiters only)
+              final matches = widget.isRecruiter
+                  ? _filterMatchesByStrategy(allMatches, _selectedStrategy)
+                  : allMatches;
 
               if (matches.isEmpty) {
                 return EmptyState.noMatches(

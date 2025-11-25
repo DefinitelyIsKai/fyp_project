@@ -108,7 +108,9 @@ class _PostCreatePageState extends State<PostCreatePage> {
       _maxAgeController.text = p.maxAgeRequirement?.toString() ?? '';
       _quotaController.text = p.applicantQuota?.toString() ?? '';
       _jobType = p.jobType;
-      _attachments.addAll(p.attachments);
+      
+      // Load existing attachments from Firestore (similar to post_details_page.dart)
+      _loadExistingAttachments(p.id);
     }
     
     // Add listeners to update button state when fields change
@@ -146,6 +148,43 @@ class _PostCreatePageState extends State<PostCreatePage> {
     }
   }
 
+  // Load attachments from Firestore (similar to post_details_page.dart)
+  Future<void> _loadExistingAttachments(String postId) async {
+    try {
+      final doc = await FirebaseFirestore.instance.collection('posts').doc(postId).get();
+      final data = doc.data();
+      if (data != null && data['attachments'] != null) {
+        final attachments = data['attachments'] as List?;
+        if (attachments != null && attachments.isNotEmpty) {
+          // Extract base64 strings from attachments (supports both old and new format)
+          final List<String> base64Strings = [];
+          for (final a in attachments) {
+            if (a is Map) {
+              // Old format: object with base64 field
+              final base64 = a['base64'] as String?;
+              if (base64 != null && base64.isNotEmpty) {
+                base64Strings.add(base64);
+              }
+            } else if (a is String) {
+              // New format: direct base64 string
+              if (a.isNotEmpty) {
+                base64Strings.add(a);
+              }
+            }
+          }
+          if (mounted && base64Strings.isNotEmpty) {
+            setState(() {
+              _attachments.clear();
+              _attachments.addAll(base64Strings);
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading attachments: $e');
+    }
+  }
+
   Future<void> _loadCategories() async {
     setState(() {
       _categoriesLoading = true;
@@ -180,6 +219,10 @@ class _PostCreatePageState extends State<PostCreatePage> {
           _tagCategoriesWithTags = tagsData;
           _tagsLoading = false;
         });
+        // If editing an existing post, map existing tags to categories
+        if (widget.existing != null && widget.existing!.tags.isNotEmpty) {
+          _mapExistingTagsToCategories(widget.existing!.tags);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -188,6 +231,38 @@ class _PostCreatePageState extends State<PostCreatePage> {
         });
       }
     }
+  }
+
+  /// Maps existing tag names to their category IDs
+  void _mapExistingTagsToCategories(List<String> existingTagNames) {
+    final Map<String, List<String>> mappedTags = {};
+    
+    // Create a map of tag name -> category ID for quick lookup
+    final Map<String, String> tagNameToCategoryId = {};
+    for (final entry in _tagCategoriesWithTags.entries) {
+      final category = entry.key;
+      final tags = entry.value;
+      for (final tag in tags) {
+        tagNameToCategoryId[tag.name] = category.id;
+      }
+    }
+    
+    // Group existing tags by their category
+    for (final tagName in existingTagNames) {
+      final categoryId = tagNameToCategoryId[tagName];
+      if (categoryId != null) {
+        if (!mappedTags.containsKey(categoryId)) {
+          mappedTags[categoryId] = [];
+        }
+        if (!mappedTags[categoryId]!.contains(tagName)) {
+          mappedTags[categoryId]!.add(tagName);
+        }
+      }
+    }
+    
+    setState(() {
+      _selectedTags = mappedTags;
+    });
   }
 
   @override
@@ -760,6 +835,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                       ],
                     ),
                     const SizedBox(height: 16),
+                    
                     TagSelectionSection(
                       selections: _selectedTags,
                       onCategoryChanged: _onTagCategoryChanged,
@@ -917,7 +993,11 @@ class _PostCreatePageState extends State<PostCreatePage> {
                   images: _attachments,
                   onImagesAdded: (newUrls) {
                     setState(() {
-                      _attachments.addAll(newUrls);
+                      // Limit to maximum 3 images
+                      final remainingSlots = 3 - _attachments.length;
+                      if (remainingSlots > 0) {
+                        _attachments.addAll(newUrls.take(remainingSlots));
+                      }
                     });
                   },
                   onImageRemoved: (index) {
@@ -930,6 +1010,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                   storageService: _storage,
                   uploadId: widget.existing?.id ?? _postId,
                   disabled: _saving,
+                  maxImages: 3, // Maximum 3 images allowed
                 ),
               ),
               
