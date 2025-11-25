@@ -4,6 +4,7 @@ import 'package:fyp_project/services/admin/rating_service.dart';
 import 'package:fyp_project/services/admin/user_service.dart';
 import 'package:intl/intl.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class RatingDetailPage extends StatefulWidget {
   final RatingModel rating;
@@ -21,6 +22,7 @@ class _RatingDetailPageState extends State<RatingDetailPage> {
   bool _isProcessing = false;
   String? _raterName;
   String? _ratedUserName;
+  String? _postTitle;
   bool _loadingUserInfo = true;
 
   @override
@@ -46,10 +48,26 @@ class _RatingDetailPageState extends State<RatingDetailPage> {
         (u) => u.id == widget.rating.employeeId,
         orElse: () => users.first,
       );
+      
+      // Fetch post title
+      String? postTitle;
+      try {
+        final postDoc = await FirebaseFirestore.instance
+            .collection('posts')
+            .doc(widget.rating.postId)
+            .get();
+        if (postDoc.exists) {
+          postTitle = postDoc.data()?['title'] as String?;
+        }
+      } catch (e) {
+        debugPrint('Error fetching post title: $e');
+      }
+      
       if (mounted) {
         setState(() {
           _raterName = employer.fullName;
           _ratedUserName = employee.fullName;
+          _postTitle = postTitle ?? widget.rating.postId;
           _loadingUserInfo = false;
         });
       }
@@ -278,8 +296,10 @@ class _RatingDetailPageState extends State<RatingDetailPage> {
                           : (_ratedUserName ?? widget.rating.employeeId),
                     ),
                     _DetailRow(
-                      label: 'Post ID',
-                      value: widget.rating.postId,
+                      label: 'Post Title',
+                      value: _loadingUserInfo
+                          ? 'Loading...'
+                          : (_postTitle ?? widget.rating.postId),
                     ),
                     _DetailRow(
                       label: 'Created At',

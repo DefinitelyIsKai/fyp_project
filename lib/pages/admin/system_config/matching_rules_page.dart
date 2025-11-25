@@ -45,6 +45,50 @@ class _MatchingRulesPageState extends State<MatchingRulesPage> {
     }
   }
 
+  Future<void> _resetToDefaults() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset to Defaults'),
+        content: const Text(
+          'This will reset all matching rules to their default values. Existing customizations will be lost. Continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await _configService.initializeDefaultMatchingRules();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Rules reset to defaults successfully')),
+          );
+          _loadRules();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error resetting rules: $e')),
+          );
+        }
+      }
+    }
+  }
+
   Future<void> _updateRule(MatchingRuleModel rule) async {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
@@ -85,6 +129,26 @@ class _MatchingRulesPageState extends State<MatchingRulesPage> {
             icon: const Icon(Icons.refresh),
             onPressed: _loadRules,
             tooltip: 'Refresh',
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'reset') {
+                _resetToDefaults();
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'reset',
+                child: Row(
+                  children: [
+                    Icon(Icons.restore, size: 20),
+                    SizedBox(width: 8),
+                    Text('Reset to Defaults'),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -127,7 +191,7 @@ class _MatchingRulesPageState extends State<MatchingRulesPage> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  'Configure how jobs are matched to users. Adjust weights to prioritize different matching criteria.',
+                                  'Configure how jobs are matched to users. Adjust weights to prioritize different matching criteria. These weights correspond to the algorithm in hybrid_matching_engine.dart.',
                                   style: TextStyle(color: Colors.blue[900]),
                                 ),
                               ),
@@ -136,10 +200,102 @@ class _MatchingRulesPageState extends State<MatchingRulesPage> {
                         ),
                       ),
                       const SizedBox(height: 16),
+                      // Weight Summary Card
+                      _buildWeightSummaryCard(),
+                      const SizedBox(height: 16),
                       ..._rules.map((rule) => _buildRuleCard(rule)),
                     ],
                   ),
                 ),
+    );
+  }
+
+  Widget _buildWeightSummaryCard() {
+    final enabledRules = _rules.where((r) => r.isEnabled).toList();
+    final totalWeight = enabledRules.fold<double>(0.0, (sum, rule) => sum + rule.weight);
+    final totalWeightPercent = totalWeight * 100;
+    
+    return Card(
+      elevation: 2,
+      color: totalWeight == 1.0 ? Colors.green[50] : Colors.orange[50],
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: totalWeight == 1.0 ? Colors.green[300]! : Colors.orange[300]!,
+          width: 2,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  totalWeight == 1.0 ? Icons.check_circle : Icons.warning,
+                  color: totalWeight == 1.0 ? Colors.green[700] : Colors.orange[700],
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Weight Summary',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: totalWeight == 1.0 ? Colors.green[900] : Colors.orange[900],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Total Weight: ${totalWeightPercent.toStringAsFixed(1)}%',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: totalWeight == 1.0 ? Colors.green[700] : Colors.orange[700],
+              ),
+            ),
+            if (totalWeight != 1.0) ...[
+              const SizedBox(height: 8),
+              Text(
+                totalWeight < 1.0
+                    ? 'Total is less than 100%. Consider increasing weights for better matching coverage.'
+                    : 'Total exceeds 100%. Consider reducing weights to balance the algorithm.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.orange[900],
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            const Divider(),
+            const SizedBox(height: 8),
+            ...enabledRules.map((rule) => Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      rule.name,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  Text(
+                    '${(rule.weight * 100).toStringAsFixed(1)}%',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blue[700],
+                    ),
+                  ),
+                ],
+              ),
+            )),
+          ],
+        ),
+      ),
     );
   }
 
@@ -197,7 +353,7 @@ class _MatchingRulesPageState extends State<MatchingRulesPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Weight: ${(rule.weight * 100).toStringAsFixed(0)}%',
+                          'Weight: ${(rule.weight * 100).toStringAsFixed(1)}%',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -275,8 +431,12 @@ class _RuleDetailsDialogState extends State<_RuleDetailsDialog> {
       final numValue = num.tryParse(value);
       updatedParameters[key] = numValue ?? value;
     });
+    
+    // Ensure weight parameter is synced with the weight field
+    updatedParameters['weight'] = _editedRule.weight;
 
     final updatedRule = _editedRule.copyWith(
+      weight: _editedRule.weight, // Ensure weight is saved
       parameters: updatedParameters,
       updatedAt: DateTime.now(),
     );
@@ -360,7 +520,7 @@ class _RuleDetailsDialogState extends State<_RuleDetailsDialog> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Weight: ${(_editedRule.weight * 100).toStringAsFixed(0)}%',
+                          'Weight: ${(_editedRule.weight * 100).toStringAsFixed(1)}%',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -371,44 +531,76 @@ class _RuleDetailsDialogState extends State<_RuleDetailsDialog> {
                           value: _editedRule.weight,
                           min: 0.0,
                           max: 1.0,
-                          divisions: 100,
-                          label: '${(_editedRule.weight * 100).toStringAsFixed(0)}%',
+                          divisions: 200,
+                          label: '${(_editedRule.weight * 100).toStringAsFixed(1)}%',
                           onChanged: (value) {
                             setState(() {
                               _editedRule = _editedRule.copyWith(weight: value);
+                              // Update the weight parameter as well
+                              final updatedParams = Map<String, dynamic>.from(_editedRule.parameters);
+                              updatedParams['weight'] = value;
+                              _editedRule = _editedRule.copyWith(parameters: updatedParams);
                             });
                           },
                         ),
                         Text(
-                          'This determines how much this rule contributes to the overall match score.',
+                          'This determines how much this rule contributes to the overall match score. Total of all enabled rules should ideally sum to 1.0 (100%).',
                           style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                        const SizedBox(height: 8),
+                        // Show current total weight
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.blue[50],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.blue[200]!),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline, size: 16, color: Colors.blue[700]),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Note: These weights are used in the hybrid matching engine scoring algorithm. Ensure weights are properly balanced for optimal matching results.',
+                                  style: TextStyle(fontSize: 11, color: Colors.blue[900]),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
                     const Divider(),
                     // Parameters
-                    const Text(
-                      'Parameters',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    ..._editedRule.parameters.entries.map((entry) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: TextField(
-                          controller: _parameterControllers[entry.key],
-                          decoration: InputDecoration(
-                            labelText: entry.key.replaceAll(RegExp(r'([A-Z])'), r' $1').trim(),
-                            hintText: entry.value.toString(),
-                            border: const OutlineInputBorder(),
-                            helperText: 'Current: ${entry.value}',
-                          ),
+                    if (_editedRule.parameters.isNotEmpty && 
+                        !_editedRule.parameters.keys.every((k) => k == 'weight' || k == 'description'))
+                    ...[
+                      const Text(
+                        'Additional Parameters',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
                         ),
-                      );
-                    }),
+                      ),
+                      const SizedBox(height: 12),
+                      ..._editedRule.parameters.entries.where((entry) => 
+                        entry.key != 'weight' && entry.key != 'description'
+                      ).map((entry) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: TextField(
+                            controller: _parameterControllers[entry.key],
+                            decoration: InputDecoration(
+                              labelText: entry.key.replaceAll(RegExp(r'([A-Z])'), r' $1').trim(),
+                              hintText: entry.value.toString(),
+                              border: const OutlineInputBorder(),
+                              helperText: 'Current: ${entry.value}',
+                            ),
+                          ),
+                        );
+                      }),
+                    ],
                   ],
                 ),
               ),

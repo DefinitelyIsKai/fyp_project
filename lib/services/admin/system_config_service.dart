@@ -112,7 +112,6 @@ class SystemConfigService {
     try {
       final snapshot = await _firestore
           .collection('matching_rules')
-          .orderBy('name')
           .get();
 
       if (snapshot.docs.isEmpty) {
@@ -120,10 +119,17 @@ class SystemConfigService {
         return _getDefaultMatchingRules();
       }
 
-      return snapshot.docs.map((doc) {
+      final rules = snapshot.docs.map((doc) {
         return MatchingRuleModel.fromJson(doc.data(), doc.id);
       }).toList();
+      
+      // Sort by name in memory (no index required)
+      rules.sort((a, b) => a.name.compareTo(b.name));
+      
+      return rules;
     } catch (e) {
+      // If error occurs, try to initialize and return defaults
+      print('Error loading matching rules: $e');
       return _getDefaultMatchingRules();
     }
   }
@@ -144,7 +150,9 @@ class SystemConfigService {
 
     for (final rule in defaultRules) {
       final docRef = _firestore.collection('matching_rules').doc(rule.id);
-      batch.set(docRef, rule.toJson());
+      // Use merge: true to update existing rules, or create if missing
+      // This ensures all 5 rules exist even if some were already created
+      batch.set(docRef, rule.toJson(), SetOptions(merge: true));
     }
 
     await batch.commit();
@@ -153,63 +161,64 @@ class SystemConfigService {
   List<MatchingRuleModel> _getDefaultMatchingRules() {
     return [
       MatchingRuleModel(
-        id: 'skills_match',
-        name: 'Skills Matching',
-        description: 'Match jobs based on required skills and user skills',
+        id: 'text_similarity',
+        name: 'Text Similarity (Embedding)',
+        description: 'Match based on text similarity using embeddings (title, description, event, job type, location, tags, skills)',
         isEnabled: true,
-        weight: 0.4,
+        weight: 0.35,
         parameters: {
-          'minMatchPercentage': 60,
-          'requiredSkillsWeight': 0.7,
-          'preferredSkillsWeight': 0.3,
+          'weight': 0.35,
+          'description': 'Weight for embedding-based text similarity matching',
         },
         updatedAt: DateTime.now(),
       ),
       MatchingRuleModel(
-        id: 'location_match',
-        name: 'Location Matching',
-        description: 'Match jobs based on location proximity',
+        id: 'tag_matching',
+        name: 'Tag Matching',
+        description: 'Match based on direct tag overlap between job posts and candidate profiles',
         isEnabled: true,
-        weight: 0.2,
+        weight: 0.35,
         parameters: {
-          'maxDistanceKm': 50,
-          'exactLocationBonus': 10,
-          'remoteWorkAllowed': true,
+          'weight': 0.35,
+          'description': 'Weight for tag overlap percentage matching',
         },
         updatedAt: DateTime.now(),
       ),
       MatchingRuleModel(
-        id: 'budget_match',
-        name: 'Budget Matching',
-        description: 'Match jobs based on budget range compatibility',
+        id: 'required_skills',
+        name: 'Required Skills Matching',
+        description: 'Match based on overlap between job required skills and candidate skill set',
         isEnabled: true,
         weight: 0.15,
         parameters: {
-          'minBudgetMatch': 80,
-          'flexibleBudgetRange': 20,
+          'weight': 0.15,
+          'description': 'Weight for required skills overlap percentage',
         },
         updatedAt: DateTime.now(),
       ),
       MatchingRuleModel(
-        id: 'experience_match',
-        name: 'Experience Matching',
-        description: 'Match jobs based on work experience level',
+        id: 'distance',
+        name: 'Distance Matching',
+        description: 'Match based on geographic proximity between candidate and job location',
         isEnabled: true,
-        weight: 0.15,
+        weight: 0.10,
         parameters: {
-          'minExperienceMatch': 70,
-          'yearsOfExperienceWeight': 0.6,
+          'weight': 0.10,
+          'maxDistanceKm': 50.0,
+          'decayFactor': 3.0,
+          'description': 'Weight for distance-based matching with exponential decay',
         },
         updatedAt: DateTime.now(),
       ),
       MatchingRuleModel(
-        id: 'category_match',
-        name: 'Category Matching',
-        description: 'Match jobs based on job category preferences',
+        id: 'job_type_preference',
+        name: 'Job Type Preference',
+        description: 'Bonus score for matching candidate job type preferences',
         isEnabled: true,
-        weight: 0.1,
+        weight: 0.02,
         parameters: {
-          'categoryPreferenceWeight': 0.8,
+          'weight': 0.02,
+          'description': 'Bonus weight for job type preference matching',
         },
         updatedAt: DateTime.now(),
       ),
@@ -221,7 +230,6 @@ class SystemConfigService {
     try {
       final snapshot = await _firestore
           .collection('booking_rules')
-          .orderBy('name')
           .get();
 
       if (snapshot.docs.isEmpty) {
@@ -229,10 +237,17 @@ class SystemConfigService {
         return _getDefaultBookingRules();
       }
 
-      return snapshot.docs.map((doc) {
+      final rules = snapshot.docs.map((doc) {
         return BookingRuleModel.fromJson(doc.data(), doc.id);
       }).toList();
+      
+      // Sort by name in memory (no index required)
+      rules.sort((a, b) => a.name.compareTo(b.name));
+      
+      return rules;
     } catch (e) {
+      // If error occurs, try to initialize and return defaults
+      print('Error loading booking rules: $e');
       return _getDefaultBookingRules();
     }
   }
@@ -253,7 +268,9 @@ class SystemConfigService {
 
     for (final rule in defaultRules) {
       final docRef = _firestore.collection('booking_rules').doc(rule.id);
-      batch.set(docRef, rule.toJson());
+      // Use merge: true to update existing rules, or create if missing
+      // This ensures all rules exist even if some were already created
+      batch.set(docRef, rule.toJson(), SetOptions(merge: true));
     }
 
     await batch.commit();

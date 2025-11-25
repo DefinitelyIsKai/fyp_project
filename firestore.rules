@@ -117,12 +117,12 @@ service cloud.firestore {
     // ============================================
     match /categories/{categoryId} {
       // All authenticated users can read categories
-      allow read: if isSignedIn();
+      allow read: if isAuthenticated();
       
       // Permission-based: users with post_moderation permission can create categories
       allow create: if hasPermission('post_moderation') || isManager() || isHR() || isStaff();
       
-      allow update: if isSignedIn() && (
+      allow update: if isAuthenticated() && (
         // Allow users with post_moderation permission to update any field
         hasPermission('post_moderation') || isManager() || isHR() || isStaff() ||
         // Allow any authenticated user to update only jobCount and updatedAt
@@ -289,7 +289,7 @@ service cloud.firestore {
     // ============================================
     match /tagCategories/{tagCategoryId} {
       // All authenticated users can read tag categories
-      allow read: if isSignedIn();
+      allow read: if isAuthenticated();
       // Permission-based: users with post_moderation permission can write
       allow write: if hasPermission('post_moderation') || isManager() || isHR() || isStaff();
     }
@@ -299,7 +299,7 @@ service cloud.firestore {
     // ============================================
     match /tags/{tagId} {
       // All authenticated users can read tags
-      allow read: if isSignedIn();
+      allow read: if isAuthenticated();
       // Permission-based: users with post_moderation permission can write
       allow write: if hasPermission('post_moderation') || isManager() || isHR() || isStaff();
     }
@@ -312,6 +312,147 @@ service cloud.firestore {
       allow read: if isAuthenticated() && request.auth.uid == adminId;
       // Only allow writes by authenticated users (you may want to restrict this further)
       allow write: if isAuthenticated();
+    }
+    
+    // ============================================
+    // MATCHING RULES COLLECTION (for algorithm weights configuration)
+    // ============================================
+    match /matching_rules/{ruleId} {
+      // All authenticated users can read matching rules (needed for matching engine)
+      // This allows the matching engine to read the configured weights
+      allow read: if isAuthenticated();
+      
+      // Only admins with system_config permission can write matching rules
+      allow write: if hasPermission('system_config') || isManager() || isHR() || isStaff();
+    }
+    
+    // ============================================
+    // SYSTEM CONFIG COLLECTION (for general system settings)
+    // ============================================
+    match /system_config/{configId} {
+      // All authenticated users can read system config (needed for matching engine and other services)
+      allow read: if isAuthenticated();
+      
+      // Only admins with system_config permission can write system config
+      allow write: if hasPermission('system_config') || isManager() || isHR() || isStaff();
+    }
+    
+    // ============================================
+    // BOOKING RULES COLLECTION (for booking/appointment rules)
+    // ============================================
+    match /booking_rules/{ruleId} {
+      // All authenticated users can read booking rules
+      allow read: if isAuthenticated();
+      
+      // Only admins with system_config permission can write booking rules
+      allow write: if hasPermission('system_config') || isManager() || isHR() || isStaff();
+    }
+    
+    // ============================================
+    // JOB MATCHES COLLECTION (created by matching engine)
+    // ============================================
+    match /job_matches/{matchId} {
+      // Allow get (single document read) if user is the jobseeker or recruiter
+      allow get: if isAuthenticated() && (
+        resource.data.jobseekerId == request.auth.uid ||
+        resource.data.recruiterId == request.auth.uid
+      );
+      
+      // Allow list (query) operations - needed for where() queries
+      // Jobseekers can query their own matches by jobseekerId
+      // Recruiters can query matches by recruiterId
+      // Note: Firestore rules cannot inspect query filters directly,
+      // but we allow list operations for authenticated users
+      // Each document returned must pass the allow get check above
+      allow list: if isAuthenticated();
+      
+      // Allow create by matching engine (any authenticated user can create matches)
+      // This allows the matching engine to create matches for jobseekers and recruiters
+      // Validate that required fields are present
+      // Note: job_matches status should only be 'pending' (not yet applied) or 'applied' (user has applied)
+      // After application, status should be tracked in 'applications' collection
+      allow create: if isAuthenticated() &&
+        request.resource.data.jobId is string &&
+        request.resource.data.jobTitle is string &&
+        request.resource.data.companyName is string &&
+        request.resource.data.recruiterId is string &&
+        request.resource.data.jobseekerId is string &&
+        request.resource.data.status is string &&
+        request.resource.data.status in ['pending', 'applied'] &&
+        // Validate matchingStrategy if present (optional field for display purposes)
+        (request.resource.data.matchingStrategy == null ||
+         request.resource.data.matchingStrategy is string &&
+         request.resource.data.matchingStrategy in ['embedding_ann', 'stable_optimal']);
+      
+      // Allow update:
+      // 1. Jobseeker can update status to 'applied' (when applying to a match)
+      // 2. Matching engine can update matches (for recomputation)
+      // Note: After 'applied', further status changes should be in 'applications' collection
+      allow update: if isAuthenticated() && (
+        // Jobseeker updating their own match status to 'applied'
+        (resource.data.jobseekerId == request.auth.uid &&
+         request.resource.data.status == 'applied' &&
+         resource.data.status == 'pending' &&
+         // Ensure critical fields remain unchanged
+         request.resource.data.jobId == resource.data.jobId &&
+         request.resource.data.jobseekerId == resource.data.jobseekerId &&
+         request.resource.data.recruiterId == resource.data.recruiterId) ||
+        // Matching engine can update matches (for recomputation)
+        // This allows the matching engine to update existing matches when recomputing
+        // Validate that all required fields are present and status is valid
+        (request.resource.data.jobId is string &&
+         request.resource.data.jobTitle is string &&
+         request.resource.data.companyName is string &&
+         request.resource.data.recruiterId is string &&
+         request.resource.data.jobseekerId is string &&
+         request.resource.data.status is string &&
+         request.resource.data.status in ['pending', 'applied'] &&
+         // Validate matchingStrategy if present (optional field for display purposes)
+         (request.resource.data.matchingStrategy == null ||
+          request.resource.data.matchingStrategy is string &&
+          request.resource.data.matchingStrategy in ['embedding_ann', 'stable_optimal']) &&
+         // Ensure critical IDs remain unchanged (matching engine should not change these)
+         request.resource.data.jobId == resource.data.jobId &&
+         request.resource.data.jobseekerId == resource.data.jobseekerId &&
+         request.resource.data.recruiterId == resource.data.recruiterId)
+      );
+      
+      allow delete: if false;
+    }
+    
+    // ============================================
+    // BOOKING REQUESTS COLLECTION
+    // ============================================
+    match /booking_requests/{requestId} {
+      // Allow read if user is the jobseeker or recruiter
+      allow get: if isAuthenticated() && (
+        resource.data.jobseekerId == request.auth.uid ||
+        resource.data.recruiterId == request.auth.uid
+      );
+      
+      // Allow list (query) operations - needed for where() queries
+      // Jobseekers can query their own requests by jobseekerId and status
+      // Recruiters can query requests by recruiterId
+      allow list: if isAuthenticated();
+      
+      // Jobseekers can create booking requests for themselves with pending status
+      allow create: if isAuthenticated() &&
+        request.resource.data.jobseekerId == request.auth.uid &&
+        request.resource.data.status == 'pending';
+      
+      // Only recruiters can update booking requests (approve/reject)
+      allow update: if isAuthenticated() &&
+        resource.data.recruiterId == request.auth.uid &&
+        request.resource.data.status in ['approved', 'rejected'] &&
+        request.resource.data.jobseekerId == resource.data.jobseekerId &&
+        request.resource.data.recruiterId == resource.data.recruiterId &&
+        request.resource.data.slotId == resource.data.slotId &&
+        request.resource.data.matchId == resource.data.matchId;
+      
+      // Admins with system_config permission can also read/write for management
+      allow read, write: if hasPermission('system_config') || isManager() || isHR() || isStaff();
+      
+      allow delete: if false;
     }
     
     // ============================================

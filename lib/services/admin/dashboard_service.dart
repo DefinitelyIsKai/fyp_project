@@ -6,7 +6,7 @@ class DashboardService {
   Future<int> getPendingPostsCount() async {
     final snapshot = await _firestore
         .collection('posts')
-        .where('status', isEqualTo: 'Pending')
+        .where('status', isEqualTo: 'pending')
         .get();
     return snapshot.docs.length;
   }

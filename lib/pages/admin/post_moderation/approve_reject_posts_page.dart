@@ -4,6 +4,8 @@ import 'package:fyp_project/services/admin/post_service.dart';
 import 'package:fyp_project/pages/admin/post_moderation/post_detail_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
+import 'package:fyp_project/services/user/wallet_service.dart';
+import 'package:fyp_project/services/user/notification_service.dart';
 
 class ApproveRejectPostsPage extends StatefulWidget {
   const ApproveRejectPostsPage({super.key});
@@ -14,6 +16,7 @@ class ApproveRejectPostsPage extends StatefulWidget {
 
 class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   final PostService _postService = PostService();
+  final NotificationService _notificationService = NotificationService();
   final TextEditingController _searchController = TextEditingController();
   final PageController _tabPageController = PageController();
   int _currentTabIndex = 0;
@@ -72,7 +75,46 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
     });
     
     try {
+      // Approve the post first
       await _postService.approvePost(post.id);
+      
+      // Deduct credits from post owner (deduct both balance and heldCredits)
+      final ownerId = post.ownerId;
+      if (ownerId != null && ownerId.isNotEmpty) {
+        try {
+          final success = await WalletService.deductPostCreationCreditsForUser(
+            firestore: FirebaseFirestore.instance,
+            userId: ownerId,
+            postId: post.id,
+            feeCredits: 200,
+          );
+          
+          if (success) {
+            // Send notification to post owner about credit deduction
+            try {
+              await _notificationService.notifyWalletDebit(
+                userId: ownerId,
+                amount: 200,
+                reason: 'Post creation fee',
+                metadata: {
+                  'postId': post.id,
+                  'postTitle': post.title,
+                  'type': 'post_creation_fee_approved',
+                },
+              );
+            } catch (e) {
+              // Log but don't fail - notification is not critical
+              debugPrint('Error sending credit deduction notification: $e');
+            }
+          } else {
+            debugPrint('Warning: Failed to deduct credits for post ${post.id}');
+          }
+        } catch (e) {
+          // Log error but don't fail approval - credits can be processed later
+          debugPrint('Error deducting credits for post ${post.id}: $e');
+        }
+      }
+      
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Post approved and now active'), backgroundColor: Colors.green),
@@ -106,7 +148,47 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
       });
       
       try {
+        // Reject the post first
         await _postService.rejectPost(post.id, reason);
+        
+        // Release held credits for post owner (deduct from heldCredits only, not balance)
+        final ownerId = post.ownerId;
+        if (ownerId != null && ownerId.isNotEmpty) {
+          try {
+            final success = await WalletService.releasePostCreationCreditsForUser(
+              firestore: FirebaseFirestore.instance,
+              userId: ownerId,
+              postId: post.id,
+              feeCredits: 200,
+            );
+            
+            if (success) {
+              // Send notification to post owner about credit release
+              try {
+                await _notificationService.notifyWalletCredit(
+                  userId: ownerId,
+                  amount: 200,
+                  reason: 'Post creation fee (Released)',
+                  metadata: {
+                    'postId': post.id,
+                    'postTitle': post.title,
+                    'rejectionReason': reason,
+                    'type': 'post_creation_fee_released',
+                  },
+                );
+              } catch (e) {
+                // Log but don't fail - notification is not critical
+                debugPrint('Error sending credit release notification: $e');
+              }
+            } else {
+              debugPrint('Warning: Failed to release credits for post ${post.id}');
+            }
+          } catch (e) {
+            // Log error but don't fail rejection - credits can be processed later
+            debugPrint('Error releasing credits for post ${post.id}: $e');
+          }
+        }
+        
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Post rejected'), backgroundColor: Colors.orange),
@@ -181,6 +263,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
       });
     });
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -295,18 +378,25 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                   );
                 }
                 if (snapshot.hasError) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Error loading posts',
-                          style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                  return ListView(
+                    children: [
+                      SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.6,
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Error loading posts',
+                                style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   );
                 }
 
@@ -359,7 +449,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                     _PostsList(
                       posts: _filterPosts(_rejectedPosts),
                       status: 'rejected',
-                      onApprove: _approvePost,
+                      onApprove: null,
                       onReject: null,
                       onComplete: null,
                       onReopen: null,
@@ -899,10 +989,16 @@ class _PostsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        if (posts.isNotEmpty)
-          Padding(
+    // Return a scrollable widget that can be wrapped by RefreshIndicator
+    if (posts.isEmpty) {
+      return _buildEmptyState(status);
+    }
+    
+    return CustomScrollView(
+      slivers: [
+        // Header with post count
+        SliverToBoxAdapter(
+          child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             child: Row(
               children: [
@@ -917,27 +1013,28 @@ class _PostsList extends StatelessWidget {
               ],
             ),
           ),
-
-        Expanded(
-          child: posts.isNotEmpty
-              ? ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            itemCount: posts.length,
-            itemBuilder: (context, index) {
-              final post = posts[index];
-              return _PostCard(
-                post: post,
-                onApprove: onApprove,
-                onReject: onReject,
-                onComplete: onComplete,
-                onReopen: onReopen,
-                onView: onView,
-                getUserName: getUserName,
-                isProcessing: processingPostIds.contains(post.id),
-              );
-            },
-          )
-              : _buildEmptyState(status),
+        ),
+        // Posts list
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final post = posts[index];
+                return _PostCard(
+                  post: post,
+                  onApprove: onApprove,
+                  onReject: onReject,
+                  onComplete: onComplete,
+                  onReopen: onReopen,
+                  onView: onView,
+                  getUserName: getUserName,
+                  isProcessing: processingPostIds.contains(post.id),
+                );
+              },
+              childCount: posts.length,
+            ),
+          ),
         ),
       ],
     );
