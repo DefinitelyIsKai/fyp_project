@@ -517,10 +517,11 @@ class PostService {
     );
 
     // Apply budget filters if provided
+    // Note: Even with composite index, Firestore doesn't allow two range queries 
+    // on different fields, so we use one in Firestore query and filter the other in memory
     if (minBudget != null) {
       queryRef = queryRef.where('budgetMax', isGreaterThanOrEqualTo: minBudget);
-    }
-    if (maxBudget != null) {
+    } else if (maxBudget != null) {
       queryRef = queryRef.where('budgetMin', isLessThanOrEqualTo: maxBudget);
     }
 
@@ -528,6 +529,35 @@ class PostService {
         .snapshots()
         .map((snap) {
           var posts = snap.docs.map((d) => _fromDoc(d)).toList();
+
+          // Apply the other budget filter in memory if both are provided
+          if (minBudget != null && maxBudget != null) {
+            // minBudget was used in Firestore query (budgetMax >= minBudget),
+            // now filter by maxBudget in memory to ensure post's budget range 
+            // is completely within user's search range
+            // Post matches if: post.budgetMin >= minBudget AND post.budgetMax <= maxBudget
+            posts = posts.where((post) {
+              if (post.budgetMin == null && post.budgetMax == null) return false;
+              
+              final postMin = post.budgetMin;
+              final postMax = post.budgetMax;
+              
+              // If post has both min and max, both must be within user's range
+              if (postMin != null && postMax != null) {
+                return postMin >= minBudget && postMax <= maxBudget;
+              }
+              // If post only has min, it must be >= user's min and we assume it's acceptable
+              if (postMin != null && postMax == null) {
+                return postMin >= minBudget;
+              }
+              // If post only has max, it must be <= user's max
+              if (postMin == null && postMax != null) {
+                return postMax <= maxBudget;
+              }
+              
+              return false;
+            }).toList();
+          }
 
           // Filter by location if provided
           if (location != null && location.isNotEmpty) {
