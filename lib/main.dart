@@ -7,11 +7,11 @@ import 'package:provider/provider.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  runApp(const JobSeekAdminApp());
+  runApp(const JobSeekApp());
 }
 
-class JobSeekAdminApp extends StatelessWidget {
-  const JobSeekAdminApp({super.key});
+class JobSeekApp extends StatelessWidget {
+  const JobSeekApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -20,12 +20,13 @@ class JobSeekAdminApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthService()),
       ],
       child: MaterialApp(
-        title: 'JobSeek Admin',
+        title: 'JobSeek',
         theme: ThemeData(
           primarySwatch: Colors.blue,
           useMaterial3: true,
         ),
-        initialRoute: AppRoutes.login,
+        debugShowCheckedModeBanner: false, // Remove DEBUG banner
+        initialRoute: AppRoutes.userLogin, // Default to user login page
         onGenerateRoute: AppRoutes.generateRoute,
       ),
     );

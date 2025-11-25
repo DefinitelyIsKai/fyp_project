@@ -3,6 +3,7 @@ import 'package:fyp_project/services/admin/auth_service.dart';
 import 'package:fyp_project/routes/app_routes.dart';
 import 'package:provider/provider.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
+import 'package:fyp_project/pages/user/authentication/login_page.dart' as user_login;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -355,6 +356,60 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                             ],
                           ),
+                        ),
+                        const SizedBox(height: 24),
+                        Divider(thickness: 1, color: Colors.grey[300]),
+                        const SizedBox(height: 16),
+                        // Switch to User Login
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.switch_account, size: 20, color: Colors.grey[600]),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    'Are you a job seeker or recruiter?',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: _isLoading
+                                    ? null
+                                    : () {
+                                        Navigator.of(context).pushReplacement(
+                                          MaterialPageRoute(
+                                            builder: (_) => const user_login.LoginPage(),
+                                          ),
+                                        );
+                                      },
+                                icon: const Icon(Icons.login, size: 18),
+                                label: const Text(
+                                  'Switch to User Login',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.primaryDark,
+                                  side: BorderSide(color: AppColors.primaryDark),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),

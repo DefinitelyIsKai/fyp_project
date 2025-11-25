@@ -1,0 +1,263 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
+import '../../models/user/resume_attachment.dart';
+
+class StorageService {
+  StorageService({FirebaseFirestore? firestore, FirebaseAuth? auth})
+      : _firestore = firestore ?? FirebaseFirestore.instance,
+        _auth = auth ?? FirebaseAuth.instance;
+
+  final FirebaseFirestore _firestore;
+  final FirebaseAuth _auth;
+
+  String get _uid => _auth.currentUser?.uid ?? 'anonymous';
+
+  // 🔹 Convert resume file to Base64 and store in Firestore
+  Future<ResumeAttachment?> pickAndUploadResume() async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: false,
+      type: FileType.custom,
+      allowedExtensions: const ['pdf', 'png', 'jpg', 'jpeg'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return null;
+
+    final file = result.files.single;
+    final bytes = file.bytes ?? await File(file.path!).readAsBytes();
+    final base64String = base64Encode(bytes);
+    final ext = file.extension?.toLowerCase() ?? 'unknown';
+
+    final attachment = ResumeAttachment(
+      fileName: file.name,
+      fileType: ext,
+      base64Data: base64String,
+    );
+
+    await _firestore.collection('users').doc(_uid).set({
+      'resume': attachment.toMap()
+        ..['uploadedAt'] = DateTime.now().toIso8601String(),
+    }, SetOptions(merge: true));
+
+    return attachment;
+  }
+
+  // 🔹 Convert image to Base64 and store in Firestore
+  Future<String?> pickAndUploadImage({required bool fromCamera}) async {
+    try {
+      final bool useImagePicker = kIsWeb ||
+          (!kIsWeb && (Platform.isAndroid || Platform.isIOS || Platform.isMacOS));
+
+      late Uint8List bytes;
+      late String ext;
+
+      if (useImagePicker) {
+        if (fromCamera && !kIsWeb && !(Platform.isAndroid || Platform.isIOS)) {
+          return null;
+        }
+
+        final ImagePicker picker = ImagePicker();
+        // Use lower quality for camera to reduce file size and allow larger images, higher for gallery
+        final XFile? x = fromCamera
+            ? await picker.pickImage(source: ImageSource.camera, imageQuality: 60)
+            : await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+
+        if (x == null) return null;
+
+        bytes = await x.readAsBytes();
+        
+        // Try to get extension from MIME type first (more reliable)
+        String? mimeType = x.mimeType;
+        if (mimeType != null) {
+          // Extract extension from MIME type (e.g., "image/jpeg" -> "jpeg")
+          final mimeParts = mimeType.split('/');
+          if (mimeParts.length == 2 && mimeParts[0] == 'image') {
+            ext = mimeParts[1].toLowerCase();
+            // Normalize common formats
+            if (ext == 'jpeg') ext = 'jpg';
+            if (!['jpg', 'png', 'gif', 'webp'].contains(ext)) {
+              ext = 'jpg'; // Fallback
+            }
+          } else {
+            ext = 'jpg'; // Fallback
+          }
+        } else {
+          // Fallback to path-based extraction
+          if (x.path.contains('.')) {
+            ext = x.path.split('.').last.toLowerCase();
+            // Normalize
+            if (ext == 'jpeg') ext = 'jpg';
+            // Validate extension is a valid image format
+            if (ext.isEmpty || !['jpg', 'png', 'gif', 'webp'].contains(ext)) {
+              ext = 'jpg'; // Default to jpg
+            }
+          } else {
+            // No extension found, default to jpg (camera images are typically jpg)
+            ext = 'jpg';
+          }
+        }
+      } else {
+        if (fromCamera) return null;
+        final result = await FilePicker.platform.pickFiles(
+          allowMultiple: false,
+          type: FileType.image,
+          withData: true,
+        );
+        if (result == null || result.files.isEmpty) return null;
+        final file = result.files.single;
+        bytes = file.bytes ?? await File(file.path!).readAsBytes();
+        ext = file.extension?.toLowerCase() ?? 'jpg';
+      }
+
+      // Check image size
+      // Firestore limit is 1MB per document total, base64 increases size by ~33%
+      // We'll allow larger original images and check the final base64 size
+      const int maxOriginalSize = 1500 * 1024; // 1.5MB original - will be compressed by imageQuality
+      
+      if (bytes.length > maxOriginalSize) {
+        throw Exception('Image is too large (${(bytes.length / 1024 / 1024).toStringAsFixed(2)}MB). '
+            'Maximum size is 1.5MB. Please try taking the photo again or select a smaller image.');
+      }
+      
+      final base64String = base64Encode(bytes);
+      
+      // Final check on actual base64 size (Firestore's hard limit is 1MB per document)
+      // We'll allow up to 980KB base64 to leave minimal room for other fields (fileType, uploadedAt are small)
+      const int maxBase64Size = 980 * 1024; // 980KB - very close to 1MB limit
+      if (base64String.length > maxBase64Size) {
+        throw Exception('Image is too large for Firestore after encoding (${(base64String.length / 1024).toStringAsFixed(1)}KB). '
+            'Firestore limit is 1MB per document. The image quality has been reduced, but it\'s still too large. '
+            'Please try taking the photo again with lower resolution or select a smaller image.');
+      }
+      
+      print('Image size: ${(bytes.length / 1024).toStringAsFixed(1)}KB original, ${(base64String.length / 1024).toStringAsFixed(1)}KB base64');
+
+      // Final validation and sanitization
+      // Ensure fileType is valid (no special characters, only alphanumeric)
+      ext = ext.replaceAll(RegExp(r'[^a-z0-9]'), '').toLowerCase();
+      
+      // Normalize jpeg to jpg
+      if (ext == 'jpeg') ext = 'jpg';
+      
+      // Final check - ensure it's a valid format, default to jpg if not
+      if (ext.isEmpty || !['jpg', 'png', 'gif', 'webp'].contains(ext)) {
+        ext = 'jpg';
+      }
+      
+      // Double-check ext is not empty (should never happen at this point, but safety check)
+      if (ext.isEmpty) {
+        ext = 'jpg';
+      }
+
+      // Debug: Print values before upload
+      print('Uploading image - fileType: "$ext", base64 length: ${base64String.length}, bytes: ${bytes.length}, uid: $_uid');
+      print('Extension after processing: "$ext"');
+
+      // Prepare the image data map - ensure all field names are valid
+      final imageData = <String, dynamic>{
+        'fileType': ext,
+        'base64': base64String,
+        'uploadedAt': FieldValue.serverTimestamp(),
+      };
+
+      // Validate field names are not empty and don't contain invalid characters
+      for (final key in imageData.keys) {
+        if (key.isEmpty) {
+          throw Exception('Invalid field name: empty string');
+        }
+        // Firestore field names cannot start with __ (reserved) or contain certain characters
+        if (key.startsWith('__')) {
+          throw Exception('Invalid field name: cannot start with __');
+        }
+      }
+
+      // Use update instead of set to avoid potential merge issues
+      try {
+        await _firestore.collection('users').doc(_uid).update({
+          'image': imageData,
+        });
+      } catch (updateError) {
+        // If update fails (document doesn't exist), use set with merge
+        if (updateError is FirebaseException && 
+            (updateError.code == 'not-found' || updateError.code == 'permission-denied')) {
+          await _firestore.collection('users').doc(_uid).set({
+            'image': imageData,
+          }, SetOptions(merge: true));
+        } else {
+          rethrow;
+        }
+      }
+
+      return base64String;
+    } catch (e) {
+      print('Upload error: $e');
+      // Print more details for debugging
+      if (e is FirebaseException) {
+        print('Firebase error code: ${e.code}');
+        print('Firebase error message: ${e.message}');
+      }
+      return null;
+    }
+  }
+
+  // 🔹 Convert post images to Base64 and store in Firestore
+  Future<List<String>> pickAndUploadPostImages({required String postId}) async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: const ['png', 'jpg', 'jpeg'],
+      withData: true,
+    );
+
+    if (result == null || result.files.isEmpty) return <String>[];
+
+    final List<String> uploaded = [];
+
+    // Get reference to the post document
+    final postDoc = _firestore.collection('posts').doc(postId);
+    
+    // Check if document exists to determine if we need to set ownerId
+    // If document doesn't exist, we need to include ownerId to satisfy Firestore rules
+    // The rule requires: allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid
+    final docSnapshot = await postDoc.get();
+    final bool docExists = docSnapshot.exists;
+    final bool needsOwnerId = !docExists;
+
+    for (final f in result.files) {
+      final bytes = f.bytes ?? await File(f.path!).readAsBytes();
+      final base64String = base64Encode(bytes);
+      final ext = f.extension?.toLowerCase() ?? 'jpg';
+
+      // Prepare data to write
+      final data = <String, dynamic>{
+        'attachments': FieldValue.arrayUnion([
+          {
+            'fileName': f.name,
+            'fileType': ext,
+            'base64': base64String,
+            'uploadedAt': DateTime.now().toIso8601String(),
+          }
+        ])
+      };
+
+      // Include ownerId only if document doesn't exist yet (for first write that creates the document)
+      // This satisfies the Firestore rule that requires ownerId when creating a post
+      if (needsOwnerId) {
+        data['ownerId'] = _uid;
+      }
+
+      await postDoc.set(data, SetOptions(merge: true));
+
+      uploaded.add(base64String);
+    }
+
+    return uploaded;
+  }
+
+}

@@ -1,0 +1,145 @@
+import 'package:flutter/material.dart';
+
+/// A reusable date picker field widget
+/// 
+/// Displays a styled date picker button that opens a date picker dialog
+/// with consistent theming across the app.
+class DatePickerField extends StatelessWidget {
+  /// The label text displayed above the field
+  final String label;
+  
+  /// The currently selected date (null if no date selected)
+  final DateTime? selectedDate;
+  
+  /// Callback when a date is selected
+  final Function(DateTime) onDateSelected;
+  
+  /// The earliest selectable date
+  final DateTime firstDate;
+  
+  /// The latest selectable date
+  final DateTime lastDate;
+  
+  /// Optional helper text displayed below the field
+  final String? helperText;
+  
+  /// Whether the field is required (adds asterisk to label)
+  final bool required;
+
+  const DatePickerField({
+    super.key,
+    required this.label,
+    required this.selectedDate,
+    required this.onDateSelected,
+    required this.firstDate,
+    required this.lastDate,
+    this.helperText,
+    this.required = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: Colors.grey[700],
+                fontWeight: FontWeight.w500,
+                fontSize: 14,
+              ),
+            ),
+            if (required) ...[
+              const SizedBox(width: 4),
+              const Text(
+                '*',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ],
+        ),
+        if (helperText != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            helperText!,
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 12,
+            ),
+          ),
+        ],
+        const SizedBox(height: 8),
+        InkWell(
+          onTap: () async {
+            // Ensure initialDate is not before firstDate
+            final DateTime initialDate;
+            if (selectedDate != null && !selectedDate!.isBefore(firstDate)) {
+              initialDate = selectedDate!;
+            } else {
+              initialDate = firstDate;
+            }
+            
+            final DateTime? picked = await showDatePicker(
+              context: context,
+              initialDate: initialDate,
+              firstDate: firstDate,
+              lastDate: lastDate,
+              builder: (context, child) {
+                return Theme(
+                  data: Theme.of(context).copyWith(
+                    colorScheme: const ColorScheme.light(
+                      primary: Color(0xFF00C8A0),
+                      onPrimary: Colors.white,
+                      onSurface: Colors.black,
+                    ),
+                  ),
+                  child: child!,
+                );
+              },
+            );
+            if (picked != null) {
+              onDateSelected(picked);
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: Colors.grey[400]!,
+                width: 1,
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    selectedDate != null
+                        ? '${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}'
+                        : 'Select date',
+                    style: TextStyle(
+                      color: selectedDate != null ? Colors.black : Colors.grey[600],
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.calendar_today,
+                  size: 20,
+                  color: Colors.grey[600],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
