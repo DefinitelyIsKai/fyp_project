@@ -458,7 +458,7 @@ class UserService {
 
   Future<void> deleteUser(String userId, {String? deletionReason}) async {
     await _usersRef.doc(userId).update({
-      'status': 'Deleted',
+      'status': 'Inactive',
       'isActive': false,
       'deletedAt': FieldValue.serverTimestamp(),
       'deletionReason': deletionReason,

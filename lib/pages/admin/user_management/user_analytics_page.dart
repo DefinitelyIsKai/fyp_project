@@ -147,10 +147,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
               : '100.0%';
         case 'engagementGrowth':
           return '${_capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%';
-        case 'profileViewGrowth':
-          return analytics.totalUsers > 0
-              ? '${(analytics.profileViews / analytics.totalUsers * 100).toStringAsFixed(1)}%'
-              : '0.0%';
         case 'messageGrowth':
           return analytics.totalUsers > 0
               ? '${(analytics.totalMessages / analytics.totalUsers * 100).toStringAsFixed(1)}%'
@@ -380,7 +376,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
                   ['Active User Growth', _formatGrowthRate(analytics.activeUserGrowth, 'activeUserGrowth', analytics)],
                   ['Registration Growth', _formatGrowthRate(analytics.registrationGrowth, 'registrationGrowth', analytics)],
                   ['Engagement Growth', _formatGrowthRate(analytics.engagementGrowth, 'engagementGrowth', analytics)],
-                  ['Profile View Growth', _formatGrowthRate(analytics.profileViewGrowth, 'profileViewGrowth', analytics)],
                   ['Message Growth', _formatGrowthRate(analytics.messageGrowth, 'messageGrowth', analytics)],
                   ['Application Growth', _formatGrowthRate(analytics.applicationGrowth, 'applicationGrowth', analytics)],
                   ['Report Growth', _formatGrowthRate(analytics.reportGrowth, 'reportGrowth', analytics)],
@@ -798,11 +793,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
               label: 'Engagement Rate',
               value: '${_capEngagementRate(_analytics!.engagementRate).toStringAsFixed(1)}%',
               trend: _analytics!.engagementGrowth,
-            ),
-            _MetricRow(
-              label: 'Profile Views',
-              value: _analytics!.profileViews.toString(),
-              trend: _analytics!.profileViewGrowth,
             ),
             _MetricRow(
               label: 'Messages Sent',

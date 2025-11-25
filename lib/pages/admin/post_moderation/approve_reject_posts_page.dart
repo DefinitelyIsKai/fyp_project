@@ -28,6 +28,9 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   
   // Cache for user names
   final Map<String, String> _userNameCache = {};
+  
+  // Track processing posts to prevent rapid clicks
+  final Set<String> _processingPostIds = {};
 
   @override
   void initState() {
@@ -45,6 +48,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   }
 
   void _switchTab(int index) {
+    if (!mounted || _currentTabIndex == index) return;
     setState(() => _currentTabIndex = index);
     if (_tabPageController.hasClients) {
       _tabPageController.animateToPage(
@@ -60,40 +64,72 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   }
 
   Future<void> _approvePost(JobPostModel post) async {
+    // Prevent multiple clicks on the same post
+    if (_processingPostIds.contains(post.id)) return;
+    
+    setState(() {
+      _processingPostIds.add(post.id);
+    });
+    
     try {
       await _postService.approvePost(post.id);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Post approved and now active'), backgroundColor: Colors.green),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _processingPostIds.remove(post.id);
+        });
+      }
     }
   }
 
   Future<void> _rejectPost(JobPostModel post) async {
+    // Prevent multiple clicks on the same post
+    if (_processingPostIds.contains(post.id)) return;
+    
     final reason = await showDialog<String>(
       context: context,
       builder: (context) => _RejectPostDialog(post: post), // Pass the post here
     );
 
-    if (reason != null) {
+    if (reason != null && reason.isNotEmpty) {
+      setState(() {
+        _processingPostIds.add(post.id);
+      });
+      
       try {
         await _postService.rejectPost(post.id, reason);
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Post rejected'), backgroundColor: Colors.orange),
         );
       } catch (e) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
+      } finally {
+        if (mounted) {
+          setState(() {
+            _processingPostIds.remove(post.id);
+          });
+        }
       }
     }
   }
 
 
   void _viewPost(JobPostModel post) {
+    // Prevent multiple navigation pushes
+    if (!mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => PostDetailPage(post: post)),
@@ -293,6 +329,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                       onReopen: null,
                       onView: _viewPost,
                       getUserName: _getUserName,
+                      processingPostIds: _processingPostIds,
                     ),
                     // Active Tab
                     _PostsList(
@@ -304,6 +341,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                       onReopen: null,
                       onView: _viewPost,
                       getUserName: _getUserName,
+                      processingPostIds: _processingPostIds,
                     ),
                     // Completed Tab
                     _PostsList(
@@ -315,6 +353,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                       onReopen: null,
                       onView: _viewPost,
                       getUserName: _getUserName,
+                      processingPostIds: _processingPostIds,
                     ),
                     // Rejected Tab
                     _PostsList(
@@ -326,6 +365,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                       onReopen: null,
                       onView: _viewPost,
                       getUserName: _getUserName,
+                      processingPostIds: _processingPostIds,
                     ),
                   ],
                 );
@@ -843,6 +883,7 @@ class _PostsList extends StatelessWidget {
   final Function(JobPostModel)? onReopen;
   final Function(JobPostModel) onView;
   final Future<String> Function(String?) getUserName;
+  final Set<String> processingPostIds;
 
   const _PostsList({
     required this.posts,
@@ -853,6 +894,7 @@ class _PostsList extends StatelessWidget {
     this.onReopen,
     required this.onView,
     required this.getUserName,
+    required this.processingPostIds,
   });
 
   @override
@@ -891,6 +933,7 @@ class _PostsList extends StatelessWidget {
                 onReopen: onReopen,
                 onView: onView,
                 getUserName: getUserName,
+                isProcessing: processingPostIds.contains(post.id),
               );
             },
           )
@@ -1032,6 +1075,7 @@ class _PostCard extends StatelessWidget {
   final Function(JobPostModel)? onReopen;
   final Function(JobPostModel) onView;
   final Future<String> Function(String?) getUserName;
+  final bool isProcessing;
 
   const _PostCard({
     required this.post,
@@ -1041,6 +1085,7 @@ class _PostCard extends StatelessWidget {
     this.onReopen,
     required this.onView,
     required this.getUserName,
+    this.isProcessing = false,
   });
 
   Color _getStatusColor(String status) {
@@ -1084,12 +1129,19 @@ class _PostCard extends StatelessWidget {
           if (onApprove != null)
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: () => onApprove!(post),
-                icon: const Icon(Icons.check, size: 18),
-                label: const Text('Approve'),
+                onPressed: isProcessing ? null : () => onApprove!(post),
+                icon: isProcessing 
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.check, size: 18),
+                label: Text(isProcessing ? 'Processing...' : 'Approve'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
                   foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.green.withOpacity(0.6),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
@@ -1099,12 +1151,19 @@ class _PostCard extends StatelessWidget {
           if (onReject != null)
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: () => onReject!(post),
-                icon: const Icon(Icons.close, size: 18),
-                label: const Text('Reject'),
+                onPressed: isProcessing ? null : () => onReject!(post),
+                icon: isProcessing 
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.close, size: 18),
+                label: Text(isProcessing ? 'Processing...' : 'Reject'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
                   foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.red.withOpacity(0.6),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
@@ -1117,12 +1176,19 @@ class _PostCard extends StatelessWidget {
           if (onComplete != null)
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: () => onComplete!(post),
-                icon: const Icon(Icons.done_all, size: 18),
-                label: const Text('Complete'),
+                onPressed: isProcessing ? null : () => onComplete!(post),
+                icon: isProcessing 
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.done_all, size: 18),
+                label: Text(isProcessing ? 'Processing...' : 'Complete'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.blue.withOpacity(0.6),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
@@ -1132,12 +1198,19 @@ class _PostCard extends StatelessWidget {
           if (onReject != null)
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: () => onReject!(post),
-                icon: const Icon(Icons.close, size: 18),
-                label: const Text('Reject'),
+                onPressed: isProcessing ? null : () => onReject!(post),
+                icon: isProcessing 
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.close, size: 18),
+                label: Text(isProcessing ? 'Processing...' : 'Reject'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
                   foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.red.withOpacity(0.6),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
@@ -1150,12 +1223,19 @@ class _PostCard extends StatelessWidget {
           if (onReopen != null)
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: () => onReopen!(post),
-                icon: const Icon(Icons.replay, size: 18),
-                label: const Text('Reopen'),
+                onPressed: isProcessing ? null : () => onReopen!(post),
+                icon: isProcessing 
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.replay, size: 18),
+                label: Text(isProcessing ? 'Processing...' : 'Reopen'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.orange,
                   foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.orange.withOpacity(0.6),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
@@ -1168,12 +1248,19 @@ class _PostCard extends StatelessWidget {
           if (onApprove != null)
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: () => onApprove!(post),
-                icon: const Icon(Icons.check, size: 18),
-                label: const Text('Approve'),
+                onPressed: isProcessing ? null : () => onApprove!(post),
+                icon: isProcessing 
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.check, size: 18),
+                label: Text(isProcessing ? 'Processing...' : 'Approve'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
                   foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.green.withOpacity(0.6),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),

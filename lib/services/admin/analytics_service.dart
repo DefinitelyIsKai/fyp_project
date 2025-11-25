@@ -73,19 +73,23 @@ class AnalyticsService {
       final previousAnalytics = futures[6] as Map<String, dynamic>;
 
       // Calculate engagement rates for both periods
-      final currentEngagementRate = _calculateEngagementRate(
+      final currentEngagementRateUncapped = _calculateEngagementRate(
         activeUsers: userAnalytics['activeUsers'] ?? 0,
         totalUsers: userAnalytics['totalUsers'] ?? 0,
         totalApplications: applicationAnalytics['totalApplications'] ?? 0,
         totalMessages: messageAnalytics['totalMessages'] ?? 0,
       );
       
-      final previousEngagementRate = _calculateEngagementRate(
+      final previousEngagementRateUncapped = _calculateEngagementRate(
         activeUsers: previousAnalytics['activeUsers'] ?? 0,
         totalUsers: previousAnalytics['totalUsers'] ?? 0,
         totalApplications: previousAnalytics['totalApplications'] ?? 0,
         totalMessages: previousAnalytics['totalMessages'] ?? 0,
       );
+
+      // Cap engagement rates at 100% before calculating growth
+      final currentEngagementRate = currentEngagementRateUncapped > 100.0 ? 100.0 : currentEngagementRateUncapped;
+      final previousEngagementRate = previousEngagementRateUncapped > 100.0 ? 100.0 : previousEngagementRateUncapped;
 
       // Calculate growth rates
       final growthRates = _calculateGrowthRates(
@@ -161,16 +165,25 @@ class AnalyticsService {
         .collection('users')
         .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
         .get();
-    final totalUsers = totalUsersSnapshot.docs.length;
-
-    // Active users: users who logged in during the selected date range
-    // Or users with lastLoginAt within the date range
-    final activeUsersSnapshot = await _firestore
-        .collection('users')
-        .where('lastLoginAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
-        .where('lastLoginAt', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
-        .get();
-    final activeUsers = activeUsersSnapshot.docs.length;
+    
+    // Parse all users to check their active status
+    final allUsers = totalUsersSnapshot.docs
+        .map((doc) => UserModel.fromJson(doc.data(), doc.id))
+        .toList();
+    
+    final totalUsers = allUsers.length;
+    
+    // Active users: count users who are currently active (based on isActive field and status)
+    // Exclude deleted and suspended users
+    final activeUsers = allUsers.where((user) {
+      // User is active if:
+      // 1. isActive is true AND
+      // 2. status is not 'Deleted' AND
+      // 3. status is not 'Suspended'
+      return user.isActive && 
+             user.status != 'Deleted' && 
+             user.status != 'Suspended';
+    }).length;
 
     // New registrations in the period
     final newRegistrationsSnapshot = await _firestore
@@ -237,22 +250,21 @@ class AnalyticsService {
   }
 
   Future<Map<String, dynamic>> _getApplicationAnalytics(DateTime startDate, DateTime endDate) async {
-    // Assuming you have an 'applications' collection
+    // Get applications within the date range only
     try {
-      final applicationsSnapshot = await _firestore.collection('applications').get();
-      final totalApplications = applicationsSnapshot.docs.length;
-
-      // New applications in the period
-      final newApplicationsSnapshot = await _firestore
+      final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+      
+      // Applications in the period
+      final applicationsSnapshot = await _firestore
           .collection('applications')
           .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
-          .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
+          .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
           .get();
-      final newApplications = newApplicationsSnapshot.docs.length;
+      final totalApplications = applicationsSnapshot.docs.length;
 
       return {
-        'totalApplications': totalApplications,
-        'newApplications': newApplications,
+        'totalApplications': totalApplications, // Only count applications within the date range
+        'newApplications': totalApplications,
       };
     } catch (e) {
       // Return defaults if applications collection doesn't exist
@@ -264,21 +276,29 @@ class AnalyticsService {
   }
 
   Future<Map<String, dynamic>> _getReportAnalytics(DateTime startDate, DateTime endDate) async {
-    final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+    // Normalize dates to start and end of day in local timezone
+    // toDate() from Firestore returns local time, so we compare in local time
+    final startOfDay = DateTime(startDate.year, startDate.month, startDate.day, 0, 0, 0);
+    final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59, 999);
     
     // Try to get from reports collection first
     try {
       final allReportsSnapshot = await _firestore.collection('reports').get();
       final allReports = allReportsSnapshot.docs;
       
-      // Filter reports created in the period
+      // Filter reports created in the period (inclusive of both boundaries)
       final reportsInPeriod = allReports.where((doc) {
         final data = doc.data();
         final createdAt = data['createdAt'] as Timestamp?;
         if (createdAt == null) return false;
+        // toDate() returns local time, so we compare in local time
         final date = createdAt.toDate();
-        return date.isAfter(startDate.subtract(const Duration(seconds: 1))) &&
-               date.isBefore(endOfDay.add(const Duration(seconds: 1)));
+        // Compare only the date part (year, month, day) to avoid timezone issues
+        final reportDate = DateTime(date.year, date.month, date.day);
+        final startDateOnly = DateTime(startOfDay.year, startOfDay.month, startOfDay.day);
+        final endDateOnly = DateTime(endOfDay.year, endOfDay.month, endOfDay.day);
+        // Use inclusive comparison: reportDate >= startDateOnly && reportDate <= endDateOnly
+        return reportDate.compareTo(startDateOnly) >= 0 && reportDate.compareTo(endDateOnly) <= 0;
       }).toList();
       
       final totalReports = reportsInPeriod.length;
@@ -325,26 +345,79 @@ class AnalyticsService {
   }
 
   Future<Map<String, dynamic>> _getMessageAnalytics(DateTime startDate, DateTime endDate) async {
-    // Assuming you have a 'messages' collection
+    // Fetch messages from conversations collection -> messages subcollection
     try {
-      final messagesSnapshot = await _firestore.collection('messages').get();
-      final totalMessages = messagesSnapshot.docs.length;
+      final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+      
+      // Get all conversations
+      final conversationsSnapshot = await _firestore.collection('conversations').get();
+      
+      int totalMessages = 0;
+      int newMessages = 0;
+      
+      print('Found ${conversationsSnapshot.docs.length} conversations');
+      
+      // Iterate through each conversation and get messages from subcollection
+      for (final conversationDoc in conversationsSnapshot.docs) {
+        try {
+          // Get messages subcollection for this conversation
+          final messagesSnapshot = await conversationDoc.reference
+              .collection('messages')
+              .get();
+          
+          final messageCount = messagesSnapshot.docs.length;
+          totalMessages += messageCount;
+          
+          print('Conversation ${conversationDoc.id} has $messageCount messages');
+          
+          // Count new messages in the period
+          for (final messageDoc in messagesSnapshot.docs) {
+            final messageData = messageDoc.data() as Map<String, dynamic>?;
+            if (messageData == null) continue;
+            
+            // Try different possible field names for timestamp
+            dynamic timestampValue = messageData['createdAt'] ?? 
+                                    messageData['timestamp'] ?? 
+                                    messageData['sentAt'] ??
+                                    messageData['time'];
+            
+            if (timestampValue != null) {
+              DateTime? messageDate;
+              
+              if (timestampValue is Timestamp) {
+                messageDate = timestampValue.toDate();
+              } else if (timestampValue is DateTime) {
+                messageDate = timestampValue;
+              } else if (timestampValue is int) {
+                messageDate = DateTime.fromMillisecondsSinceEpoch(timestampValue);
+              } else if (timestampValue is String) {
+                messageDate = DateTime.tryParse(timestampValue);
+              }
+              
+              if (messageDate != null) {
+                if (messageDate.isAfter(startDate.subtract(const Duration(seconds: 1))) &&
+                    messageDate.isBefore(endOfDay.add(const Duration(seconds: 1)))) {
+                  newMessages++;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          // Skip conversations that don't have messages subcollection or have errors
+          print('Error fetching messages for conversation ${conversationDoc.id}: $e');
+        }
+      }
 
-      // New messages in the period
-      final newMessagesSnapshot = await _firestore
-          .collection('messages')
-          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
-          .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
-          .get();
-      final newMessages = newMessagesSnapshot.docs.length;
+      print('Total messages: $totalMessages, New messages in period: $newMessages');
 
       return {
-        'totalMessages': totalMessages,
-        'reportedMessages': 0, // Replace with actual query
+        'totalMessages': newMessages, // Only count messages within the date range
+        'reportedMessages': 0, // Replace with actual query if needed
         'newMessages': newMessages,
       };
     } catch (e) {
-      // Return defaults if messages collection doesn't exist
+      print('Error getting message analytics: $e');
+      // Return defaults if conversations collection doesn't exist
       return {
         'totalMessages': 0,
         'reportedMessages': 0,
@@ -479,8 +552,12 @@ class AnalyticsService {
   }
 
   Future<Map<String, dynamic>> _getPreviousPeriodAnalytics(DateTime startDate, DateTime endDate) async {
-    final previousStartDate = startDate.subtract(const Duration(days: 30));
-    final previousEndDate = startDate;
+    // Calculate the duration of the current period
+    final periodDuration = endDate.difference(startDate);
+    
+    // Previous period should be the same length, ending just before the current period starts
+    final previousEndDate = startDate.subtract(const Duration(seconds: 1));
+    final previousStartDate = previousEndDate.subtract(periodDuration);
 
     final futures = await Future.wait([
       _getEnhancedUserAnalytics(previousStartDate, previousEndDate),
@@ -626,19 +703,23 @@ class AnalyticsService {
       final previousAnalytics = futures[6] as Map<String, dynamic>;
 
       // Calculate engagement rates for both periods
-      final currentEngagementRate = _calculateEngagementRate(
+      final currentEngagementRateUncapped = _calculateEngagementRate(
         activeUsers: userAnalytics['activeUsers'] ?? 0,
         totalUsers: userAnalytics['totalUsers'] ?? 0,
         totalApplications: applicationAnalytics['totalApplications'] ?? 0,
         totalMessages: messageAnalytics['totalMessages'] ?? 0,
       );
       
-      final previousEngagementRate = _calculateEngagementRate(
+      final previousEngagementRateUncapped = _calculateEngagementRate(
         activeUsers: previousAnalytics['activeUsers'] ?? 0,
         totalUsers: previousAnalytics['totalUsers'] ?? 0,
         totalApplications: previousAnalytics['totalApplications'] ?? 0,
         totalMessages: previousAnalytics['totalMessages'] ?? 0,
       );
+
+      // Cap engagement rates at 100% before calculating growth
+      final currentEngagementRate = currentEngagementRateUncapped > 100.0 ? 100.0 : currentEngagementRateUncapped;
+      final previousEngagementRate = previousEngagementRateUncapped > 100.0 ? 100.0 : previousEngagementRateUncapped;
 
       // Calculate growth rates
       final growthRates = _calculateGrowthRates(

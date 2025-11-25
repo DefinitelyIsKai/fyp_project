@@ -68,9 +68,11 @@ service cloud.firestore {
     // ROLES COLLECTION
     // ============================================
     match /roles/{roleId} {
-      // Read: Allow any authenticated user to read roles
+      // Read and list: Allow any authenticated user to read/list roles
       // This is needed for login validation, creating users, assigning roles, and viewing role information
-      allow read: if isAuthenticated();
+      // Write operations (create, update, delete) are explicitly denied
+      allow read, list: if isAuthenticated();
+      allow create, update, delete: if false;
     }
     
     // ============================================
@@ -150,6 +152,36 @@ service cloud.firestore {
     match /messages/{msgId} {
       // Permission-based: users with message_oversight permission can read/write
       allow read, write: if hasPermission('message_oversight') || isManager() || isHR() || isStaff();
+    }
+    
+    // ============================================
+    // CONVERSATIONS COLLECTION
+    // ============================================
+    match /conversations/{conversationId} {
+      // Permission-based: users with message_oversight or analytics permission can read
+      // This is needed for analytics to count messages
+      allow read: if hasPermission('message_oversight') || 
+                     hasPermission('analytics') || 
+                     isManager() || 
+                     isHR() || 
+                     isStaff();
+      
+      // Allow write for message_oversight permission
+      allow write: if hasPermission('message_oversight') || isManager() || isHR() || isStaff();
+      
+      // Messages subcollection within conversations
+      match /messages/{messageId} {
+        // Permission-based: users with message_oversight or analytics permission can read
+        // This is needed for analytics to count messages
+        allow read: if hasPermission('message_oversight') || 
+                       hasPermission('analytics') || 
+                       isManager() || 
+                       isHR() || 
+                       isStaff();
+        
+        // Allow write for message_oversight permission
+        allow write: if hasPermission('message_oversight') || isManager() || isHR() || isStaff();
+      }
     }
     
     // ============================================
