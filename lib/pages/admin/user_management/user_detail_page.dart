@@ -600,31 +600,43 @@ class UserDetailPage extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                // Warning Button
-                if (!user.isSuspended)
-                  ActionButton(
-                    text: 'Give Warning',
-                    color: Colors.orange,
-                    onPressed: () => _showWarningDialog(context, userService),
-                  )
-                else
-                  ActionButton(
-                    text: 'Activate User',
-                    color: Colors.green,
-                    onPressed: () => _showStatusConfirmationDialog(context, userService, 'activate'),
-                  ),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  // Warning Button
+                  if (!user.isSuspended)
+                    ActionButton(
+                      text: 'Warning',
+                      color: Colors.orange,
+                      onPressed: () => _showWarningDialog(context, userService),
+                    )
+                  else
+                    ActionButton(
+                      text: 'Activate',
+                      color: Colors.green,
+                      onPressed: () => _showStatusConfirmationDialog(context, userService, 'activate'),
+                    ),
 
-                // Delete Button
-                ActionButton(
-                  text: 'Delete Account',
-                  color: Colors.red,
-                  onPressed: () => _showStatusConfirmationDialog(context, userService, 'delete'),
-                ),
-              ],
+                  // Suspend Button (only show if not suspended)
+                  if (!user.isSuspended) ...[
+                    const SizedBox(width: 8),
+                    ActionButton(
+                      text: 'Suspend',
+                      color: Colors.red,
+                      onPressed: () => _showSuspendDialog(context, userService),
+                    ),
+                  ],
+
+                  // Delete Button
+                  const SizedBox(width: 8),
+                  ActionButton(
+                    text: 'Delete',
+                    color: Colors.red,
+                    onPressed: () => _showStatusConfirmationDialog(context, userService, 'delete'),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -787,6 +799,188 @@ class UserDetailPage extends StatelessWidget {
         SnackBar(
           content: Text('Failed to issue warning: $e'),
           backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _showSuspendDialog(BuildContext context, UserService userService) async {
+    final reasonController = TextEditingController();
+    final durationController = TextEditingController(text: '30'); // Default 30 days
+
+    await showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.block, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Suspend User Account'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'You are about to suspend ${user.fullName}\'s account immediately.',
+                style: const TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red[200]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber, color: Colors.red[700], size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'This will suspend the user immediately without waiting for 3 warnings.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.red[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Suspension Reason *',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: reasonController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  hintText: 'Explain why this account is being suspended...',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.all(12),
+                ),
+                textInputAction: TextInputAction.done,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Suspension Duration (Days)',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: durationController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: false),
+                decoration: const InputDecoration(
+                  hintText: 'Enter number of days (e.g., 30)',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.all(12),
+                  prefixIcon: Icon(Icons.calendar_today, size: 20),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Leave empty or enter 0 for indefinite suspension',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final suspensionReason = reasonController.text.trim();
+              final durationText = durationController.text.trim();
+
+              if (suspensionReason.isEmpty) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please provide a suspension reason'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              int? durationDays;
+              if (durationText.isNotEmpty) {
+                durationDays = int.tryParse(durationText);
+                if (durationDays == null || durationDays < 0) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter a valid number of days (0 or positive)'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+                // If 0, set to null for indefinite suspension
+                if (durationDays == 0) {
+                  durationDays = null;
+                }
+              }
+
+              Navigator.pop(context);
+              await _suspendUser(context, userService, suspensionReason, durationDays);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Suspend Account'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _suspendUser(BuildContext context, UserService userService, String suspensionReason, int? durationDays) async {
+    try {
+      await userService.suspendUser(
+        user.id,
+        violationReason: suspensionReason,
+        durationDays: durationDays,
+      );
+
+      if (!context.mounted) return;
+
+      final durationText = durationDays != null 
+          ? ' for $durationDays day${durationDays == 1 ? '' : 's'}'
+          : ' indefinitely';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${user.fullName}\'s account has been suspended$durationText'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      if (context.mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to suspend user: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }

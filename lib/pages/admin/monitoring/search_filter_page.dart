@@ -29,9 +29,8 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
   
   List<dynamic> _results = [];
   bool _isLoading = false;
-  bool _isFiltersExpanded = false;
+  bool _isFiltersExpanded = true;
   List<String> _categories = [];
-  List<String> _locations = [];
   List<String> _roles = [];
 
   @override
@@ -57,25 +56,11 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
           .toList();
       categories.sort();
 
-      // Load locations from posts and extract states only
-      final postsSnapshot = await FirebaseFirestore.instance
-          .collection('posts')
-          .get();
-      final locations = postsSnapshot.docs
-          .map((doc) => doc.data()['location'] as String? ?? '')
-          .where((loc) => loc.isNotEmpty)
-          .map((loc) => _extractState(loc))
-          .where((state) => state.isNotEmpty)
-          .toSet()
-          .toList();
-      locations.sort();
-
       // Load roles from users
       final roles = await _userService.getAllRoles();
 
       setState(() {
         _categories = categories;
-        _locations = locations;
         _roles = roles;
       });
     } catch (e) {
@@ -152,7 +137,10 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
 
         if (_selectedLocation != 'all') {
           filteredPosts = filteredPosts
-              .where((post) => _extractState(post.location) == _selectedLocation)
+              .where((post) {
+                final postState = _extractState(post.location);
+                return postState.toLowerCase() == _selectedLocation.toLowerCase();
+              })
               .toList();
         }
 
@@ -199,12 +187,19 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        title: const Text(
+          'Search & Filter',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
         backgroundColor: AppColors.primaryDark,
         foregroundColor: Colors.white,
       ),
       body: Column(
         children: [
-          // Header Section
+          // Header Section with Description
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -225,15 +220,6 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Search & Filter',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 8),
                 Text(
                   'Search users and posts using keywords, categories, or status',
                   style: TextStyle(
@@ -347,10 +333,8 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                 ),
                 const SizedBox(height: 12),
 
-                // Filters Section (Expandable)
+                // Filter Section (Expandable)
                 if (_searchType == 'posts' || _searchType == 'all' || _searchType == 'users') ...[
-                  const Divider(),
-                  const SizedBox(height: 8),
                   InkWell(
                     onTap: () {
                       setState(() {
@@ -419,165 +403,95 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                               padding: const EdgeInsets.only(top: 12),
                               child: Column(
                                 children: [
-                                  Wrap(
-                                    spacing: 12,
-                                    runSpacing: 12,
+                                  // First Row
+                                  Row(
                                     children: [
-                                // Category Filter (for posts)
-                                if (_searchType == 'posts' || _searchType == 'all')
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: DropdownButtonFormField<String>(
-                                      value: _selectedCategory,
-                                      decoration: InputDecoration(
-                                        labelText: 'Category',
-                                        prefixIcon: const Icon(Icons.category, size: 20),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(10),
+                                      // Category Filter (for posts)
+                                      if (_searchType == 'posts' || _searchType == 'all')
+                                        Expanded(
+                                          child: _FilterChip(
+                                            label: 'Category',
+                                            value: _selectedCategory == 'all' ? 'All' : _selectedCategory,
+                                            onTap: () => _showCategoryFilter(),
+                                          ),
                                         ),
-                                        filled: true,
-                                        fillColor: Colors.grey[50],
-                                        contentPadding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 16,
+                                      if (_searchType == 'posts' || _searchType == 'all') const SizedBox(width: 8),
+                                      // Status Filter (for posts)
+                                      if (_searchType == 'posts' || _searchType == 'all')
+                                        Expanded(
+                                          child: _FilterChip(
+                                            label: 'Status',
+                                            value: _selectedStatus == 'all' ? 'All' : _selectedStatus.toUpperCase(),
+                                            onTap: () => _showStatusFilter(),
+                                          ),
                                         ),
-                                      ),
-                                      items: [
-                                        const DropdownMenuItem(value: 'all', child: Text('All Categories')),
-                                        ..._categories.map((cat) => DropdownMenuItem(
-                                              value: cat,
-                                              child: Text(cat),
-                                            )),
-                                      ],
-                                      onChanged: (value) {
-                                        setState(() => _selectedCategory = value ?? 'all');
-                                      },
-                                    ),
-                                  ),
-
-                                // Status Filter (for posts)
-                                if (_searchType == 'posts' || _searchType == 'all')
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: DropdownButtonFormField<String>(
-                                      value: _selectedStatus,
-                                      decoration: InputDecoration(
-                                        labelText: 'Status',
-                                        prefixIcon: const Icon(Icons.info_outline, size: 20),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(10),
+                                      // Role Filter (for users only)
+                                      if (_searchType == 'users' && _searchType != 'all')
+                                        Expanded(
+                                          child: _FilterChip(
+                                            label: 'Role',
+                                            value: _selectedRole == 'all' ? 'All' : _getRoleDisplayName(_selectedRole),
+                                            onTap: () => _showRoleFilter(),
+                                          ),
                                         ),
-                                        filled: true,
-                                        fillColor: Colors.grey[50],
-                                        contentPadding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 16,
-                                        ),
-                                      ),
-                                      items: const [
-                                        DropdownMenuItem(value: 'all', child: Text('All Status')),
-                                        DropdownMenuItem(value: 'pending', child: Text('Pending')),
-                                        DropdownMenuItem(value: 'active', child: Text('Active')),
-                                        DropdownMenuItem(value: 'completed', child: Text('Completed')),
-                                        DropdownMenuItem(value: 'rejected', child: Text('Rejected')),
-                                      ],
-                                      onChanged: (value) {
-                                        setState(() => _selectedStatus = value ?? 'all');
-                                      },
-                                    ),
-                                  ),
-
-                                // Location Filter (for posts)
-                                if (_searchType == 'posts' || _searchType == 'all')
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: DropdownButtonFormField<String>(
-                                      value: _selectedLocation,
-                                      decoration: InputDecoration(
-                                        labelText: 'Location',
-                                        prefixIcon: const Icon(Icons.location_on, size: 20),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(10),
-                                        ),
-                                        filled: true,
-                                        fillColor: Colors.grey[50],
-                                        contentPadding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 16,
-                                        ),
-                                      ),
-                                      items: [
-                                        const DropdownMenuItem(value: 'all', child: Text('All Locations')),
-                                        ..._locations.map((loc) => DropdownMenuItem(
-                                              value: loc,
-                                              child: Text(
-                                                loc,
-                                                overflow: TextOverflow.ellipsis,
-                                                maxLines: 1,
-                                              ),
-                                            )),
-                                      ],
-                                      isExpanded: true,
-                                      onChanged: (value) {
-                                        setState(() => _selectedLocation = value ?? 'all');
-                                      },
-                                    ),
-                                  ),
-
-                                // Role Filter (for users)
-                                if (_searchType == 'users' || _searchType == 'all')
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: DropdownButtonFormField<String>(
-                                      value: _selectedRole,
-                                      decoration: InputDecoration(
-                                        labelText: 'Role',
-                                        prefixIcon: const Icon(Icons.person_outline, size: 20),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(10),
-                                        ),
-                                        filled: true,
-                                        fillColor: Colors.grey[50],
-                                        contentPadding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 16,
-                                        ),
-                                      ),
-                                      items: [
-                                        const DropdownMenuItem(value: 'all', child: Text('All Roles')),
-                                        ..._roles.map((role) => DropdownMenuItem(
-                                              value: role,
-                                              child: Text(_getRoleDisplayName(role)),
-                                            )),
-                                      ],
-                                      onChanged: (value) {
-                                        setState(() => _selectedRole = value ?? 'all');
-                                      },
-                                    ),
-                                  ),
                                     ],
                                   ),
-                                  // Reset Filters Button
-                                  if (_hasActiveFilters())
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 12),
-                                      child: SizedBox(
-                                        width: double.infinity,
-                                        child: OutlinedButton.icon(
-                                          onPressed: _resetFilters,
-                                          icon: const Icon(Icons.refresh, size: 18),
-                                          label: const Text('Reset Filters'),
-                                          style: OutlinedButton.styleFrom(
-                                            foregroundColor: Colors.blue[700],
-                                            side: BorderSide(color: Colors.blue[300]!),
-                                            padding: const EdgeInsets.symmetric(vertical: 12),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(8),
+                                  // Second Row
+                                  if ((_searchType == 'posts' || _searchType == 'all') || (_searchType == 'users' || _searchType == 'all')) ...[
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        // State Filter (for posts)
+                                        if (_searchType == 'posts' || _searchType == 'all')
+                                          Expanded(
+                                            child: _FilterChip(
+                                              label: 'State',
+                                              value: _selectedLocation == 'all' ? 'All' : _selectedLocation,
+                                              onTap: () => _showLocationFilter(),
+                                            ),
+                                          ),
+                                        if (_searchType == 'posts' || _searchType == 'all') const SizedBox(width: 8),
+                                        // Role Filter (for users or all)
+                                        if (_searchType == 'users' || _searchType == 'all')
+                                          Expanded(
+                                            child: _FilterChip(
+                                              label: 'Role',
+                                              value: _selectedRole == 'all' ? 'All' : _getRoleDisplayName(_selectedRole),
+                                              onTap: () => _showRoleFilter(),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ],
+                                  // Active Filters Indicator
+                                  if (_hasActiveFilters()) ...[
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue[50],
+                                            borderRadius: BorderRadius.circular(20),
+                                          ),
+                                          child: Text(
+                                            '${_getActiveFilterCount()} filter${_getActiveFilterCount() > 1 ? 's' : ''} active',
+                                            style: TextStyle(
+                                              color: Colors.blue[700],
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
                                             ),
                                           ),
                                         ),
-                                      ),
+                                        const Spacer(),
+                                        TextButton.icon(
+                                          onPressed: _resetFilters,
+                                          icon: const Icon(Icons.clear_all, size: 16),
+                                          label: const Text('Clear All'),
+                                        ),
+                                      ],
                                     ),
+                                  ],
                                 ],
                               ),
                             )
@@ -724,31 +638,50 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
     }).join(' ');
   }
 
-  /// Extract state from location string
-  /// Handles formats like: "City, State", "State", "City State", etc.
+  /// Extract Malaysian state from location string
   String _extractState(String location) {
     if (location.isEmpty) return '';
     
-    // Remove extra whitespace
-    location = location.trim();
+    final locationLower = location.toLowerCase();
     
-    // If location contains a comma, take the part after the comma (usually the state)
-    if (location.contains(',')) {
-      final parts = location.split(',');
-      if (parts.length > 1) {
-        return parts.last.trim();
+    // List of Malaysian states and federal territories
+    final states = [
+      'johor',
+      'kedah',
+      'kelantan',
+      'kuala lumpur',
+      'labuan',
+      'malacca',
+      'melaka',
+      'negeri sembilan',
+      'pahang',
+      'penang',
+      'pulau pinang',
+      'perak',
+      'perlis',
+      'putrajaya',
+      'sabah',
+      'sarawak',
+      'selangor',
+      'terengganu',
+    ];
+    
+    // Check for state names in the location string
+    for (final state in states) {
+      if (locationLower.contains(state)) {
+        // Normalize state names
+        if (state == 'kuala lumpur') return 'Kuala Lumpur';
+        if (state == 'pulau pinang' || state == 'penang') return 'Penang';
+        if (state == 'melaka' || state == 'malacca') return 'Melaka';
+        // Capitalize first letter of each word
+        return state.split(' ').map((word) => 
+          word[0].toUpperCase() + word.substring(1)
+        ).join(' ');
       }
     }
     
-    // If no comma, try to extract the last word (assuming it's the state)
-    final words = location.split(' ');
-    if (words.length > 1) {
-      // Return the last word (likely the state)
-      return words.last.trim();
-    }
-    
-    // If it's a single word, return it as is (might be just a state name)
-    return location;
+    // If no state found, return empty string
+    return '';
   }
 
   bool _hasActiveFilters() {
@@ -774,6 +707,215 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
       if (_selectedRole != 'all') count++;
     }
     return count;
+  }
+
+  void _showCategoryFilter() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.7,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Select Category',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView(
+                children: [
+                  ListTile(
+                    title: const Text('All Categories'),
+                    trailing: _selectedCategory == 'all'
+                        ? const Icon(Icons.check, color: Colors.blue)
+                        : null,
+                    onTap: () {
+                      setState(() => _selectedCategory = 'all');
+                      Navigator.pop(context);
+                      _performSearch();
+                    },
+                  ),
+                  ..._categories.map((category) {
+                    return ListTile(
+                      title: Text(category),
+                      trailing: _selectedCategory == category
+                          ? const Icon(Icons.check, color: Colors.blue)
+                          : null,
+                      onTap: () {
+                        setState(() => _selectedCategory = category);
+                        Navigator.pop(context);
+                        _performSearch();
+                      },
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showStatusFilter() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Select Status',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            ...['all', 'pending', 'active', 'completed', 'rejected'].map((status) {
+              return ListTile(
+                title: Text(status == 'all' ? 'All Status' : status.toUpperCase()),
+                trailing: _selectedStatus == status
+                    ? const Icon(Icons.check, color: Colors.blue)
+                    : null,
+                onTap: () {
+                  setState(() => _selectedStatus = status);
+                  Navigator.pop(context);
+                  _performSearch();
+                },
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLocationFilter() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => FutureBuilder<List<String>>(
+        future: _getStates(),
+        builder: (context, snapshot) {
+          final states = snapshot.data ?? [];
+          return Container(
+            padding: const EdgeInsets.all(20),
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.7,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Select State',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: snapshot.connectionState == ConnectionState.waiting
+                      ? const Center(child: CircularProgressIndicator())
+                      : ListView(
+                          children: [
+                            ListTile(
+                              title: const Text('All States'),
+                              trailing: _selectedLocation == 'all'
+                                  ? const Icon(Icons.check, color: Colors.blue)
+                                  : null,
+                              onTap: () {
+                                setState(() => _selectedLocation = 'all');
+                                Navigator.pop(context);
+                                _performSearch();
+                              },
+                            ),
+                            ...states.map((state) {
+                              return ListTile(
+                                title: Text(state),
+                                trailing: _selectedLocation == state
+                                    ? const Icon(Icons.check, color: Colors.blue)
+                                    : null,
+                                onTap: () {
+                                  setState(() => _selectedLocation = state);
+                                  Navigator.pop(context);
+                                  _performSearch();
+                                },
+                              );
+                            }),
+                          ],
+                        ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<List<String>> _getStates() async {
+    try {
+      final postsSnapshot = await FirebaseFirestore.instance.collection('posts').get();
+      
+      final states = <String>{};
+      for (var doc in postsSnapshot.docs) {
+        final loc = doc.data()['location'] as String? ?? '';
+        if (loc.isNotEmpty) {
+          final state = _extractState(loc);
+          if (state.isNotEmpty) {
+            states.add(state);
+          }
+        }
+      }
+      
+      final stateList = states.toList()..sort();
+      return stateList;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  void _showRoleFilter() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Select Role',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              title: const Text('All Roles'),
+              trailing: _selectedRole == 'all'
+                  ? const Icon(Icons.check, color: Colors.blue)
+                  : null,
+              onTap: () {
+                setState(() => _selectedRole = 'all');
+                Navigator.pop(context);
+                _performSearch();
+              },
+            ),
+            ..._roles.map((role) {
+              return ListTile(
+                title: Text(_getRoleDisplayName(role)),
+                trailing: _selectedRole == role
+                    ? const Icon(Icons.check, color: Colors.blue)
+                    : null,
+                onTap: () {
+                  setState(() => _selectedRole = role);
+                  Navigator.pop(context);
+                  _performSearch();
+                },
+              );
+            }),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildUserCard(UserModel user) {
@@ -1223,3 +1365,76 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
     );
   }
 }
+
+// Filter Chip Widget (Similar to map_oversight_page)
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  const _FilterChip({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = value != 'All';
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.blue[50] : Colors.grey[100],
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isActive ? Colors.blue[300]! : Colors.grey[300]!,
+            width: isActive ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: isActive ? Colors.blue[700] : Colors.grey[800],
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 18,
+              color: isActive ? Colors.blue[700] : Colors.grey[600],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

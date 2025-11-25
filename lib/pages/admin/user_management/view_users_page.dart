@@ -147,83 +147,110 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   }
 
   Widget _buildActionButtons(UserModel user) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        // View Profile Button
-        ElevatedButton.icon(
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => UserDetailPage(user: user),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          // View Profile Button
+          ElevatedButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => UserDetailPage(user: user),
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue[50],
+              foregroundColor: Colors.blue[700],
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            ),
+            icon: const Icon(Icons.person, size: 16),
+            label: const Text(
+              'View',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
             ),
           ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue[50],
-            foregroundColor: Colors.blue[700],
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          ),
-          icon: const Icon(Icons.person, size: 16),
-          label: const Text(
-            'View Profile',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-          ),
-        ),
+          const SizedBox(width: 6),
 
-        // Warning Button (replaces Suspend)
-        ElevatedButton.icon(
-          onPressed: () {
-            if (user.isSuspended) {
-              _unsuspendUser(user);
-            } else {
-              _showWarningDialog(user);
-            }
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: user.isSuspended ? Colors.green[50] : Colors.orange[50],
-            foregroundColor: user.isSuspended ? Colors.green[700] : Colors.orange[700],
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+          // Warning Button
+          ElevatedButton.icon(
+            onPressed: () {
+              if (user.isSuspended) {
+                _unsuspendUser(user);
+              } else {
+                _showWarningDialog(user);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: user.isSuspended ? Colors.green[50] : Colors.orange[50],
+              foregroundColor: user.isSuspended ? Colors.green[700] : Colors.orange[700],
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            icon: Icon(
+              user.isSuspended ? Icons.check_circle : Icons.warning_amber,
+              size: 16,
+            ),
+            label: Text(
+              user.isSuspended ? 'Activate' : 'Warning',
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+            ),
           ),
-          icon: Icon(
-            user.isSuspended ? Icons.check_circle : Icons.warning_amber,
-            size: 16,
-          ),
-          label: Text(
-            user.isSuspended ? 'Activate' : 'Give Warning',
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-          ),
-        ),
+          const SizedBox(width: 6),
 
-        // Delete Button
-        ElevatedButton.icon(
-          onPressed: () {
-            _showDeleteDialog(user);
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.red[50],
-            foregroundColor: Colors.red[700],
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+          // Direct Suspend Button (only show if not suspended)
+          if (!user.isSuspended) ...[
+            ElevatedButton.icon(
+              onPressed: () {
+                _showSuspendDialog(user);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red[50],
+                foregroundColor: Colors.red[700],
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              ),
+              icon: const Icon(Icons.block, size: 16),
+              label: const Text(
+                'Suspend',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+              ),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            const SizedBox(width: 6),
+          ],
+
+          // Delete Button
+          ElevatedButton.icon(
+            onPressed: () {
+              _showDeleteDialog(user);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red[50],
+              foregroundColor: Colors.red[700],
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            ),
+            icon: const Icon(Icons.delete, size: 16),
+            label: const Text(
+              'Delete',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+            ),
           ),
-          icon: const Icon(Icons.delete, size: 16),
-          label: const Text(
-            'Delete',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -558,6 +585,174 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     } catch (e) {
       if (!mounted) return;
       _showSnackBar('Failed to unsuspend user: $e', isError: true);
+    }
+  }
+
+  Future<void> _showSuspendDialog(UserModel user) async {
+    final reasonController = TextEditingController();
+    final durationController = TextEditingController(text: '30'); // Default 30 days
+
+    await showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.block, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Suspend User Account'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'You are about to suspend ${user.fullName}\'s account immediately.',
+                style: const TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red[200]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber, color: Colors.red[700], size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'This will suspend the user immediately without waiting for 3 warnings.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.red[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Suspension Reason *',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: reasonController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  hintText: 'Explain why this account is being suspended...',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.all(12),
+                ),
+                textInputAction: TextInputAction.done,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Suspension Duration (Days)',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: durationController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: false),
+                decoration: const InputDecoration(
+                  hintText: 'Enter number of days (e.g., 30)',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.all(12),
+                  prefixIcon: Icon(Icons.calendar_today, size: 20),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Leave empty or enter 0 for indefinite suspension',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final suspensionReason = reasonController.text.trim();
+              final durationText = durationController.text.trim();
+
+              if (suspensionReason.isEmpty) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please provide a suspension reason'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              int? durationDays;
+              if (durationText.isNotEmpty) {
+                durationDays = int.tryParse(durationText);
+                if (durationDays == null || durationDays < 0) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter a valid number of days (0 or positive)'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+                // If 0, set to null for indefinite suspension
+                if (durationDays == 0) {
+                  durationDays = null;
+                }
+              }
+
+              Navigator.pop(context);
+              await _suspendUser(user, suspensionReason, durationDays);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Suspend Account'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _suspendUser(UserModel user, String suspensionReason, int? durationDays) async {
+    try {
+      await _userService.suspendUser(
+        user.id,
+        violationReason: suspensionReason,
+        durationDays: durationDays,
+      );
+
+      if (!mounted) return;
+
+      final durationText = durationDays != null 
+          ? ' for $durationDays day${durationDays == 1 ? '' : 's'}'
+          : ' indefinitely';
+      _showSnackBar('${user.fullName}\'s account has been suspended$durationText');
+
+      _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('Failed to suspend user: $e', isError: true);
     }
   }
 
@@ -1428,8 +1623,15 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
 
       if (result.success) {
         // If re-authentication is required, navigate immediately to prevent crashes
-        // DO NOT call _loadData() or _showSnackBar() as we're signed out
         if (result.requiresReauth) {
+          if (!mounted) return;
+          
+          // Show message first
+          _showSnackBar(result.message ?? 'Admin user "$name" created successfully. Please log in again.');
+          
+          // Wait a moment for the message to show, then navigate
+          await Future.delayed(const Duration(milliseconds: 500));
+          
           if (!mounted) return;
           
           // Navigate immediately to prevent any Firestore listeners from causing crashes
@@ -1437,25 +1639,14 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
             '/login',
             (route) => false,
           );
-          
-          // Show success message after navigation
-          Future.delayed(const Duration(milliseconds: 300), () {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    result.message ?? 'Admin user "$name" created successfully. Please log in again.',
-                  ),
-                  backgroundColor: Colors.green,
-                  duration: const Duration(seconds: 4),
-                ),
-              );
-            }
-          });
         } else {
           // Session was restored successfully - refresh data
           _showSnackBar(result.message ?? 'Admin user "$name" created successfully');
-          _loadData();
+          // Wait a moment before reloading to ensure session is fully restored
+          await Future.delayed(const Duration(milliseconds: 300));
+          if (mounted) {
+            _loadData();
+          }
         }
       } else {
         _showSnackBar(result.error ?? 'Failed to create admin user.', isError: true);

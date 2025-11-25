@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/pages/admin/post_moderation/approve_reject_posts_page.dart';
 import 'package:fyp_project/pages/admin/post_moderation/manage_tags_categories_page.dart';
 import 'package:fyp_project/pages/admin/post_moderation/content_analytics_page.dart';
-import 'package:fyp_project/pages/admin/post_moderation/bulk_actions_page.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 
 class PostModerationPage extends StatelessWidget {
@@ -238,23 +237,6 @@ class PostModerationPage extends StatelessWidget {
               );
             },
             stats: 'View analytics',
-            badgeCount: 0,
-          ),
-          _ManagementCard(
-            title: 'Bulk Actions',
-            description: 'Perform batch operations on multiple posts',
-            icon: Icons.playlist_add_check,
-            iconColor: Colors.green[700]!,
-            backgroundColor: Colors.green[50]!,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const BulkActionsPage(),
-                ),
-              );
-            },
-            stats: 'Bulk tools',
             badgeCount: 0,
           ),
         ],

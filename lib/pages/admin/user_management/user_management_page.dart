@@ -5,6 +5,7 @@ import 'package:fyp_project/pages/admin/user_management/view_users_page.dart';
 import 'package:fyp_project/pages/admin/user_management/user_actions_page.dart';
 import 'package:fyp_project/pages/admin/user_management/user_analytics_page.dart';
 import 'package:fyp_project/pages/admin/user_management/role_management_page.dart';
+import 'package:fyp_project/pages/admin/user_management/wallet_management_page.dart';
 import 'package:fyp_project/services/admin/auth_service.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 
@@ -200,6 +201,24 @@ class UserManagementPage extends StatelessWidget {
         stats: 'View Analytics',
       ),
     ];
+
+    // Add Wallet Management card only if user is not staff
+    if (userRole != 'staff') {
+      cards.add(
+        _ManagementCard(
+          title: 'Wallet Management',
+          description: 'Manage user wallet balances and transactions',
+          icon: Icons.account_balance_wallet,
+          iconColor: Colors.teal[700]!,
+          backgroundColor: Colors.teal[50]!,
+          onTap: () {
+            Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const WalletManagementPage()));
+          },
+          stats: 'Manage wallets',
+        ),
+      );
+    }
 
     // Add Role Management card if user has access
     if (canAccessRoleManagement) {

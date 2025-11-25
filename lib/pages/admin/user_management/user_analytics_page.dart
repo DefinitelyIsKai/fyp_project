@@ -19,6 +19,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
   final AnalyticsService _analyticsService = AnalyticsService();
   bool _isLoading = true;
   AnalyticsModel? _analytics;
+  AnalyticsModel? _allTimeAnalytics;
   List<AnalyticsModel> _weeklyAnalytics = [];
   DateTime _startDate = DateTime.now().subtract(const Duration(days: 30));
   DateTime _endDate = DateTime.now();
@@ -50,6 +51,12 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
       // Use the selected date range for analytics
       final analytics = await _analyticsService.getAnalyticsForRange(_startDate, _endDate);
       
+      // Get all-time analytics (from beginning to end date)
+      final allTimeAnalytics = await _analyticsService.getAnalyticsForRange(
+        DateTime(2020, 1, 1),
+        _endDate,
+      );
+      
       // Load data for charts - use the selected date range
       List<AnalyticsModel> weekly = [];
       final daysDiff = _endDate.difference(_startDate).inDays;
@@ -72,6 +79,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
       if (mounted) {
         setState(() {
           _analytics = analytics;
+          _allTimeAnalytics = allTimeAnalytics;
           _weeklyAnalytics = weekly;
           _isLoading = false;
         });
@@ -134,38 +142,53 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
     const double newDataIndicator = -999.0;
     if (rate == newDataIndicator) {
       // Show percentage based on current value when it's new data
+      // Cap all calculated percentages at 100%
       switch (metricType) {
         case 'userGrowth':
           return '100.0%';
         case 'activeUserGrowth':
-          return analytics.totalUsers > 0 
-              ? '${(analytics.activeUsers / analytics.totalUsers * 100).toStringAsFixed(1)}%'
-              : '0.0%';
+          if (analytics.totalUsers > 0) {
+            final calculated = (analytics.activeUsers / analytics.totalUsers * 100);
+            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
+          }
+          return '0.0%';
         case 'registrationGrowth':
-          return analytics.totalUsers > 0
-              ? '${(analytics.newRegistrations / analytics.totalUsers * 100).toStringAsFixed(1)}%'
-              : '100.0%';
+          if (analytics.totalUsers > 0) {
+            final calculated = (analytics.newRegistrations / analytics.totalUsers * 100);
+            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
+          }
+          return '100.0%';
         case 'engagementGrowth':
           return '${_capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%';
         case 'messageGrowth':
-          return analytics.totalUsers > 0
-              ? '${(analytics.totalMessages / analytics.totalUsers * 100).toStringAsFixed(1)}%'
-              : '0.0%';
+          if (analytics.totalUsers > 0) {
+            final calculated = (analytics.totalMessages / analytics.totalUsers * 100);
+            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
+          }
+          return '0.0%';
         case 'applicationGrowth':
-          return analytics.totalUsers > 0
-              ? '${(analytics.totalApplications / analytics.totalUsers * 100).toStringAsFixed(1)}%'
-              : '0.0%';
+          if (analytics.totalUsers > 0) {
+            final calculated = (analytics.totalApplications / analytics.totalUsers * 100);
+            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
+          }
+          return '0.0%';
         case 'reportGrowth':
-          return analytics.totalUsers > 0
-              ? '${(analytics.totalReports / analytics.totalUsers * 100).toStringAsFixed(1)}%'
-              : '0.0%';
-        case 'reportedMessageGrowth':
-          return analytics.totalMessages > 0
-              ? '${(analytics.reportedMessages / analytics.totalMessages * 100).toStringAsFixed(1)}%'
-              : '0.0%';
+          if (analytics.totalUsers > 0) {
+            final calculated = (analytics.totalReports / analytics.totalUsers * 100);
+            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
+          }
+          return '0.0%';
         default:
           return '0.0%';
       }
+    }
+    // Hide negative growth rates for registration, engagement, application, and message
+    if (rate < 0 && (metricType == 'registrationGrowth' || metricType == 'engagementGrowth' || metricType == 'applicationGrowth' || metricType == 'messageGrowth')) {
+      return '0.0%';
+    }
+    // Cap ALL growth rates at 100% to avoid misleading high percentages (for PDF and UI consistency)
+    if (rate > 100) {
+      return '100.0%';
     }
     return '${rate.toStringAsFixed(1)}%';
   }
@@ -174,12 +197,21 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
     return rate > 100.0 ? 100.0 : rate;
   }
 
+  double _capGrowthRate(double rate) {
+    // Cap growth rate at 100% to avoid misleading high percentages
+    if (rate > 100.0) return 100.0;
+    // Hide negative growth rates (show as 0)
+    if (rate < 0) return 0.0;
+    return rate;
+  }
+
   Future<void> _downloadPDF() async {
-    if (_analytics == null) return;
+    if (_analytics == null || _allTimeAnalytics == null) return;
 
     try {
       final pdf = pw.Document();
       final analytics = _analytics!;
+      final allTime = _allTimeAnalytics!;
 
       pdf.addPage(
         pw.MultiPage(
@@ -259,12 +291,12 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
                     bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
                   ),
                 ),
-                headers: ['Metric', 'Value'],
+                headers: ['Metric', 'All Time', 'Selected Period'],
                 data: [
-                  ['Total Users', analytics.totalUsers.toString()],
-                  ['Active Users', '${analytics.activeUsers.toString()} (${analytics.activeUserPercentage.toStringAsFixed(1)}%)'],
-                  ['Inactive Users', analytics.inactiveUsers.toString()],
-                  ['New Registrations', analytics.newRegistrations.toString()],
+                  ['Total Users', allTime.totalUsers.toString(), analytics.totalUsers.toString()],
+                  ['Active Users', allTime.activeUsers.toString(), analytics.activeUsers.toString()],
+                  ['Inactive Users', allTime.inactiveUsers.toString(), analytics.inactiveUsers.toString()],
+                  ['New Registrations', allTime.newRegistrations.toString(), analytics.newRegistrations.toString()],
                 ],
               ),
               pw.SizedBox(height: 20),
@@ -296,10 +328,11 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
                     bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
                   ),
                 ),
-                headers: ['Metric', 'Value'],
+                headers: ['Metric', 'All Time', 'Selected Period'],
                 data: [
-                  ['Engagement Rate', '${_capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%'],
-                  ['Job Applications', analytics.totalApplications.toString()],
+                  ['Engagement Rate', '${_capEngagementRate(allTime.engagementRate).toStringAsFixed(1)}%', '${_capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%'],
+                  ['Job Applications', allTime.totalApplications.toString(), analytics.totalApplications.toString()],
+                  ['Messages Sent', allTime.totalMessages.toString(), analytics.totalMessages.toString()],
                 ],
               ),
               pw.SizedBox(height: 20),
@@ -331,14 +364,13 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
                     bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
                   ),
                 ),
-                headers: ['Metric', 'Value'],
+                headers: ['Metric', 'All Time', 'Selected Period'],
                 data: [
-                  ['Total Reports', analytics.totalReports.toString()],
-                  ['Pending Reports', analytics.pendingReports.toString()],
-                  ['Resolved Reports', analytics.resolvedReports.toString()],
-                  ['Dismissed Reports', analytics.dismissedReports.toString()],
-                  ['Reported Messages', analytics.reportedMessages.toString()],
-                  ['Report Resolution Rate', '${analytics.reportResolutionRate.toStringAsFixed(1)}%'],
+                  ['Total Reports', allTime.totalReports.toString(), analytics.totalReports.toString()],
+                  ['Pending Reports', allTime.pendingReports.toString(), analytics.pendingReports.toString()],
+                  ['Resolved Reports', allTime.resolvedReports.toString(), analytics.resolvedReports.toString()],
+                  ['Dismissed Reports', allTime.dismissedReports.toString(), analytics.dismissedReports.toString()],
+                  ['Report Resolution Rate', '${allTime.reportResolutionRate.toStringAsFixed(1)}%', '${analytics.reportResolutionRate.toStringAsFixed(1)}%'],
                 ],
               ),
               pw.SizedBox(height: 20),
@@ -379,7 +411,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
                   ['Message Growth', _formatGrowthRate(analytics.messageGrowth, 'messageGrowth', analytics)],
                   ['Application Growth', _formatGrowthRate(analytics.applicationGrowth, 'applicationGrowth', analytics)],
                   ['Report Growth', _formatGrowthRate(analytics.reportGrowth, 'reportGrowth', analytics)],
-                  ['Reported Message Growth', _formatGrowthRate(analytics.reportedMessageGrowth, 'reportedMessageGrowth', analytics)],
                 ],
               ),
             ];
@@ -613,7 +644,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
               subtitle: 'All registered',
               color: Colors.blue,
               icon: Icons.people,
-              trend: _analytics!.userGrowthRate,
+              trend: _capGrowthRate(_analytics!.userGrowthRate),
             ),
           ),
           const SizedBox(width: 10),
@@ -625,19 +656,19 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
               subtitle: 'Currently online',
               color: Colors.green,
               icon: Icons.online_prediction,
-              trend: _analytics!.activeUserGrowth,
+              trend: _capGrowthRate(_analytics!.activeUserGrowth),
             ),
           ),
           const SizedBox(width: 10),
           SizedBox(
             width: MediaQuery.of(context).size.width * 0.45,
-            child: _QuickStatCard(
+            child:             _QuickStatCard(
               title: 'New Users',
               value: _analytics!.newRegistrations.toString(),
               subtitle: 'This period',
               color: Colors.orange,
               icon: Icons.person_add,
-              trend: _analytics!.registrationGrowth,
+              trend: _capGrowthRate(_analytics!.registrationGrowth),
             ),
           ),
           const SizedBox(width: 10),
@@ -738,12 +769,12 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
             _MetricRow(
               label: 'Total Users',
               value: _analytics!.totalUsers.toString(),
-              trend: _analytics!.userGrowthRate,
+              trend: _capGrowthRate(_analytics!.userGrowthRate),
             ),
             _MetricRow(
               label: 'Active Users',
               value: '${_analytics!.activeUsers.toString()} (${_analytics!.activeUserPercentage.toStringAsFixed(1)}%)',
-              trend: _analytics!.activeUserGrowth,
+              trend: _capGrowthRate(_analytics!.activeUserGrowth),
               subMetrics: {
                 'Inactive': _analytics!.inactiveUsers.toString(),
               },
@@ -751,7 +782,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
             _MetricRow(
               label: 'New Registrations',
               value: _analytics!.newRegistrations.toString(),
-              trend: _analytics!.registrationGrowth,
+              trend: _capGrowthRate(_analytics!.registrationGrowth),
             ),
           ],
         ),
@@ -792,17 +823,17 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
             _MetricRow(
               label: 'Engagement Rate',
               value: '${_capEngagementRate(_analytics!.engagementRate).toStringAsFixed(1)}%',
-              trend: _analytics!.engagementGrowth,
+              trend: _capGrowthRate(_analytics!.engagementGrowth),
             ),
             _MetricRow(
               label: 'Messages Sent',
               value: _analytics!.totalMessages.toString(),
-              trend: _analytics!.messageGrowth,
+              trend: _capGrowthRate(_analytics!.messageGrowth),
             ),
             _MetricRow(
               label: 'Job Applications',
               value: _analytics!.totalApplications.toString(),
-              trend: _analytics!.applicationGrowth,
+              trend: _capGrowthRate(_analytics!.applicationGrowth),
             ),
           ],
         ),
@@ -1069,17 +1100,12 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
             _MetricRow(
               label: 'Total Reports',
               value: _analytics!.totalReports.toString(),
-              trend: _analytics!.reportGrowth,
+              trend: _capGrowthRate(_analytics!.reportGrowth),
               subMetrics: {
                 'Pending': _analytics!.pendingReports.toString(),
                 'Resolved': _analytics!.resolvedReports.toString(),
                 'Dismissed': _analytics!.dismissedReports.toString(),
               },
-            ),
-            _MetricRow(
-              label: 'Reported Messages',
-              value: _analytics!.reportedMessages.toString(),
-              trend: _analytics!.reportedMessageGrowth,
             ),
             _MetricRow(
               label: 'Report Resolution Rate',

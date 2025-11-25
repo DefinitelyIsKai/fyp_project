@@ -11,7 +11,13 @@ service cloud.firestore {
       return request.auth != null;
     }
     
+    // Check if user is signed in (alias for isAuthenticated)
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
     // Get current user's document from users collection
+    // Only call this after checking exists() first
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
@@ -39,20 +45,15 @@ service cloud.firestore {
     }
     
     // Check if user is an admin (has admin role OR has any admin permissions)
-    // This allows dynamic roles to work without updating rules
     function isAdmin() {
       return userExistsAndActive() && (
-        // System roles (backward compatibility)
-        getUserData().role in ['manager', 'hr', 'staff', 'admin'] ||
-        // OR has any admin permissions (for dynamic roles)
+        getUserData().role in ['manager', 'hr', 'staff'] ||
         (getUserData().permissions is list && 
          getUserData().permissions.hasAny(['all', 'post_moderation', 'user_management', 'analytics', 'monitoring', 'system_config', 'message_oversight', 'role_management']))
       );
     }
     
     // Check if user has a specific permission
-    // Note: Firestore rules use hasAny() to check if array contains value
-    // This works for both system roles and dynamically created roles
     function hasPermission(permission) {
       return userExistsAndActive() && 
              getUserData().permissions is list &&
@@ -64,13 +65,15 @@ service cloud.firestore {
       return hasPermission('role_management');
     }
     
+    // Check if user is self
+    function isSelf(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
     // ============================================
     // ROLES COLLECTION
     // ============================================
     match /roles/{roleId} {
-      // Read and list: Allow any authenticated user to read/list roles
-      // This is needed for login validation, creating users, assigning roles, and viewing role information
-      // Write operations (create, update, delete) are explicitly denied
       allow read, list: if isAuthenticated();
       allow create, update, delete: if false;
     }
@@ -78,55 +81,138 @@ service cloud.firestore {
     // ============================================
     // USERS COLLECTION
     // ============================================
-    match /users/{userId} {
-      // Allow users to read their own document (needed for login)
-      allow read: if isAuthenticated() && request.auth.uid == userId;
+    
+    // CRITICAL: Allow list queries on users collection for admins
+    // This must come BEFORE the /users/{userId} rule
+    match /users/{document=**} {
+      // Allow admins to query (list) users collection
+      allow list: if hasPermission('user_management') || 
+                   isManager() || 
+                   isHR() || 
+                   isStaff();
       
-      // Allow users to create their own document (needed during registration/admin creation)
-      // This is needed because createUserWithEmailAndPassword signs in the new user
-      allow create: if isAuthenticated() && request.auth.uid == userId;
-      
-      // Permission-based: users with user_management permission can read/write
-      // Backward compatibility: system roles (manager, HR, staff) also have access
-      allow read, write: if hasPermission('user_management') || isManager() || isHR() || isStaff();
+      // Allow admins to get any user document
+      allow get: if hasPermission('user_management') || 
+                  isManager() || 
+                  isHR() || 
+                  isStaff();
     }
     
-    // Allow listing all users (for queries)
-    match /users/{document=**} {
-      allow read: if hasPermission('user_management') || isManager() || isHR() || isStaff();
+    // Individual user document rules
+    match /users/{userId} {
+      // Allow users to read their own document (needed for login)
+      allow get: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Allow admins to read any user document
+      allow get: if hasPermission('user_management') || 
+                  isManager() || 
+                  isHR() || 
+                  isStaff();
+      
+      // Allow create/update:
+      // 1. Users can create/update their own document (for registration)
+      // 2. Admins can create/update any user
+      allow create, update: if isSelf(userId) || 
+                            hasPermission('user_management') || 
+                            isManager() || 
+                            isHR() || 
+                            isStaff();
+      
+      allow delete: if false;
+    }
+    
+    // ============================================
+    // REPORTS COLLECTION
+    // ============================================
+    
+    // CRITICAL: Allow list queries on reports collection for admins
+    match /reports/{document=**} {
+      // Allow admins to query (list) reports collection
+      allow list: if hasPermission('user_management') || 
+                   hasPermission('post_moderation') || 
+                   isManager() || 
+                   isHR() || 
+                   isStaff();
+      
+      // Allow admins to get any report document
+      allow get: if hasPermission('user_management') || 
+                  hasPermission('post_moderation') || 
+                  isManager() || 
+                  isHR() || 
+                  isStaff();
+    }
+    
+    match /reports/{reportId} {
+      // Allow users to read their own reports
+      allow get: if isSignedIn() && resource.data.reporterId == request.auth.uid;
+      
+      // Allow admins to read any report
+      allow get: if hasPermission('user_management') || 
+                  hasPermission('post_moderation') || 
+                  isManager() || 
+                  isHR() || 
+                  isStaff();
+      
+      // Allow admins to query reports
+      allow list: if hasPermission('user_management') || 
+                   hasPermission('post_moderation') || 
+                   isManager() || 
+                   isHR() || 
+                   isStaff();
+      
+      // Authenticated users can create reports
+      allow create: if isSignedIn() &&
+        request.resource.data.reporterId == request.auth.uid &&
+        request.resource.data.type in ['post', 'jobseeker'] &&
+        request.resource.data.reason is string &&
+        request.resource.data.description is string &&
+        request.resource.data.status == 'pending';
+      
+      // Only admins can update/delete reports
+      allow update, delete: if hasPermission('user_management') || 
+                             hasPermission('post_moderation') || 
+                             isManager() || 
+                             isHR() || 
+                             isStaff();
     }
     
     // ============================================
     // POSTS COLLECTION
     // ============================================
     match /posts/{postId} {
-      // Permission-based: users with post_moderation permission can read/write
-      allow read, write: if hasPermission('post_moderation') || isManager() || isHR() || isStaff();
+      allow read, list, write: if hasPermission('post_moderation') || 
+                                 isManager() || 
+                                 isHR() || 
+                                 isStaff();
     }
     
     // ============================================
     // JOB POSTS COLLECTION (for analytics)
     // ============================================
     match /job_posts/{postId} {
-      // Permission-based: users with post_moderation or analytics permission can read/write
-      allow read, write: if hasPermission('post_moderation') || hasPermission('analytics') || isManager() || isHR() || isStaff();
+      allow read, list, write: if hasPermission('post_moderation') || 
+                                 hasPermission('analytics') || 
+                                 isManager() || 
+                                 isHR() || 
+                                 isStaff();
     }
     
     // ============================================
     // CATEGORIES COLLECTION
     // ============================================
     match /categories/{categoryId} {
-      // All authenticated users can read categories
-      allow read: if isAuthenticated();
+      allow read, list: if isSignedIn();
       
-      // Permission-based: users with post_moderation permission can create categories
-      allow create: if hasPermission('post_moderation') || isManager() || isHR() || isStaff();
+      allow create: if hasPermission('post_moderation') || 
+                     isManager() || 
+                     isHR() || 
+                     isStaff();
       
-      allow update: if isAuthenticated() && (
-        // Allow users with post_moderation permission to update any field
-        hasPermission('post_moderation') || isManager() || isHR() || isStaff() ||
-        // Allow any authenticated user to update only jobCount and updatedAt
-        // Verify all other fields remain unchanged
+      allow update: if isSignedIn() && (
+        hasPermission('post_moderation') || 
+        isManager() || 
+        isHR() || 
+        isStaff() ||
         (request.resource.data.name == resource.data.name &&
          request.resource.data.description == resource.data.description &&
          request.resource.data.isActive == resource.data.isActive &&
@@ -134,243 +220,137 @@ service cloud.firestore {
          request.resource.data.updatedAt is timestamp)
       );
       
-      // Permission-based: users with post_moderation permission can delete
-      allow delete: if hasPermission('post_moderation') || isManager() || isHR() || isStaff();
+      allow delete: if hasPermission('post_moderation') || 
+                     isManager() || 
+                     isHR() || 
+                     isStaff();
     }
     
     // ============================================
     // ANALYTICS / REPORTING
     // ============================================
     match /analytics/{docId} {
-      // Permission-based: users with analytics permission can read/write
-      allow read, write: if hasPermission('analytics') || isManager() || isHR();
+      allow read, list, write: if hasPermission('analytics') || 
+                                 isManager() || 
+                                 isHR();
     }
     
     // ============================================
-    // MESSAGES COLLECTION
-    // ============================================
-    match /messages/{msgId} {
-      // Permission-based: users with message_oversight permission can read/write
-      allow read, write: if hasPermission('message_oversight') || isManager() || isHR() || isStaff();
-    }
-    
-    // ============================================
-    // CONVERSATIONS COLLECTION
-    // ============================================
-    match /conversations/{conversationId} {
-      // Permission-based: users with message_oversight or analytics permission can read
-      // This is needed for analytics to count messages
-      allow read: if hasPermission('message_oversight') || 
-                     hasPermission('analytics') || 
-                     isManager() || 
-                     isHR() || 
-                     isStaff();
-      
-      // Allow write for message_oversight permission
-      allow write: if hasPermission('message_oversight') || isManager() || isHR() || isStaff();
-      
-      // Messages subcollection within conversations
-      match /messages/{messageId} {
-        // Permission-based: users with message_oversight or analytics permission can read
-        // This is needed for analytics to count messages
-        allow read: if hasPermission('message_oversight') || 
-                       hasPermission('analytics') || 
-                       isManager() || 
-                       isHR() || 
-                       isStaff();
-        
-        // Allow write for message_oversight permission
-        allow write: if hasPermission('message_oversight') || isManager() || isHR() || isStaff();
-      }
-    }
-    
-    // ============================================
-    // APPLICATIONS COLLECTION (for job applications)
-    // ============================================
-    match /applications/{applicationId} {
-      // Permission-based: users with post_moderation permission can read/write
-      allow read, write: if hasPermission('post_moderation') || isManager() || isHR() || isStaff();
-    }
-    
-    // ============================================
-    // REPORTS COLLECTION (for user/content reports)
-    // ============================================
-    match /reports/{reportId} {
-      // Permission-based: users with user_management or post_moderation permission can read/write
-      allow read, write: if hasPermission('user_management') || hasPermission('post_moderation') || isManager() || isHR() || isStaff();
-    }
-    
-    // ============================================
-    // PENDING PAYMENTS COLLECTION (for credit/revenue analytics)
-    // ============================================
-    match /pending_payments/{paymentId} {
-      // Permission-based: users with analytics permission can read/write
-      allow read, write: if hasPermission('analytics') || isManager() || isHR();
-    }
-    
-    // ============================================
-    // WALLETS COLLECTION
+    // WALLET COLLECTION
     // ============================================
     match /wallets/{walletId} {
-      // Allow users to read their own wallet
-      allow read: if isAuthenticated() && request.auth.uid == walletId;
-      // Permission-based: users with user_management permission can read/write
-      // Also allow managers and HR to access wallets
-      allow read, write: if hasPermission('user_management') || isManager() || isHR();
+      allow read, list, write: if hasPermission('user_management') || 
+                                 isManager() || 
+                                 isHR();
     }
     
     // ============================================
-    // LOGS COLLECTION (for tracking warnings, deductions, etc.)
+    // LOGS COLLECTION
     // ============================================
-    match /logs/{logId} {
-      // Permission-based: users with user_management, post_moderation, analytics, monitoring permissions, managers, or HR can read/write
-      allow read, write: if hasPermission('user_management') || hasPermission('post_moderation') || hasPermission('analytics') || hasPermission('monitoring') || isManager() || isHR();
-    }
     
-    // Allow listing all logs (for queries)
+    // Allow list queries on logs collection
     match /logs/{document=**} {
-      allow read: if hasPermission('user_management') || hasPermission('post_moderation') || hasPermission('analytics') || hasPermission('monitoring') || isManager() || isHR();
+      allow list: if hasPermission('user_management') || 
+                   isManager() || 
+                   isHR();
+      
+      allow get: if hasPermission('user_management') || 
+                  isManager() || 
+                  isHR();
+    }
+    
+    match /logs/{logId} {
+      allow read, write: if hasPermission('user_management') || 
+                          isManager() || 
+                          isHR();
     }
     
     // ============================================
-    // REVIEWS COLLECTION (for ratings/reviews)
+    // APPLICATIONS COLLECTION
     // ============================================
-    match /reviews/{reviewId} {
-      // Read: 
-      // 1. Users can read their own reviews (as employer or employee)
-      // 2. Admins with message_oversight permission can read all reviews
-      allow read: if isAuthenticated() && (
-        request.auth.uid == resource.data.employerId ||
-        request.auth.uid == resource.data.employeeId ||
-        hasPermission('message_oversight') || isManager() || isHR() || isStaff()
-      );
-      
-      // Create:
-      // 1. Authenticated users can create reviews (employers rating employees)
-      // 2. Must be the employer creating the review
-      allow create: if isAuthenticated() && 
-                     request.auth.uid == request.resource.data.employerId &&
-                     request.resource.data.keys().hasAll(['employerId', 'employeeId', 'postId', 'rating', 'createdAt']) &&
-                     request.resource.data.employerId is string &&
-                     request.resource.data.employeeId is string &&
-                     request.resource.data.postId is string &&
-                     request.resource.data.rating is number &&
-                     request.resource.data.rating >= 1 &&
-                     request.resource.data.rating <= 5 &&
-                     request.resource.data.createdAt is timestamp;
-      
-      // Update:
-      // 1. Only admins with message_oversight permission can update reviews (for moderation)
-      // 2. Users cannot update their own reviews after creation
-      allow update: if hasPermission('message_oversight') || isManager() || isHR() || isStaff();
-      
-      // Delete:
-      // 1. Only admins with message_oversight permission can delete reviews
-      allow delete: if hasPermission('message_oversight') || isManager() || isHR() || isStaff();
+    match /applications/{applicationId} {
+      allow read, list, write: if hasPermission('post_moderation') || 
+                                 isManager() || 
+                                 isHR() || 
+                                 isStaff();
     }
     
-    // Allow listing all reviews (for queries)
-    match /reviews/{document=**} {
-      allow read: if hasPermission('message_oversight') || isManager() || isHR() || isStaff();
+    // ============================================
+    // PENDING PAYMENTS COLLECTION
+    // ============================================
+    match /pending_payments/{paymentId} {
+      allow read, list, write: if hasPermission('analytics') || 
+                                 isManager() || 
+                                 isHR();
     }
     
     // ============================================
     // NOTIFICATIONS COLLECTION
     // ============================================
     match /notifications/{notificationId} {
-      // Permission-based: users with user_management permission can read/write
-      allow write: if hasPermission('user_management') || isManager() || isHR() || isStaff();
-      // All authenticated users can read their own notifications
-      allow read: if isAuthenticated();
+      allow write: if hasPermission('user_management') || 
+                    isManager() || 
+                    isHR() || 
+                    isStaff();
+      
+      allow read, list: if isAuthenticated();
     }
     
     // ============================================
     // TAG CATEGORIES COLLECTION
     // ============================================
     match /tagCategories/{tagCategoryId} {
-      // All authenticated users can read tag categories
-      allow read: if isAuthenticated();
-      // Permission-based: users with post_moderation permission can write
-      allow write: if hasPermission('post_moderation') || isManager() || isHR() || isStaff();
+      allow read, list: if isSignedIn();
+      allow write: if hasPermission('post_moderation') || 
+                    isManager() || 
+                    isHR() || 
+                    isStaff();
     }
     
     // ============================================
     // TAGS COLLECTION
     // ============================================
     match /tags/{tagId} {
-      // All authenticated users can read tags
-      allow read: if isAuthenticated();
-      // Permission-based: users with post_moderation permission can write
-      allow write: if hasPermission('post_moderation') || isManager() || isHR() || isStaff();
+      allow read, list: if isSignedIn();
+      allow write: if hasPermission('post_moderation') || 
+                    isManager() || 
+                    isHR() || 
+                    isStaff();
     }
     
     // ============================================
-    // ADMINS COLLECTION (if still used)
-    // ============================================
-    match /admins/{adminId} {
-      // Allow admins to read their own data
-      allow read: if isAuthenticated() && request.auth.uid == adminId;
-      // Only allow writes by authenticated users (you may want to restrict this further)
-      allow write: if isAuthenticated();
-    }
-    
-    // ============================================
-    // MATCHING RULES COLLECTION (for algorithm weights configuration)
+    // MATCHING RULES COLLECTION
     // ============================================
     match /matching_rules/{ruleId} {
-      // All authenticated users can read matching rules (needed for matching engine)
-      // This allows the matching engine to read the configured weights
-      allow read: if isAuthenticated();
-      
-      // Only admins with system_config permission can write matching rules
-      allow write: if hasPermission('system_config') || isManager() || isHR() || isStaff();
+      allow read, list: if isAuthenticated();
+      allow write: if hasPermission('system_config') || 
+                    isManager() || 
+                    isHR() || 
+                    isStaff();
     }
     
     // ============================================
-    // SYSTEM CONFIG COLLECTION (for general system settings)
+    // SYSTEM CONFIG COLLECTION
     // ============================================
     match /system_config/{configId} {
-      // All authenticated users can read system config (needed for matching engine and other services)
-      allow read: if isAuthenticated();
-      
-      // Only admins with system_config permission can write system config
-      allow write: if hasPermission('system_config') || isManager() || isHR() || isStaff();
+      allow read, list: if isAuthenticated();
+      allow write: if hasPermission('system_config') || 
+                    isManager() || 
+                    isHR() || 
+                    isStaff();
     }
     
     // ============================================
-    // BOOKING RULES COLLECTION (for booking/appointment rules)
-    // ============================================
-    match /booking_rules/{ruleId} {
-      // All authenticated users can read booking rules
-      allow read: if isAuthenticated();
-      
-      // Only admins with system_config permission can write booking rules
-      allow write: if hasPermission('system_config') || isManager() || isHR() || isStaff();
-    }
-    
-    // ============================================
-    // JOB MATCHES COLLECTION (created by matching engine)
+    // JOB MATCHES COLLECTION
     // ============================================
     match /job_matches/{matchId} {
-      // Allow get (single document read) if user is the jobseeker or recruiter
       allow get: if isAuthenticated() && (
         resource.data.jobseekerId == request.auth.uid ||
         resource.data.recruiterId == request.auth.uid
       );
       
-      // Allow list (query) operations - needed for where() queries
-      // Jobseekers can query their own matches by jobseekerId
-      // Recruiters can query matches by recruiterId
-      // Note: Firestore rules cannot inspect query filters directly,
-      // but we allow list operations for authenticated users
-      // Each document returned must pass the allow get check above
       allow list: if isAuthenticated();
       
-      // Allow create by matching engine (any authenticated user can create matches)
-      // This allows the matching engine to create matches for jobseekers and recruiters
-      // Validate that required fields are present
-      // Note: job_matches status should only be 'pending' (not yet applied) or 'applied' (user has applied)
-      // After application, status should be tracked in 'applications' collection
       allow create: if isAuthenticated() &&
         request.resource.data.jobId is string &&
         request.resource.data.jobTitle is string &&
@@ -379,27 +359,17 @@ service cloud.firestore {
         request.resource.data.jobseekerId is string &&
         request.resource.data.status is string &&
         request.resource.data.status in ['pending', 'applied'] &&
-        // Validate matchingStrategy if present (optional field for display purposes)
         (request.resource.data.matchingStrategy == null ||
          request.resource.data.matchingStrategy is string &&
          request.resource.data.matchingStrategy in ['embedding_ann', 'stable_optimal']);
       
-      // Allow update:
-      // 1. Jobseeker can update status to 'applied' (when applying to a match)
-      // 2. Matching engine can update matches (for recomputation)
-      // Note: After 'applied', further status changes should be in 'applications' collection
       allow update: if isAuthenticated() && (
-        // Jobseeker updating their own match status to 'applied'
         (resource.data.jobseekerId == request.auth.uid &&
          request.resource.data.status == 'applied' &&
          resource.data.status == 'pending' &&
-         // Ensure critical fields remain unchanged
          request.resource.data.jobId == resource.data.jobId &&
          request.resource.data.jobseekerId == resource.data.jobseekerId &&
          request.resource.data.recruiterId == resource.data.recruiterId) ||
-        // Matching engine can update matches (for recomputation)
-        // This allows the matching engine to update existing matches when recomputing
-        // Validate that all required fields are present and status is valid
         (request.resource.data.jobId is string &&
          request.resource.data.jobTitle is string &&
          request.resource.data.companyName is string &&
@@ -407,11 +377,9 @@ service cloud.firestore {
          request.resource.data.jobseekerId is string &&
          request.resource.data.status is string &&
          request.resource.data.status in ['pending', 'applied'] &&
-         // Validate matchingStrategy if present (optional field for display purposes)
          (request.resource.data.matchingStrategy == null ||
           request.resource.data.matchingStrategy is string &&
           request.resource.data.matchingStrategy in ['embedding_ann', 'stable_optimal']) &&
-         // Ensure critical IDs remain unchanged (matching engine should not change these)
          request.resource.data.jobId == resource.data.jobId &&
          request.resource.data.jobseekerId == resource.data.jobseekerId &&
          request.resource.data.recruiterId == resource.data.recruiterId)
@@ -421,38 +389,42 @@ service cloud.firestore {
     }
     
     // ============================================
-    // BOOKING REQUESTS COLLECTION
+    // MESSAGES COLLECTION
     // ============================================
-    match /booking_requests/{requestId} {
-      // Allow read if user is the jobseeker or recruiter
-      allow get: if isAuthenticated() && (
-        resource.data.jobseekerId == request.auth.uid ||
-        resource.data.recruiterId == request.auth.uid
-      );
+    match /messages/{msgId} {
+      allow read, list, write: if hasPermission('message_oversight') || 
+                                 isManager() || 
+                                 isHR() || 
+                                 isStaff();
+    }
+    
+    // ============================================
+    // CONVERSATIONS COLLECTION
+    // ============================================
+    match /conversations/{conversationId} {
+      allow read, list: if hasPermission('message_oversight') || 
+                         hasPermission('analytics') || 
+                         isManager() || 
+                         isHR() || 
+                         isStaff();
       
-      // Allow list (query) operations - needed for where() queries
-      // Jobseekers can query their own requests by jobseekerId and status
-      // Recruiters can query requests by recruiterId
-      allow list: if isAuthenticated();
+      allow write: if hasPermission('message_oversight') || 
+                    isManager() || 
+                    isHR() || 
+                    isStaff();
       
-      // Jobseekers can create booking requests for themselves with pending status
-      allow create: if isAuthenticated() &&
-        request.resource.data.jobseekerId == request.auth.uid &&
-        request.resource.data.status == 'pending';
-      
-      // Only recruiters can update booking requests (approve/reject)
-      allow update: if isAuthenticated() &&
-        resource.data.recruiterId == request.auth.uid &&
-        request.resource.data.status in ['approved', 'rejected'] &&
-        request.resource.data.jobseekerId == resource.data.jobseekerId &&
-        request.resource.data.recruiterId == resource.data.recruiterId &&
-        request.resource.data.slotId == resource.data.slotId &&
-        request.resource.data.matchId == resource.data.matchId;
-      
-      // Admins with system_config permission can also read/write for management
-      allow read, write: if hasPermission('system_config') || isManager() || isHR() || isStaff();
-      
-      allow delete: if false;
+      match /messages/{messageId} {
+        allow read, list: if hasPermission('message_oversight') || 
+                           hasPermission('analytics') || 
+                           isManager() || 
+                           isHR() || 
+                           isStaff();
+        
+        allow write: if hasPermission('message_oversight') || 
+                      isManager() || 
+                      isHR() || 
+                      isStaff();
+      }
     }
     
     // ============================================
@@ -463,3 +435,4 @@ service cloud.firestore {
     }
   }
 }
+
