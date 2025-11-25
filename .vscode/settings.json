@@ -1,0 +1,25 @@
+{
+  // Explicitly identify this as a Flutter project
+  "dart.flutterSdkPath": null,
+  "dart.projectSearchDepth": 3,
+  
+  // Flutter-specific settings
+  "dart.enableSdkFormatter": true,
+  "dart.lineLength": 120,
+  
+  // Ensure Flutter is detected correctly
+  "files.exclude": {
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/CVS": true,
+    "**/.DS_Store": true
+  },
+  
+  // File associations
+  "files.associations": {
+    "*.dart": "dart"
+  }
+}
+
+

@@ -1,0 +1,1051 @@
+import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../services/user/wallet_service.dart';
+import '../../../models/user/wallet.dart';
+import '../../../utils/user/dialog_utils.dart';
+import '../../../utils/user/date_utils.dart' as DateUtilsHelper;
+import '../../../utils/user/timestamp_utils.dart';
+import '../../../widgets/user/loading_indicator.dart';
+import '../../../widgets/user/empty_state.dart';
+import '../../../widgets/admin/dialogs/user_dialogs/add_credits_dialog.dart';
+
+class CreditWalletPage extends StatefulWidget {
+  const CreditWalletPage({super.key});
+
+  @override
+  State<CreditWalletPage> createState() => _CreditWalletPageState();
+}
+
+class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBindingObserver {
+  final WalletService _walletService = WalletService();
+  WalletTxnType? _selectedFilter;
+  List<Map<String, dynamic>> _pendingPayments = [];
+  
+  // Pagination state
+  final PageController _pageController = PageController();
+  List<List<_UnifiedTransaction>> _pages = [];
+  int _currentPage = 0;
+  bool _isLoading = false;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+  List<_UnifiedTransaction> _allTransactions = [];
+  static const int _itemsPerPage = 10;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPendingPayments();
+      _refreshPendingPayments();
+      _loadInitialTransactions();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadInitialTransactions() async {
+    if (_isLoading) return;
+    
+    setState(() {
+      _isLoading = true;
+      _hasMore = true;
+    });
+
+    try {
+      final transactions = await _walletService.loadInitialTransactions(limit: _itemsPerPage);
+      final cancelledPayments = await _walletService.loadInitialCancelledPayments(limit: _itemsPerPage);
+
+      // Convert to unified format
+      final unified = <_UnifiedTransaction>[];
+      
+      for (final txn in transactions) {
+        unified.add(_UnifiedTransaction(
+          id: txn.id,
+          type: txn.type,
+          amount: txn.amount,
+          description: txn.description,
+          createdAt: txn.createdAt,
+          isCancelled: false,
+        ));
+      }
+
+      for (final payment in cancelledPayments) {
+        final credits = payment['credits'] as int? ?? 0;
+        final createdAt = TimestampUtils.parseTimestamp(payment['createdAt']);
+        unified.add(_UnifiedTransaction(
+          id: payment['id'] as String? ?? '',
+          type: WalletTxnType.credit,
+          amount: credits,
+          description: 'Top-up payment (Cancelled)',
+          createdAt: createdAt,
+          isCancelled: true,
+        ));
+      }
+
+      // Sort by date
+      unified.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      if (!mounted) return;
+
+      if (!mounted) return;
+
+      // Organize into pages
+      final pages = <List<_UnifiedTransaction>>[];
+      for (int i = 0; i < unified.length; i += _itemsPerPage) {
+        final end = (i + _itemsPerPage < unified.length) 
+            ? i + _itemsPerPage 
+            : unified.length;
+        pages.add(unified.sublist(i, end));
+      }
+      if (pages.isEmpty && unified.isNotEmpty) {
+        pages.add(unified);
+      }
+
+      setState(() {
+        _allTransactions = unified;
+        _pages = pages;
+        _hasMore = unified.length >= _itemsPerPage;
+        _isLoading = false;
+        _currentPage = 0;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+      print('Error loading initial transactions: $e');
+    }
+  }
+
+  Future<void> _loadMoreTransactions() async {
+    if (_isLoadingMore || !_hasMore || _allTransactions.isEmpty) return;
+
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    try {
+      final lastTransaction = _allTransactions.last;
+      
+      // Load more regular transactions
+      final moreTransactions = await _walletService.loadMoreTransactions(
+        lastTransactionTime: lastTransaction.createdAt,
+        lastTransactionId: lastTransaction.isCancelled ? null : lastTransaction.id,
+        limit: _itemsPerPage,
+      );
+
+      // Convert to unified format
+      final unified = <_UnifiedTransaction>[];
+      
+      for (final txn in moreTransactions) {
+        unified.add(_UnifiedTransaction(
+          id: txn.id,
+          type: txn.type,
+          amount: txn.amount,
+          description: txn.description,
+          createdAt: txn.createdAt,
+          isCancelled: false,
+        ));
+      }
+
+      // For cancelled payments, we'll load all and filter client-side
+      // This is simpler since cancelled payments are less common
+      final allCancelled = await _walletService.loadInitialCancelledPayments(limit: 1000);
+      final existingIds = _allTransactions
+          .where((t) => t.isCancelled)
+          .map((t) => t.id)
+          .toSet();
+      
+      for (final payment in allCancelled) {
+        if (existingIds.contains(payment['id'])) continue;
+        
+        final credits = payment['credits'] as int? ?? 0;
+        final createdAt = TimestampUtils.parseTimestamp(payment['createdAt']);
+        
+        // Only add if it's older than the last transaction
+        if (createdAt.isBefore(lastTransaction.createdAt) ||
+            (createdAt.isAtSameMomentAs(lastTransaction.createdAt) &&
+             payment['id'] as String != lastTransaction.id)) {
+          unified.add(_UnifiedTransaction(
+            id: payment['id'] as String? ?? '',
+            type: WalletTxnType.credit,
+            amount: credits,
+            description: 'Top-up payment (Cancelled)',
+            createdAt: createdAt,
+            isCancelled: true,
+          ));
+        }
+      }
+
+      if (!mounted) return;
+
+      if (!mounted) return;
+
+      if (unified.isEmpty) {
+        setState(() {
+          _hasMore = false;
+          _isLoadingMore = false;
+        });
+        return;
+      }
+
+      // Add new transactions and re-sort
+      _allTransactions.addAll(unified);
+      _allTransactions.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      // Reorganize into pages
+      final pages = <List<_UnifiedTransaction>>[];
+      for (int i = 0; i < _allTransactions.length; i += _itemsPerPage) {
+        final end = (i + _itemsPerPage < _allTransactions.length) 
+            ? i + _itemsPerPage 
+            : _allTransactions.length;
+        pages.add(_allTransactions.sublist(i, end));
+      }
+
+      setState(() {
+        _pages = pages;
+        if (unified.length < _itemsPerPage) {
+          _hasMore = false;
+        }
+        _isLoadingMore = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingMore = false;
+      });
+      print('Error loading more transactions: $e');
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      _checkPendingPayments();
+    }
+  }
+
+  Future<void> _checkPendingPayments() async {
+    if (!mounted) return;
+    try {
+      await _walletService.checkAndCreditPendingPayments();
+      // Also refresh pending payments list
+      await _refreshPendingPayments();
+    } catch (e) {
+      print('Error checking pending payments: $e');
+    }
+  }
+
+  Future<void> _refreshPendingPayments() async {
+    try {
+      // Get pending payments directly as a one-time fetch
+      final pendingPayments = await _walletService.getPendingPayments();
+      if (mounted) {
+        setState(() {
+          _pendingPayments = pendingPayments;
+        });
+      }
+    } catch (e) {
+      print('Error refreshing pending payments: $e');
+    }
+  }
+
+
+  void _showAddCreditDialog() {
+    AddCreditsDialog.show(
+      context: context,
+      walletService: _walletService,
+      onTopUpStarted: () {
+        // Refresh pending payments when top-up starts
+        _refreshPendingPayments();
+      },
+    );
+  }
+
+
+  Future<void> _openPendingPayment(String checkoutUrl) async {
+    try {
+      final url = Uri.parse(checkoutUrl);
+      final ok = await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (!ok) {
+        if (!mounted) return;
+        DialogUtils.showWarningMessage(
+          context: context,
+          message: 'Could not open payment page',
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      DialogUtils.showWarningMessage(
+        context: context,
+        message: 'Failed to open payment: $e',
+      );
+    }
+  }
+
+  Future<void> _cancelPendingPayment(String sessionId, String paymentId) async {
+    if (!mounted) return;
+    
+    // Show confirmation dialog using the existing widget
+    final confirmed = await DialogUtils.showConfirmationDialog(
+      context: context,
+      title: 'Cancel Payment?',
+      message: 'Are you sure you want to cancel this pending payment? You can start a new top-up after cancelling.',
+      icon: Icons.cancel_outlined,
+      confirmText: 'Yes, Cancel',
+      cancelText: 'No',
+      isDestructive: true,
+    );
+
+    if (confirmed != true) return;
+
+    if (!mounted) return;
+
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: CircularProgressIndicator(
+          color: const Color(0xFF00C8A0),
+        ),
+      ),
+    );
+
+    try {
+      await _walletService.cancelPendingPayment(sessionId);
+      
+      if (!mounted) return;
+      
+      // Close loading dialog
+      Navigator.of(context).pop();
+      
+      // Refresh pending payments
+      await _refreshPendingPayments();
+      
+      // Show success message
+      DialogUtils.showSuccessMessage(
+        context: context,
+        message: 'Payment cancelled successfully',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      
+      // Close loading dialog
+      Navigator.of(context).pop();
+      
+      DialogUtils.showWarningMessage(
+        context: context,
+        message: 'Failed to cancel payment: $e',
+      );
+    }
+  }
+
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text(
+          'Wallet',
+          style: TextStyle(
+            color: Colors.black,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 1,
+        iconTheme: const IconThemeData(color: Colors.black),
+      ),
+      body: Column(
+        children: [
+          // Pending Payments Section
+          StreamBuilder<List<Map<String, dynamic>>>(
+            stream: _walletService.streamPendingPayments(),
+            builder: (context, snap) {
+              // Use stream data if available, otherwise fallback to cached data
+              List<Map<String, dynamic>> pendingPayments = [];
+              
+              if (snap.hasData) {
+                pendingPayments = snap.data ?? [];
+                // Update cached data
+                _pendingPayments = pendingPayments;
+              } else if (snap.hasError) {
+                print('Error loading pending payments from stream: ${snap.error}');
+                // Use cached data as fallback
+                pendingPayments = _pendingPayments;
+              } else {
+                // Still loading or no data, use cached
+                pendingPayments = _pendingPayments;
+              }
+              
+              print('Pending payments count in UI: ${pendingPayments.length}');
+              if (pendingPayments.isNotEmpty) {
+                print('Pending payments data: $pendingPayments');
+              }
+              
+              if (pendingPayments.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              
+              return Container(
+                margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.orange.shade200,
+                    width: 1.5,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.pending_actions,
+                          color: Colors.orange.shade700,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Pending Payment',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.orange.shade900,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ...pendingPayments.map((payment) {
+                      final credits = payment['credits'] as int? ?? 0;
+                      final amount = payment['amount'] as int? ?? 0;
+                      final checkoutUrl = payment['checkoutUrl'] as String? ?? '';
+                      final createdAt = TimestampUtils.parseTimestamp(payment['createdAt']);
+                      final dateStr = DateUtilsHelper.DateUtils.formatRelativeDate(createdAt);
+                      final amountDollars = (amount / 100).toStringAsFixed(2);
+                      
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.orange.shade300,
+                          ),
+                        ),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          leading: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade100,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.payment,
+                              color: Colors.orange.shade700,
+                              size: 20,
+                            ),
+                          ),
+                          title: Text(
+                            '$credits credits - \$$amountDollars',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Started $dateStr',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 12,
+                            ),
+                          ),
+                          trailing: SizedBox(
+                            width: 140,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                OutlinedButton(
+                                  onPressed: () => _cancelPendingPayment(
+                                    payment['sessionId'] as String? ?? '',
+                                    payment['id'] as String? ?? '',
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.grey.shade700,
+                                    side: BorderSide(color: Colors.grey.shade400),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    minimumSize: const Size(60, 32),
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  child: const Text(
+                                    'Cancel',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                ElevatedButton(
+                                  onPressed: checkoutUrl.isNotEmpty
+                                      ? () => _openPendingPayment(checkoutUrl)
+                                      : null,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.orange.shade600,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    minimumSize: const Size(70, 32),
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  child: const Text(
+                                    'Complete',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Please complete your pending payment before starting a new top-up.',
+                      style: TextStyle(
+                        color: Colors.orange.shade800,
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          
+          // Balance Card
+          Container(
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFF00C8A0),
+                  const Color(0xFF00C8A0).withOpacity(0.8),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF00C8A0).withOpacity(0.3),
+                  blurRadius: 15,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.account_balance_wallet,
+                    size: 30,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Current Balance',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                StreamBuilder<Wallet>(
+                  stream: _walletService.streamWallet(),
+                  builder: (context, snap) {
+                    if (snap.connectionState == ConnectionState.waiting) {
+                      return const CircularProgressIndicator(color: Colors.white);
+                    }
+                    
+                    if (snap.hasError) {
+                      return const Text(
+                        '0',
+                        style: TextStyle(
+                          fontSize: 42,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      );
+                    }
+                    
+                    final wallet = snap.data;
+                    final int balance = wallet?.balance ?? 0;
+                    final int heldCredits = wallet?.heldCredits ?? 0;
+                    final int availableBalance = balance - heldCredits;
+                    
+                    return Column(
+                      children: [
+                        Text(
+                          availableBalance.toString(),
+                          style: const TextStyle(
+                            fontSize: 42,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (heldCredits > 0)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              '$heldCredits on hold',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white.withOpacity(0.8),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Credits',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                StreamBuilder<List<Map<String, dynamic>>>(
+                  stream: _walletService.streamPendingPayments(),
+                  builder: (context, snap) {
+                    final hasPending = (snap.data?.isNotEmpty ?? false);
+                    
+                    return SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: hasPending ? null : _showAddCreditDialog,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: hasPending 
+                              ? Colors.grey.shade300 
+                              : Colors.white,
+                          foregroundColor: hasPending 
+                              ? Colors.grey.shade600 
+                              : const Color(0xFF00C8A0),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: hasPending ? 0 : 2,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              hasPending ? Icons.block : Icons.add,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              hasPending 
+                                  ? 'Complete Pending Payment First'
+                                  : 'Add Credits',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          // Filter Chips
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                Text(
+                  'Transactions',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[700],
+                  ),
+                ),
+                const Spacer(),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    _buildFilterChip('All', _selectedFilter == null),
+                    _buildFilterChip('Added', _selectedFilter == WalletTxnType.credit),
+                    _buildFilterChip('Spent', _selectedFilter == WalletTxnType.debit),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Transactions List
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: _buildTransactionsList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTransactionsList() {
+    if (_isLoading) {
+      return const LoadingIndicator.standard();
+    }
+
+    // Apply filter to pages
+    final filteredPages = _selectedFilter == null
+        ? _pages
+        : _pages
+            .map((page) => page.where((t) {
+              // For "Added" filter, only show credit transactions that are NOT cancelled
+              if (_selectedFilter == WalletTxnType.credit) {
+                return t.type == WalletTxnType.credit && !t.isCancelled;
+              }
+              // For "Spent" filter, show debit transactions (cancelled payments are not debits)
+              return t.type == _selectedFilter;
+            }).toList())
+            .where((page) => page.isNotEmpty)
+            .toList();
+
+    if (filteredPages.isEmpty || filteredPages.every((page) => page.isEmpty)) {
+      return const EmptyState.noTransactions();
+    }
+
+    // Check if we need to load more when reaching the last page
+    if (_currentPage >= filteredPages.length - 1 && _hasMore && !_isLoadingMore) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadMoreTransactions();
+      });
+    }
+
+    return Column(
+      children: [
+        Expanded(
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount: filteredPages.length + (_isLoadingMore ? 1 : 0),
+            onPageChanged: (index) {
+              setState(() {
+                _currentPage = index;
+              });
+              // Load more if approaching the end
+              if (index >= filteredPages.length - 2 && _hasMore && !_isLoadingMore) {
+                _loadMoreTransactions();
+              }
+            },
+            itemBuilder: (context, pageIndex) {
+              if (pageIndex == filteredPages.length) {
+                // Loading page
+                return const LoadingIndicator.standard();
+              }
+
+              final pageTransactions = filteredPages[pageIndex];
+              return ListView.builder(
+                padding: const EdgeInsets.all(8),
+                itemCount: pageTransactions.length,
+                itemBuilder: (context, index) {
+                  final t = pageTransactions[index];
+                  final bool isCredit = t.type == WalletTxnType.credit;
+                  final dateStr = DateUtilsHelper.DateUtils.formatRelativeDate(t.createdAt);
+                  
+                  // Check for held credits flow
+                  final bool isOnHold = t.description.contains('(On Hold)');
+                  final bool isReleased = t.description.contains('(Released)');
+                  
+                  // Determine colors based on transaction type
+                  Color iconColor;
+                  Color backgroundColor;
+                  IconData iconData;
+                  
+                  if (t.isCancelled) {
+                    iconColor = Colors.grey;
+                    backgroundColor = Colors.grey.withOpacity(0.1);
+                    iconData = Icons.cancel_outlined;
+                  } else if (isOnHold) {
+                    iconColor = Colors.orange.shade700;
+                    backgroundColor = Colors.orange.withOpacity(0.1);
+                    iconData = Icons.lock_clock;
+                  } else if (isReleased) {
+                    iconColor = const Color(0xFF00C8A0);
+                    backgroundColor = const Color(0xFF00C8A0).withOpacity(0.1);
+                    iconData = Icons.lock_open;
+                  } else if (isCredit) {
+                    iconColor = const Color(0xFF00C8A0);
+                    backgroundColor = const Color(0xFF00C8A0).withOpacity(0.1);
+                    iconData = Icons.add;
+                  } else {
+                    iconColor = Colors.red;
+                    backgroundColor = Colors.red.withOpacity(0.1);
+                    iconData = Icons.remove;
+                  }
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: t.isCancelled 
+                            ? Colors.grey[300]! 
+                            : (isOnHold ? Colors.orange.shade200 : Colors.grey[100]!),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Opacity(
+                      opacity: t.isCancelled ? 0.6 : 1.0,
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        leading: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: backgroundColor,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            iconData,
+                            color: iconColor,
+                            size: 20,
+                          ),
+                        ),
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                t.description,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: t.isCancelled 
+                                      ? Colors.grey[700] 
+                                      : Colors.black,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ),
+                            if (t.isCancelled)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[200],
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'Cancelled',
+                                  style: TextStyle(
+                                    color: Colors.grey[700],
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              )
+                            else if (isOnHold)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'On Hold',
+                                  style: TextStyle(
+                                    color: Colors.orange.shade800,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        subtitle: Text(
+                          dateStr,
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 13,
+                          ),
+                        ),
+                        trailing: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '${isCredit || isReleased ? '+' : '-'}${t.amount}',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: t.isCancelled
+                                    ? Colors.grey
+                                    : (isOnHold 
+                                        ? Colors.orange.shade700
+                                        : (isCredit || isReleased 
+                                            ? const Color(0xFF00C8A0) 
+                                            : Colors.red)),
+                              ),
+                            ),
+                            Text(
+                              'credits',
+                              style: TextStyle(
+                                color: Colors.grey[500],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        if (filteredPages.length > 1)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                filteredPages.length,
+                (index) => Container(
+                  width: 8,
+                  height: 8,
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: index == _currentPage
+                        ? const Color(0xFF00C8A0)
+                        : Colors.grey[300],
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildFilterChip(String label, bool selected) {
+    return ChoiceChip(
+      label: Text(
+        label,
+        style: TextStyle(
+          color: selected ? Colors.white : Colors.black,
+          fontWeight: FontWeight.w500,
+          fontSize: 13,
+        ),
+      ),
+      selected: selected,
+      onSelected: (selected) {
+        if (!selected) return;
+        setState(() {
+          _selectedFilter = label == 'All' 
+              ? null 
+              : label == 'Added' 
+                  ? WalletTxnType.credit 
+                  : WalletTxnType.debit;
+        });
+      },
+      backgroundColor: Colors.grey[100],
+      selectedColor: const Color(0xFF00C8A0),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+    );
+  }
+}
+
+// Helper class to unify regular transactions and cancelled payments
+class _UnifiedTransaction {
+  final String id;
+  final WalletTxnType type;
+  final int amount;
+  final String description;
+  final DateTime createdAt;
+  final bool isCancelled;
+
+  _UnifiedTransaction({
+    required this.id,
+    required this.type,
+    required this.amount,
+    required this.description,
+    required this.createdAt,
+    required this.isCancelled,
+  });
+}

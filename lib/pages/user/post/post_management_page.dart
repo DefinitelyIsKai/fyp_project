@@ -1,0 +1,746 @@
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../models/user/post.dart';
+import 'post_create_page.dart';
+import 'post_details_page.dart';
+import '../../../services/user/post_service.dart';
+import '../../../services/user/auth_service.dart';
+import '../../../services/user/application_service.dart';
+import '../../../models/user/application.dart';
+import '../../../utils/user/dialog_utils.dart';
+import '../../../utils/user/card_decorations.dart';
+import '../../../widgets/user/empty_state.dart';
+
+class PostManagementPage extends StatefulWidget {
+  const PostManagementPage({super.key});
+
+  @override
+  State<PostManagementPage> createState() => _PostManagementPageState();
+}
+
+class _PostManagementPageState extends State<PostManagementPage> {
+  final PostService _service = PostService();
+  final AuthService _authService = AuthService();
+  final ApplicationService _applicationService = ApplicationService();
+  final PageController _pageController = PageController();
+
+  late Future<DocumentSnapshot<Map<String, dynamic>>> _userFuture;
+  
+  List<List<Post>> _pages = [];
+  int _currentPage = 0;
+  bool _isInitialLoad = true;
+  List<Post>? _lastPosts;
+  static const int _itemsPerPage = 10;
+
+  @override
+  void initState() {
+    super.initState();
+    _userFuture = _authService.getUserDoc();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _createNewPost() async {
+    final bool? created = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (context) => const PostCreatePage()),
+    );
+    if (created == true) {
+      if (!mounted) return;
+      DialogUtils.showSuccessMessage(
+        context: context,
+        message: 'Post created',
+      );
+    }
+  }
+
+  Widget _buildPostManagementBody() {
+    return StreamBuilder<List<Post>>(
+      stream: _service.streamMyPosts(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          final error = snapshot.error.toString();
+          final isIndexError = error.contains('index') || error.contains('Index');
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.error_outline, color: const Color(0xFF00C8A0), size: 48),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Could not load your posts',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black,
+                      fontSize: 18,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    error,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                  if (isIndexError) ...[
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Note: Make sure the composite index is fully built and matches:\nownerId (Asc) + createdAt (Desc)',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.orange, fontSize: 11),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: _createNewPost,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00C8A0),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Create New Post'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting && _isInitialLoad) {
+          return Center(
+            child: CircularProgressIndicator(
+              color: const Color(0xFF00C8A0),
+            ),
+          );
+        }
+
+        final allPosts = snapshot.data ?? const <Post>[];
+
+        final postsChanged = _lastPosts == null ||
+            _lastPosts!.length != allPosts.length ||
+            !_listsEqual(_lastPosts!, allPosts);
+
+        if (postsChanged) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            _lastPosts = allPosts;
+            setState(() {
+              _pages.clear();
+              for (int i = 0; i < allPosts.length; i += _itemsPerPage) {
+                final end = (i + _itemsPerPage < allPosts.length) ? i + _itemsPerPage : allPosts.length;
+                _pages.add(allPosts.sublist(i, end));
+              }
+              if (_pages.isEmpty && allPosts.isNotEmpty) {
+                _pages.add(allPosts);
+              }
+              if (_currentPage >= _pages.length) {
+                _currentPage = _pages.length > 0 ? _pages.length - 1 : 0;
+              }
+              if (_isInitialLoad) {
+                _isInitialLoad = false;
+                _currentPage = 0;
+              }
+            });
+          });
+        }
+
+        if (allPosts.isEmpty && !_isInitialLoad) {
+          return const EmptyState.noPosts();
+        }
+
+        if (_pages.isEmpty) {
+          return Center(
+            child: CircularProgressIndicator(
+              color: const Color(0xFF00C8A0),
+            ),
+          );
+        }
+
+        return Column(
+          children: [
+            Expanded(
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: _pages.length,
+                onPageChanged: (index) {
+                  setState(() {
+                    _currentPage = index;
+                  });
+                },
+                itemBuilder: (context, pageIndex) {
+                  final pagePosts = _pages[pageIndex];
+                  return ListView(
+                    children: [
+                      const SizedBox(height: 8),
+                      for (final post in pagePosts)
+                        _PostCard(
+                          post: post,
+                          onView: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => PostDetailsPage(post: post)),
+                            );
+                          },
+                          onEdit: () async {
+                            final bool? updated = await Navigator.push<bool>(
+                              context,
+                              MaterialPageRoute(builder: (_) => PostCreatePage(existing: post)),
+                            );
+                            if (updated == true && context.mounted) {
+                              DialogUtils.showSuccessMessage(
+                                context: context,
+                                message: 'Post updated',
+                              );
+                            }
+                          },
+                          onDelete: () async {
+                            final confirmed = await DialogUtils.showDestructiveConfirmation(
+                              context: context,
+                              title: 'Delete Post',
+                              message: 'Are you sure you want to delete "${post.title}"? This action cannot be undone.',
+                              icon: Icons.delete_outline,
+                              confirmText: 'Delete',
+                              cancelText: 'Cancel',
+                            );
+
+                            if (confirmed == true && context.mounted) {
+                              _service.delete(post.id);
+                              if (context.mounted) {
+                                DialogUtils.showInfoMessage(
+                                  context: context,
+                                  message: 'Post deleted',
+                                );
+                              }
+                            }
+                          },
+                        ),
+                      const SizedBox(height: 24),
+                    ],
+                  );
+                },
+              ),
+            ),
+            if (_pages.length > 1)
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(
+                    _pages.length,
+                    (index) => Container(
+                      width: 8,
+                      height: 8,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: index == _currentPage
+                            ? const Color(0xFF00C8A0)
+                            : Colors.grey[300],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+
+  bool _listsEqual(List<Post> a, List<Post> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      final postA = a[i];
+      final postB = b[i];
+      // Compare IDs first
+      if (postA.id != postB.id) return false;
+      // Compare key fields that might change and affect UI
+      if (postA.status != postB.status ||
+          postA.isDraft != postB.isDraft ||
+          postA.views != postB.views ||
+          postA.applicants != postB.applicants ||
+          postA.title != postB.title) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      future: _userFuture,
+      builder: (context, userSnap) {
+        final data = userSnap.data?.data();
+        final String role = (data?['role'] as String?)?.toLowerCase() == 'recruiter' ? 'recruiter' : 'jobseeker';
+        final bool isRecruiter = role == 'recruiter';
+
+        final Widget body = isRecruiter
+            ? _buildPostManagementBody()
+            : StreamBuilder<List<Application>>(
+                stream: _applicationService.streamMyApplications(),
+                builder: (context, appSnap) {
+                  final applications = appSnap.data ?? const <Application>[];
+
+                  if (appSnap.hasError) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.error_outline, color: const Color(0xFF00C8A0), size: 48),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Could not load your applications',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black,
+                                fontSize: 18,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              appSnap.error.toString(),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.grey, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  if (appSnap.connectionState == ConnectionState.waiting) {
+                    return Center(
+                      child: CircularProgressIndicator(
+                        color: const Color(0xFF00C8A0),
+                      ),
+                    );
+                  }
+
+                  if (applications.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.work_outline, size: 80, color: Colors.grey[400]),
+                          const SizedBox(height: 20),
+                          Text(
+                            'No applications yet',
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Apply to posts to see them here',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    itemCount: applications.length,
+                    itemBuilder: (context, index) {
+                      final app = applications[index];
+                      return StreamBuilder<Post?>(
+                        stream: _service.streamPostById(app.postId),
+                        builder: (context, postSnap) {
+                          final post = postSnap.data;
+                          // Hide applications only if post doesn't exist at all (after initial load)
+                          if (post == null && postSnap.connectionState == ConnectionState.active) {
+                            // Post was deleted or doesn't exist - hide the application
+                            return const SizedBox.shrink();
+                          }
+                          // Show loading state while checking
+                          if (postSnap.connectionState == ConnectionState.waiting && post == null) {
+                            return const SizedBox(
+                              height: 80,
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Color(0xFF00C8A0),
+                                ),
+                              ),
+                            );
+                          }
+                          final bool isPostDeleted = post != null && post.status == PostStatus.deleted;
+                          return Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.05),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          post?.title ?? 'Post unavailable',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.black,
+                                          ),
+                                        ),
+                                      ),
+                                      _ApplicationStatusChip(status: app.status),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    _dateString(app.createdAt),
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      OutlinedButton(
+                                        onPressed: (post == null || isPostDeleted)
+                                            ? null
+                                            : () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(builder: (_) => PostDetailsPage(post: post)),
+                                                );
+                                              },
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: const Color(0xFF00C8A0),
+                                          side: const BorderSide(color: Color(0xFF00C8A0)),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                        ),
+                                        child: const Text('View Details'),
+                                      ),
+                                      const Spacer(),
+                                      if (post != null && !isPostDeleted && post.status == PostStatus.completed)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey[100],
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            'Completed',
+                                            style: TextStyle(
+                                              color: Colors.grey[600],
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+              );
+
+        return Scaffold(
+          backgroundColor: Colors.grey[50],
+          appBar: AppBar(
+            title: Text(
+              isRecruiter ? 'Post Management' : 'My Applications',
+              style: const TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            backgroundColor: Colors.white,
+            elevation: 1,
+            iconTheme: const IconThemeData(color: Colors.black),
+          ),
+          floatingActionButton: isRecruiter
+              ? FloatingActionButton(
+                  onPressed: _createNewPost,
+                  backgroundColor: const Color(0xFF00C8A0),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: const Icon(Icons.add, size: 28),
+                )
+              : null,
+          body: userSnap.connectionState == ConnectionState.waiting
+              ? Center(
+                  child: CircularProgressIndicator(
+                    color: const Color(0xFF00C8A0),
+                  ),
+                )
+              : body,
+        );
+      },
+    );
+  }
+
+  String _dateString(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  }
+}
+
+class _ApplicationStatusChip extends StatelessWidget {
+  const _ApplicationStatusChip({required this.status});
+
+  final ApplicationStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    late final Color bg;
+    late final Color fg;
+    late final String label;
+
+    switch (status) {
+      case ApplicationStatus.pending:
+        bg = Colors.orange.withOpacity(0.15);
+        fg = Colors.orange;
+        label = 'Pending';
+        break;
+      case ApplicationStatus.approved:
+        bg = const Color(0xFF00C8A0).withOpacity(0.15);
+        fg = const Color(0xFF00C8A0);
+        label = 'Approved';
+        break;
+      case ApplicationStatus.rejected:
+        bg = Colors.red.withOpacity(0.15);
+        fg = Colors.red;
+        label = 'Rejected';
+        break;
+      case ApplicationStatus.deleted:
+        bg = Colors.red.withOpacity(0.15);
+        fg = Colors.red;
+        label = 'Deleted';
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: fg,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+class _PostCard extends StatelessWidget {
+  const _PostCard({
+    required this.post,
+    required this.onView,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final Post post;
+  final VoidCallback onView;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isActive = !post.isDraft && post.status == PostStatus.active;
+    final bool isPending = !post.isDraft && post.status == PostStatus.pending;
+    final bool canMarkCompleted = post.status == PostStatus.active && !post.isDraft;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: CardDecorations.standard(),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    post.title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: post.status == PostStatus.completed
+                        ? Colors.grey.withOpacity(0.1)
+                        : (isPending 
+                            ? Colors.orange.withOpacity(0.15) 
+                            : (isActive ? const Color(0xFF00C8A0).withOpacity(0.15) : Colors.orange.withOpacity(0.15))),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    post.status == PostStatus.completed 
+                        ? 'Completed' 
+                        : (isPending ? 'Pending' : (isActive ? 'Active' : 'Draft')),
+                    style: TextStyle(
+                      color: post.status == PostStatus.completed
+                          ? Colors.grey[700]
+                          : (isPending ? Colors.orange : (isActive ? const Color(0xFF00C8A0) : Colors.orange)),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text(
+                  _dateString(post.createdAt),
+                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                ),
+                const SizedBox(width: 16),
+                Icon(Icons.remove_red_eye, size: 14, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text(
+                  '${post.views} views',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton(
+                  onPressed: onView,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF00C8A0),
+                    side: const BorderSide(color: Color(0xFF00C8A0)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  ),
+                  child: const Text('View'),
+                ),
+                OutlinedButton(
+                  onPressed: onEdit,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.black,
+                    side: const BorderSide(color: Colors.black),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  ),
+                  child: const Text('Edit'),
+                ),
+                OutlinedButton(
+                  onPressed: onDelete,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  ),
+                  child: const Text('Delete'),
+                ),
+                if (canMarkCompleted)
+                  FilledButton(
+                    onPressed: () async {
+                      final confirmed = await DialogUtils.showConfirmationDialog(
+                        context: context,
+                        title: 'Mark as Completed',
+                        message: 'Are you sure you want to mark "${post.title}" as completed? This will close the post to new applications.',
+                        icon: Icons.flag,
+                        confirmText: 'Mark Complete',
+                        cancelText: 'Cancel',
+                        isDestructive: false,
+                      );
+
+                      if (confirmed == true && context.mounted) {
+                        try {
+                          await PostService().markCompleted(postId: post.id);
+                          if (context.mounted) {
+                            DialogUtils.showSuccessMessage(
+                              context: context,
+                              message: 'Marked as completed.',
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            DialogUtils.showWarningMessage(
+                              context: context,
+                              message: 'Failed: $e',
+                            );
+                          }
+                        }
+                      }
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF00C8A0),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.flag, size: 16),
+                        SizedBox(width: 4),
+                        Text('Complete'),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _dateString(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  }
+}
