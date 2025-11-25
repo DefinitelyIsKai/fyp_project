@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../services/user/wallet_service.dart';
@@ -25,11 +26,18 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
   final PageController _pageController = PageController();
   List<List<_UnifiedTransaction>> _pages = [];
   int _currentPage = 0;
-  bool _isLoading = false;
   bool _isLoadingMore = false;
   bool _hasMore = true;
   List<_UnifiedTransaction> _allTransactions = [];
   static const int _itemsPerPage = 10;
+  static const int _initialStreamLimit = 50; // Load first 50 transactions in real-time
+  
+  // Cache the stream to avoid recreating it on every rebuild
+  Stream<List<_UnifiedTransaction>>? _cachedUnifiedStream;
+  
+  // Scroll controller for balance card shrink effect
+  final ScrollController _scrollController = ScrollController();
+  bool _isCardShrunk = false;
 
   @override
   void initState() {
@@ -38,89 +46,116 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkPendingPayments();
       _refreshPendingPayments();
-      _loadInitialTransactions();
     });
+    
+    // Listen to scroll events
+    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _pageController.dispose();
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    _cachedUnifiedStream = null; // Clear cached stream
     super.dispose();
   }
-
-  Future<void> _loadInitialTransactions() async {
-    if (_isLoading) return;
-    
-    setState(() {
-      _isLoading = true;
-      _hasMore = true;
-    });
-
-    try {
-      final transactions = await _walletService.loadInitialTransactions(limit: _itemsPerPage);
-      final cancelledPayments = await _walletService.loadInitialCancelledPayments(limit: _itemsPerPage);
-
-      // Convert to unified format
-      final unified = <_UnifiedTransaction>[];
-      
-      for (final txn in transactions) {
-        unified.add(_UnifiedTransaction(
-          id: txn.id,
-          type: txn.type,
-          amount: txn.amount,
-          description: txn.description,
-          createdAt: txn.createdAt,
-          isCancelled: false,
-        ));
-      }
-
-      for (final payment in cancelledPayments) {
-        final credits = payment['credits'] as int? ?? 0;
-        final createdAt = TimestampUtils.parseTimestamp(payment['createdAt']);
-        unified.add(_UnifiedTransaction(
-          id: payment['id'] as String? ?? '',
-          type: WalletTxnType.credit,
-          amount: credits,
-          description: 'Top-up payment (Cancelled)',
-          createdAt: createdAt,
-          isCancelled: true,
-        ));
-      }
-
-      // Sort by date
-      unified.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
-      if (!mounted) return;
-
-      if (!mounted) return;
-
-      // Organize into pages
-      final pages = <List<_UnifiedTransaction>>[];
-      for (int i = 0; i < unified.length; i += _itemsPerPage) {
-        final end = (i + _itemsPerPage < unified.length) 
-            ? i + _itemsPerPage 
-            : unified.length;
-        pages.add(unified.sublist(i, end));
-      }
-      if (pages.isEmpty && unified.isNotEmpty) {
-        pages.add(unified);
-      }
-
+  
+  void _onScroll() {
+    final shouldShrink = _scrollController.offset > 50; // Shrink after scrolling 50px
+    if (shouldShrink != _isCardShrunk) {
       setState(() {
-        _allTransactions = unified;
-        _pages = pages;
-        _hasMore = unified.length >= _itemsPerPage;
-        _isLoading = false;
-        _currentPage = 0;
+        _isCardShrunk = shouldShrink;
       });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
-      print('Error loading initial transactions: $e');
     }
+  }
+
+  /// Combine transactions and cancelled payments streams
+  Stream<List<_UnifiedTransaction>> _getUnifiedTransactionsStream() {
+    // Return cached stream if it exists
+    if (_cachedUnifiedStream != null) {
+      return _cachedUnifiedStream!;
+    }
+    
+    final controller = StreamController<List<_UnifiedTransaction>>();
+    final transactionsStream = _walletService.streamTransactions(limit: _initialStreamLimit);
+    final cancelledPaymentsStream = _walletService.streamCancelledPayments();
+    
+    List<WalletTransaction>? latestTransactions;
+    List<Map<String, dynamic>>? latestCancelledPayments;
+    
+    void emitIfReady() {
+      if (latestTransactions != null && latestCancelledPayments != null) {
+        // Convert to unified format
+        final unified = <_UnifiedTransaction>[];
+        
+        for (final txn in latestTransactions!) {
+          unified.add(_UnifiedTransaction(
+            id: txn.id,
+            type: txn.type,
+            amount: txn.amount,
+            description: txn.description,
+            createdAt: txn.createdAt,
+            isCancelled: false,
+          ));
+        }
+
+        for (final payment in latestCancelledPayments!) {
+          final credits = payment['credits'] as int? ?? 0;
+          final createdAt = TimestampUtils.parseTimestamp(payment['createdAt']);
+          unified.add(_UnifiedTransaction(
+            id: payment['id'] as String? ?? '',
+            type: WalletTxnType.credit,
+            amount: credits,
+            description: 'Top-up payment (Cancelled)',
+            createdAt: createdAt,
+            isCancelled: true,
+          ));
+        }
+
+        // Sort by date
+        unified.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+        if (!controller.isClosed) {
+          controller.add(unified);
+        }
+      }
+    }
+    
+    final transactionsSubscription = transactionsStream.listen(
+      (transactions) {
+        latestTransactions = transactions;
+        emitIfReady();
+      },
+      onError: (error) {
+        if (!controller.isClosed) {
+          controller.addError(error);
+        }
+      },
+    );
+    
+    final cancelledSubscription = cancelledPaymentsStream.listen(
+      (payments) {
+        latestCancelledPayments = payments;
+        emitIfReady();
+      },
+      onError: (error) {
+        if (!controller.isClosed) {
+          controller.addError(error);
+        }
+      },
+    );
+    
+    // Clean up subscriptions when stream is closed
+    controller.onCancel = () {
+      transactionsSubscription.cancel();
+      cancelledSubscription.cancel();
+      _cachedUnifiedStream = null; // Clear cache when stream is cancelled
+    };
+    
+    _cachedUnifiedStream = controller.stream;
+    return _cachedUnifiedStream!;
   }
 
   Future<void> _loadMoreTransactions() async {
@@ -263,7 +298,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
       context: context,
       walletService: _walletService,
       onTopUpStarted: () {
-        // Refresh pending payments when top-up starts
         _refreshPendingPayments();
       },
     );
@@ -365,12 +399,37 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
         elevation: 1,
         iconTheme: const IconThemeData(color: Colors.black),
       ),
-      body: Column(
-        children: [
-          // Pending Payments Section
-          StreamBuilder<List<Map<String, dynamic>>>(
-            stream: _walletService.streamPendingPayments(),
-            builder: (context, snap) {
+      body: NotificationListener<ScrollNotification>(
+        onNotification: (ScrollNotification notification) {
+          if (notification is ScrollUpdateNotification || notification is ScrollEndNotification) {
+            // Get scroll offset from the notification
+            final scrollOffset = notification.metrics.pixels;
+            final shouldShrink = scrollOffset > 50;
+            
+            // Only update if state actually changed to avoid unnecessary rebuilds
+            if (shouldShrink != _isCardShrunk) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  setState(() {
+                    _isCardShrunk = shouldShrink;
+                  });
+                }
+              });
+            }
+          }
+          return false; // Allow the notification to continue bubbling
+        },
+        child: CustomScrollView(
+          controller: _scrollController,
+          slivers: [
+          SliverToBoxAdapter(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Pending Payments Section
+                StreamBuilder<List<Map<String, dynamic>>>(
+                  stream: _walletService.streamPendingPayments(),
+                  builder: (context, snap) {
               // Use stream data if available, otherwise fallback to cached data
               List<Map<String, dynamic>> pendingPayments = [];
               
@@ -554,252 +613,390 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
                 ),
               );
             },
-          ),
-          
-          // Balance Card
-          Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  const Color(0xFF00C8A0),
-                  const Color(0xFF00C8A0).withOpacity(0.8),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF00C8A0).withOpacity(0.3),
-                  blurRadius: 15,
-                  offset: const Offset(0, 4),
                 ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Container(
-                  width: 60,
-                  height: 60,
+                
+                // Balance Card
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                  margin: EdgeInsets.all(_isCardShrunk ? 8 : 16),
+                  padding: EdgeInsets.all(_isCardShrunk ? 12 : 24),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        const Color(0xFF00C8A0),
+                        const Color(0xFF00C8A0).withOpacity(0.8),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(_isCardShrunk ? 12 : 20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF00C8A0).withOpacity(0.3),
+                        blurRadius: 15,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
-                  child: Icon(
-                    Icons.account_balance_wallet,
-                    size: 30,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Current Balance',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                StreamBuilder<Wallet>(
-                  stream: _walletService.streamWallet(),
-                  builder: (context, snap) {
-                    if (snap.connectionState == ConnectionState.waiting) {
-                      return const CircularProgressIndicator(color: Colors.white);
-                    }
-                    
-                    if (snap.hasError) {
-                      return const Text(
-                        '0',
-                        style: TextStyle(
-                          fontSize: 42,
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      );
-                    }
-                    
-                    final wallet = snap.data;
-                    final int balance = wallet?.balance ?? 0;
-                    final int heldCredits = wallet?.heldCredits ?? 0;
-                    final int availableBalance = balance - heldCredits;
-                    
-                    return Column(
-                      children: [
-                        Text(
-                          availableBalance.toString(),
-                          style: const TextStyle(
-                            fontSize: 42,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        if (heldCredits > 0)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(
-                              '$heldCredits on hold',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.white.withOpacity(0.8),
-                                fontWeight: FontWeight.w500,
+                  child: _isCardShrunk
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.account_balance_wallet,
+                                        size: 20,
+                                        color: Colors.white,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const Text(
+                                        'Balance',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  StreamBuilder<Wallet>(
+                                    stream: _walletService.streamWallet(),
+                                    builder: (context, snap) {
+                                      if (snap.connectionState == ConnectionState.waiting) {
+                                        return const SizedBox(
+                                          height: 20,
+                                          width: 20,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2,
+                                          ),
+                                        );
+                                      }
+                                      
+                                      if (snap.hasError) {
+                                        return Text(
+                                          '0',
+                                          style: TextStyle(
+                                            fontSize: 24,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        );
+                                      }
+                                      
+                                      final wallet = snap.data;
+                                      final int balance = wallet?.balance ?? 0;
+                                      final int heldCredits = wallet?.heldCredits ?? 0;
+                                      final int availableBalance = balance - heldCredits;
+                                      
+                                      return Text(
+                                        availableBalance.toString(),
+                                        style: const TextStyle(
+                                          fontSize: 24,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
                               ),
                             ),
-                          ),
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Credits',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                StreamBuilder<List<Map<String, dynamic>>>(
-                  stream: _walletService.streamPendingPayments(),
-                  builder: (context, snap) {
-                    final hasPending = (snap.data?.isNotEmpty ?? false);
-                    
-                    return SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: hasPending ? null : _showAddCreditDialog,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: hasPending 
-                              ? Colors.grey.shade300 
-                              : Colors.white,
-                          foregroundColor: hasPending 
-                              ? Colors.grey.shade600 
-                              : const Color(0xFF00C8A0),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: hasPending ? 0 : 2,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              hasPending ? Icons.block : Icons.add,
-                              size: 20,
+                            StreamBuilder<List<Map<String, dynamic>>>(
+                              stream: _walletService.streamPendingPayments(),
+                              builder: (context, snap) {
+                                final hasPending = (snap.data?.isNotEmpty ?? false);
+                                
+                                return IconButton(
+                                  onPressed: hasPending ? null : _showAddCreditDialog,
+                                  icon: Icon(
+                                    hasPending ? Icons.block : Icons.add,
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
+                                  tooltip: hasPending ? 'Complete Pending Payment First' : 'Add Credits',
+                                );
+                              },
                             ),
-                            const SizedBox(width: 8),
-                            Text(
-                              hasPending 
-                                  ? 'Complete Pending Payment First'
-                                  : 'Add Credits',
+                          ],
+                        )
+                      : Column(
+                          children: [
+                            Container(
+                              width: 60,
+                              height: 60,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.account_balance_wallet,
+                                size: 30,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'Current Balance',
                               style: TextStyle(
                                 fontSize: 16,
+                                color: Colors.white,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
+                            const SizedBox(height: 8),
+                            StreamBuilder<Wallet>(
+                              stream: _walletService.streamWallet(),
+                              builder: (context, snap) {
+                                if (snap.connectionState == ConnectionState.waiting) {
+                                  return const CircularProgressIndicator(color: Colors.white);
+                                }
+                                
+                                if (snap.hasError) {
+                                  return const Text(
+                                    '0',
+                                    style: TextStyle(
+                                      fontSize: 42,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  );
+                                }
+                                
+                                final wallet = snap.data;
+                                final int balance = wallet?.balance ?? 0;
+                                final int heldCredits = wallet?.heldCredits ?? 0;
+                                final int availableBalance = balance - heldCredits;
+                                
+                                return Column(
+                                  children: [
+                                    Text(
+                                      availableBalance.toString(),
+                                      style: const TextStyle(
+                                        fontSize: 42,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    if (heldCredits > 0)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Text(
+                                          '$heldCredits on hold',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.white.withOpacity(0.8),
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Credits',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            StreamBuilder<List<Map<String, dynamic>>>(
+                              stream: _walletService.streamPendingPayments(),
+                              builder: (context, snap) {
+                                final hasPending = (snap.data?.isNotEmpty ?? false);
+                                
+                                return SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton(
+                                    onPressed: hasPending ? null : _showAddCreditDialog,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: hasPending 
+                                          ? Colors.grey.shade300 
+                                          : Colors.white,
+                                      foregroundColor: hasPending 
+                                          ? Colors.grey.shade600 
+                                          : const Color(0xFF00C8A0),
+                                      padding: const EdgeInsets.symmetric(vertical: 14),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      elevation: hasPending ? 0 : 2,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          hasPending ? Icons.block : Icons.add,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          hasPending 
+                                              ? 'Complete Pending Payment First'
+                                              : 'Add Credits',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                           ],
                         ),
-                      ),
-                    );
-                  },
                 ),
-              ],
-            ),
-          ),
 
-          // Filter Chips
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                Text(
-                  'Transactions',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey[700],
+                // Filter Chips
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Transactions',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                      const Spacer(),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          _buildFilterChip('All', _selectedFilter == null),
+                          _buildFilterChip('Added', _selectedFilter == WalletTxnType.credit),
+                          _buildFilterChip('Spent', _selectedFilter == WalletTxnType.debit),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                const Spacer(),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    _buildFilterChip('All', _selectedFilter == null),
-                    _buildFilterChip('Added', _selectedFilter == WalletTxnType.credit),
-                    _buildFilterChip('Spent', _selectedFilter == WalletTxnType.debit),
-                  ],
-                ),
               ],
             ),
           ),
-
+          
           // Transactions List
-          Expanded(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: _buildTransactionsList(),
+          SliverToBoxAdapter(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  height: MediaQuery.of(context).size.height - 
+                          (_isCardShrunk ? 250 : 450), // Dynamic height based on card state
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: _buildTransactionsList(),
+                );
+              },
             ),
           ),
         ],
+        ),
       ),
     );
   }
 
   Widget _buildTransactionsList() {
-    if (_isLoading) {
-      return const LoadingIndicator.standard();
-    }
+    return StreamBuilder<List<_UnifiedTransaction>>(
+      stream: _getUnifiedTransactionsStream(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const LoadingIndicator.standard();
+        }
 
-    // Apply filter to pages
-    final filteredPages = _selectedFilter == null
-        ? _pages
-        : _pages
-            .map((page) => page.where((t) {
-              // For "Added" filter, only show credit transactions that are NOT cancelled
-              if (_selectedFilter == WalletTxnType.credit) {
-                return t.type == WalletTxnType.credit && !t.isCancelled;
-              }
-              // For "Spent" filter, show debit transactions (cancelled payments are not debits)
-              return t.type == _selectedFilter;
-            }).toList())
-            .where((page) => page.isNotEmpty)
-            .toList();
+        if (snap.hasError) {
+          return Center(
+            child: Text('Error loading transactions: ${snap.error}'),
+          );
+        }
 
-    if (filteredPages.isEmpty || filteredPages.every((page) => page.isEmpty)) {
-      return const EmptyState.noTransactions();
-    }
+        final allTransactions = snap.data ?? [];
+        
+        // Organize into pages directly from stream data (no setState in builder)
+        final pages = <List<_UnifiedTransaction>>[];
+        for (int i = 0; i < allTransactions.length; i += _itemsPerPage) {
+          final end = (i + _itemsPerPage < allTransactions.length) 
+              ? i + _itemsPerPage 
+              : allTransactions.length;
+          pages.add(allTransactions.sublist(i, end));
+        }
+        if (pages.isEmpty && allTransactions.isNotEmpty) {
+          pages.add(allTransactions);
+        }
 
-    // Check if we need to load more when reaching the last page
-    if (_currentPage >= filteredPages.length - 1 && _hasMore && !_isLoadingMore) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _loadMoreTransactions();
-      });
-    }
-
-    return Column(
-      children: [
-        Expanded(
-          child: PageView.builder(
-            controller: _pageController,
-            itemCount: filteredPages.length + (_isLoadingMore ? 1 : 0),
-            onPageChanged: (index) {
+        // Update state only if data actually changed (avoid unnecessary rebuilds)
+        if (_allTransactions.length != allTransactions.length ||
+            _pages.length != pages.length) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
               setState(() {
-                _currentPage = index;
+                _allTransactions = allTransactions;
+                _pages = pages;
+                _hasMore = allTransactions.length >= _initialStreamLimit;
               });
-              // Load more if approaching the end
-              if (index >= filteredPages.length - 2 && _hasMore && !_isLoadingMore) {
-                _loadMoreTransactions();
-              }
-            },
-            itemBuilder: (context, pageIndex) {
+            }
+          });
+        }
+
+        // Apply filter to pages
+        final filteredPages = _selectedFilter == null
+            ? pages
+            : pages
+                .map((page) => page.where((t) {
+                  // For "Added" filter, only show credit transactions that are NOT cancelled
+                  if (_selectedFilter == WalletTxnType.credit) {
+                    return t.type == WalletTxnType.credit && !t.isCancelled;
+                  }
+                  // For "Spent" filter, show debit transactions (cancelled payments are not debits)
+                  return t.type == _selectedFilter;
+                }).toList())
+                .where((page) => page.isNotEmpty)
+                .toList();
+
+        if (filteredPages.isEmpty || filteredPages.every((page) => page.isEmpty)) {
+          return const EmptyState.noTransactions();
+        }
+
+        // Check if we need to load more when reaching the last page
+        if (_currentPage >= filteredPages.length - 1 && _hasMore && !_isLoadingMore) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _loadMoreTransactions();
+          });
+        }
+
+        return Column(
+          children: [
+            Expanded(
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: filteredPages.length + (_isLoadingMore ? 1 : 0),
+                onPageChanged: (index) {
+                  setState(() {
+                    _currentPage = index;
+                  });
+                  // Load more if approaching the end
+                  if (index >= filteredPages.length - 2 && _hasMore && !_isLoadingMore) {
+                    _loadMoreTransactions();
+                  }
+                },
+                itemBuilder: (context, pageIndex) {
               if (pageIndex == filteredPages.length) {
                 // Loading page
                 return const LoadingIndicator.standard();
@@ -998,6 +1195,8 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
             ),
           ),
       ],
+    );
+      },
     );
   }
 
