@@ -6,7 +6,6 @@ import '../../../services/user/auth_service.dart';
 import '../../../services/user/application_service.dart';
 import '../../../services/user/post_service.dart';
 import '../../../models/user/availability_slot.dart';
-import '../../../models/user/job_match.dart';
 import '../../../models/user/application.dart';
 import '../../../models/user/post.dart';
 import '../../../widgets/user/monthly_calendar.dart';
@@ -30,8 +29,8 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
   DateTime _currentMonth = DateTime.now();
   String? _selectedRecruiterId; // Selected recruiter (Level 1 -> Level 2)
   Application? _selectedApplication; // Selected application (Level 2 -> Level 3)
-  JobMatch? _selectedMatch; // Selected match (derived from application)
   Map<String, Post> _postCache = {}; // Cache for post data
+  Map<String, String> _recruiterNameCache = {}; // Cache for recruiter names
   int _refreshKey = 0; // Key to force refresh of FutureBuilder
 
   void _onMonthChanged(DateTime newMonth) {
@@ -136,7 +135,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
           // Handle back button - navigate back to application list
           setState(() {
             _selectedApplication = null;
-            _selectedMatch = null;
           });
         }
       },
@@ -166,7 +164,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                     onPressed: () {
                       setState(() {
                         _selectedApplication = null;
-                        _selectedMatch = null;
                       });
                     },
                   ),
@@ -190,45 +187,47 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
 
                       // Text (Company Name & Job Title)
                       Expanded(
-                       
-                          child: Column(
-                            mainAxisSize:
-                                MainAxisSize.min, // Shrinks to fit text height
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment
-                                .center, // Centers text vertically in the column
-                            children: [
-                              Text(
-                                _selectedMatch?.companyName ??
-                                    'Book Interview Slot',
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.black,
-                                  height:
-                                      1.1, // Fixes visual alignment for lowercase text
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              // Only show job title if it exists and isn't empty
-                              if (_selectedMatch != null &&
-                                  _selectedMatch!.jobTitle.isNotEmpty) ...[
-                                const SizedBox(height: 2),
+                        child: FutureBuilder<Map<String, dynamic>>(
+                          future: _selectedApplication != null
+                              ? _loadApplicationDisplayData(_selectedApplication!)
+                              : Future.value({'fullName': null, 'jobTitle': null}),
+                          builder: (context, snapshot) {
+                            final fullName = snapshot.data?['fullName'] as String?;
+                            final jobTitle = snapshot.data?['jobTitle'] as String?;
+                            
+                            return Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
                                 Text(
-                                  _selectedMatch!.jobTitle,
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.grey[600],
-                                    height: 2.0,
+                                  fullName ?? 'Book Interview Slot',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.black,
+                                    height: 1.1,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
+                                if (jobTitle != null && jobTitle.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    jobTitle,
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.grey[600],
+                                      height: 2.0,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ],
-                            ],
-                          ),
-                     
+                            );
+                          },
+                        ),
                       ),
                     ],
                   ),
@@ -333,7 +332,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                         final slots = snapshot.data ?? [];
                         
                         // Filter slots to only show booked slots for this specific application
-                        final applicationId = _selectedMatch?.id;
+                        final applicationId = _selectedApplication?.id;
                         final filteredSlots = applicationId != null
                             ? slots.where((slot) {
                                 // Show available slots (no matchId yet)
@@ -414,7 +413,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                       JobseekerSlotsList(
                         selectedDate: _selectedDate,
                         selectedRecruiterId: _selectedRecruiterId,
-                        selectedMatch: _selectedMatch,
+                        selectedApplication: _selectedApplication,
                         availabilityService: _availabilityService,
                         authService: _authService,
                         applicationService: _applicationService,
@@ -565,10 +564,10 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                       final count = recruiterApps.length;
                       
                       final recruiterData = recruitersMap[recruiterId] ?? {};
-                      final companyName =
-                          recruiterData['professionalProfile'] as String? ??
+                      final fullName =
                           recruiterData['fullName'] as String? ??
-                          'Company';
+                          recruiterData['professionalProfile'] as String? ??
+                          'Unknown';
 
                       return Container(
                         decoration: BoxDecoration(
@@ -622,7 +621,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                                           CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          companyName,
+                                          fullName,
                                           style: const TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.w700,
@@ -799,11 +798,11 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                       final post = postsMap[application.postId];
                       final recruiterData =
                           recruitersMap[application.recruiterId] ?? {};
-                      final companyName =
-                          recruiterData['professionalProfile'] as String? ??
+                      final fullName =
                           recruiterData['fullName'] as String? ??
+                          recruiterData['professionalProfile'] as String? ??
                           post?.event ??
-                          'Company';
+                          'Unknown';
                       final jobTitle = post?.title ?? 'Job Position';
 
                       return Container(
@@ -826,20 +825,10 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                           child: InkWell(
                             borderRadius: BorderRadius.circular(12),
                             onTap: () async {
-                              // Load post to get job title
-                              final post = await _postService.getById(
-                                  application.postId);
-                              final jobTitle = post?.title ?? 'Job Position';
-
                               setState(() {
                                 _selectedApplication = application;
-                                _selectedMatch = JobMatch(
-                                  id: application.id,
-                                  jobTitle: jobTitle,
-                                  companyName: companyName,
-                                  recruiterId: application.recruiterId,
-                                  status: 'accepted',
-                                );
+                                // Cache recruiter name for quick access
+                                _recruiterNameCache[application.recruiterId] = fullName;
                               });
                             },
                             child: Padding(
@@ -881,7 +870,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
-                                          companyName,
+                                          fullName,
                                           style: TextStyle(
                                             color: Colors.grey[600],
                                             fontSize: 13,
@@ -997,6 +986,42 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     }
 
     return {'posts': postsMap, 'recruiters': recruitersMap};
+  }
+
+  /// Load display data for selected application (recruiter name and job title)
+  Future<Map<String, dynamic>> _loadApplicationDisplayData(Application application) async {
+    // Get recruiter name from cache or load it
+    String? fullName = _recruiterNameCache[application.recruiterId];
+    if (fullName == null) {
+      try {
+        final recruiterData = await _loadPostsAndRecruitersForApplications([application]);
+        final recruitersMap = recruiterData['recruiters'] as Map<String, Map<String, dynamic>>? ?? {};
+        final recruiterDataMap = recruitersMap[application.recruiterId] ?? {};
+        fullName = recruiterDataMap['fullName'] as String? ??
+            recruiterDataMap['professionalProfile'] as String? ??
+            'Unknown';
+        _recruiterNameCache[application.recruiterId] = fullName;
+      } catch (e) {
+        fullName = 'Unknown';
+      }
+    }
+
+    // Get job title from cache or load it
+    String? jobTitle;
+    if (_postCache.containsKey(application.postId)) {
+      jobTitle = _postCache[application.postId]?.title;
+    } else {
+      final post = await _postService.getById(application.postId);
+      if (post != null) {
+        _postCache[application.postId] = post;
+        jobTitle = post.title;
+      }
+    }
+
+    return {
+      'fullName': fullName,
+      'jobTitle': jobTitle ?? 'Job Position',
+    };
   }
 }
 

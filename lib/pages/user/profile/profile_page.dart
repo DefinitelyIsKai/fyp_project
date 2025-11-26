@@ -98,6 +98,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 backgroundColor: const Color(0xFF00C8A0),
                 elevation: 0,
+                automaticallyImplyLeading: false,
                 actions: [
                   Container(
                     margin: const EdgeInsets.only(right: 16, top: 8),

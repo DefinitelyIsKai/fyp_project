@@ -207,57 +207,280 @@ class StorageService {
   }
 
   // 🔹 Convert post images to Base64 and store in Firestore
-  Future<List<String>> pickAndUploadPostImages({required String postId}) async {
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: true,
-      type: FileType.custom,
-      allowedExtensions: const ['png', 'jpg', 'jpeg'],
-      withData: true,
-    );
+  // Uses ImagePicker with compression (similar to profile image upload)
+  /// Pick images and convert to base64 without uploading to Firestore
+  /// Returns list of base64 strings for preview
+  Future<List<String>> pickPostImages() async {
+    try {
+      bool useImagePicker = kIsWeb ||
+          (!kIsWeb && Platform.isAndroid );
 
-    if (result == null || result.files.isEmpty) return <String>[];
+      List<XFile> selectedFiles = [];
 
-    final List<String> uploaded = [];
-
-    // Get reference to the post document
-    final postDoc = _firestore.collection('posts').doc(postId);
-    
-    // Check if document exists to determine if we need to set ownerId
-    // If document doesn't exist, we need to include ownerId to satisfy Firestore rules
-    // The rule requires: allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid
-    final docSnapshot = await postDoc.get();
-    final bool docExists = docSnapshot.exists;
-    final bool needsOwnerId = !docExists;
-
-    for (final f in result.files) {
-      final bytes = f.bytes ?? await File(f.path!).readAsBytes();
-      final base64String = base64Encode(bytes);
-      final ext = f.extension?.toLowerCase() ?? 'jpg';
-
-      // Prepare data to write
-      final data = <String, dynamic>{
-        'attachments': FieldValue.arrayUnion([
-          {
-            'fileName': f.name,
-            'fileType': ext,
-            'base64': base64String,
-            'uploadedAt': DateTime.now().toIso8601String(),
+      if (useImagePicker) {
+        // Use ImagePicker for better compression support
+        final ImagePicker picker = ImagePicker();
+        // Try to pick multiple images with compression
+        // Note: pickMultiImage may not be available on all platforms
+        try {
+          selectedFiles = await picker.pickMultiImage(imageQuality: 70); // 70% quality for post images
+        } catch (e) {
+          // Fallback: allow user to pick one image at a time
+          // In this case, we'll use FilePicker for multiple selection
+          print('Multi-image picker not available, using FilePicker fallback: $e');
+          useImagePicker = false; // Fall through to FilePicker
+        }
+      }
+      
+      if (!useImagePicker) {
+        // Fallback to FilePicker for other platforms
+        final result = await FilePicker.platform.pickFiles(
+          allowMultiple: true,
+          type: FileType.custom,
+          allowedExtensions: const ['png', 'jpg', 'jpeg'],
+          withData: true,
+        );
+        if (result == null || result.files.isEmpty) return <String>[];
+        // Convert FilePicker files to a format we can process
+        for (final file in result.files) {
+          if (file.path != null) {
+            selectedFiles.add(XFile(file.path!));
           }
-        ])
+        }
+      }
+
+      if (selectedFiles.isEmpty) return <String>[];
+
+      final List<String> base64Strings = [];
+
+      for (final xFile in selectedFiles) {
+        try {
+          late Uint8List bytes;
+
+          bytes = await xFile.readAsBytes();
+          
+          // Check image size (similar to profile upload logic)
+          // Firestore limit is 1MB per document, base64 increases size by ~33%
+          const int maxOriginalSize = 1500 * 1024; // 1.5MB original - already compressed by imageQuality
+          
+          if (bytes.length > maxOriginalSize) {
+            throw Exception('Image "${xFile.name}" is too large (${(bytes.length / 1024 / 1024).toStringAsFixed(2)}MB). '
+                'Maximum size is 1.5MB. Please select a smaller image.');
+          }
+          
+          final base64String = base64Encode(bytes);
+          
+          // Final check on actual base64 size
+          const int maxBase64Size = 980 * 1024; // 980KB - close to 1MB limit
+          if (base64String.length > maxBase64Size) {
+            throw Exception('Image "${xFile.name}" is too large after encoding (${(base64String.length / 1024).toStringAsFixed(1)}KB). '
+                'Firestore limit is 1MB per document. Please select a smaller image.');
+          }
+
+          base64Strings.add(base64String);
+        } catch (e) {
+          print('Failed to process image ${xFile.name}: $e');
+          // Continue with other images even if one fails
+        }
+      }
+
+      return base64Strings;
+    } catch (e) {
+      print('Error picking post images: $e');
+      rethrow;
+    }
+  }
+
+  /// Upload base64 images to Firestore post document
+  Future<void> uploadPostImages({required String postId, required List<String> base64Images}) async {
+    if (base64Images.isEmpty) return;
+
+    try {
+      // Get reference to the post document
+      final postDoc = _firestore.collection('posts').doc(postId);
+      
+      // Check if document exists to determine if we need to set ownerId
+      final docSnapshot = await postDoc.get();
+      final bool docExists = docSnapshot.exists;
+      final bool needsOwnerId = !docExists;
+
+      // Prepare data to write - store as simple base64 strings in attachments array
+      final data = <String, dynamic>{
+        'attachments': FieldValue.arrayUnion(base64Images)
       };
 
-      // Include ownerId only if document doesn't exist yet (for first write that creates the document)
-      // This satisfies the Firestore rule that requires ownerId when creating a post
+      // Include ownerId only if document doesn't exist yet
       if (needsOwnerId) {
         data['ownerId'] = _uid;
       }
 
-      await postDoc.set(data, SetOptions(merge: true));
-
-      uploaded.add(base64String);
+      // Use update with merge, or set if document doesn't exist
+      if (docExists) {
+        await postDoc.update(data);
+      } else {
+        await postDoc.set(data, SetOptions(merge: true));
+      }
+    } catch (e) {
+      print('Error uploading post images: $e');
+      rethrow;
     }
+  }
 
-    return uploaded;
+  Future<List<String>> pickAndUploadPostImages({required String postId}) async {
+    try {
+      bool useImagePicker = kIsWeb ||
+          (!kIsWeb && (Platform.isAndroid || Platform.isIOS || Platform.isMacOS));
+
+      List<XFile> selectedFiles = [];
+
+      if (useImagePicker) {
+        // Use ImagePicker for better compression support
+        final ImagePicker picker = ImagePicker();
+        // Try to pick multiple images with compression
+        // Note: pickMultiImage may not be available on all platforms
+        try {
+          selectedFiles = await picker.pickMultiImage(imageQuality: 70); // 70% quality for post images
+        } catch (e) {
+          // Fallback: allow user to pick one image at a time
+          // In this case, we'll use FilePicker for multiple selection
+          print('Multi-image picker not available, using FilePicker fallback: $e');
+          useImagePicker = false; // Fall through to FilePicker
+        }
+      }
+      
+      if (!useImagePicker) {
+        // Fallback to FilePicker for other platforms
+        final result = await FilePicker.platform.pickFiles(
+          allowMultiple: true,
+          type: FileType.custom,
+          allowedExtensions: const ['png', 'jpg', 'jpeg'],
+          withData: true,
+        );
+        if (result == null || result.files.isEmpty) return <String>[];
+        // Convert FilePicker files to a format we can process
+        for (final file in result.files) {
+          if (file.path != null) {
+            selectedFiles.add(XFile(file.path!));
+          }
+        }
+      }
+
+      if (selectedFiles.isEmpty) return <String>[];
+
+      final List<String> uploaded = [];
+      final List<String> failedImages = [];
+
+      // Get reference to the post document
+      final postDoc = _firestore.collection('posts').doc(postId);
+      
+      // Check if document exists to determine if we need to set ownerId
+      final docSnapshot = await postDoc.get();
+      final bool docExists = docSnapshot.exists;
+      final bool needsOwnerId = !docExists;
+
+      for (final xFile in selectedFiles) {
+        try {
+          late Uint8List bytes;
+          late String ext;
+
+          bytes = await xFile.readAsBytes();
+          
+          // Get extension from MIME type (similar to profile upload)
+          String? mimeType = xFile.mimeType;
+          if (mimeType != null) {
+            final mimeParts = mimeType.split('/');
+            if (mimeParts.length == 2 && mimeParts[0] == 'image') {
+              ext = mimeParts[1].toLowerCase();
+              if (ext == 'jpeg') ext = 'jpg';
+              if (!['jpg', 'png', 'gif', 'webp'].contains(ext)) {
+                ext = 'jpg';
+              }
+            } else {
+              ext = 'jpg';
+            }
+          } else {
+            // Fallback to path-based extraction
+            if (xFile.path.contains('.')) {
+              ext = xFile.path.split('.').last.toLowerCase();
+              if (ext == 'jpeg') ext = 'jpg';
+              if (ext.isEmpty || !['jpg', 'png', 'gif', 'webp'].contains(ext)) {
+                ext = 'jpg';
+              }
+            } else {
+              ext = 'jpg';
+            }
+          }
+
+          // Check image size (similar to profile upload logic)
+          // Firestore limit is 1MB per document, base64 increases size by ~33%
+          const int maxOriginalSize = 1500 * 1024; // 1.5MB original - already compressed by imageQuality
+          
+          if (bytes.length > maxOriginalSize) {
+            throw Exception('Image "${xFile.name}" is too large (${(bytes.length / 1024 / 1024).toStringAsFixed(2)}MB). '
+                'Maximum size is 1.5MB. Please select a smaller image.');
+          }
+          
+          final base64String = base64Encode(bytes);
+          
+          // Final check on actual base64 size
+          const int maxBase64Size = 980 * 1024; // 980KB - close to 1MB limit
+          if (base64String.length > maxBase64Size) {
+            throw Exception('Image "${xFile.name}" is too large after encoding (${(base64String.length / 1024).toStringAsFixed(1)}KB). '
+                'Firestore limit is 1MB per document. Please select a smaller image.');
+          }
+
+          // Validate and sanitize extension
+          ext = ext.replaceAll(RegExp(r'[^a-z0-9]'), '').toLowerCase();
+          if (ext == 'jpeg') ext = 'jpg';
+          if (ext.isEmpty || !['jpg', 'png', 'gif', 'webp'].contains(ext)) {
+            ext = 'jpg';
+          }
+
+          print('Uploading post image - fileType: "$ext", base64 length: ${base64String.length}, bytes: ${bytes.length}');
+
+          // Prepare data to write - store as simple base64 string in attachments array
+          final data = <String, dynamic>{
+            'attachments': FieldValue.arrayUnion([base64String])
+          };
+
+          // Include ownerId only if document doesn't exist yet
+          if (needsOwnerId) {
+            data['ownerId'] = _uid;
+          }
+
+          // Use update with merge, or set if document doesn't exist
+          if (docExists) {
+            await postDoc.update(data);
+          } else {
+            await postDoc.set(data, SetOptions(merge: true));
+          }
+
+          uploaded.add(base64String);
+        } catch (e) {
+          print('Failed to upload image ${xFile.name}: $e');
+          failedImages.add(xFile.name);
+        }
+      }
+
+      // If all images failed, throw an error
+      if (uploaded.isEmpty && failedImages.isNotEmpty) {
+        throw Exception('Failed to upload all images. ${failedImages.length} image(s) failed: ${failedImages.join(", ")}');
+      }
+
+      // If some images failed, log a warning
+      if (failedImages.isNotEmpty) {
+        print('Warning: ${failedImages.length} image(s) failed to upload: ${failedImages.join(", ")}');
+      }
+
+      return uploaded;
+    } catch (e) {
+      print('Error picking/uploading post images: $e');
+      if (e is FirebaseException) {
+        print('Firebase error code: ${e.code}');
+        print('Firebase error message: ${e.message}');
+      }
+      rethrow;
+    }
   }
 
 }

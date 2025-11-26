@@ -29,6 +29,8 @@ class PostCreatePage extends StatefulWidget {
 
 class _PostCreatePageState extends State<PostCreatePage> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _titleFieldKey = GlobalKey();
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _budgetMinController = TextEditingController();
@@ -108,7 +110,9 @@ class _PostCreatePageState extends State<PostCreatePage> {
       _maxAgeController.text = p.maxAgeRequirement?.toString() ?? '';
       _quotaController.text = p.applicantQuota?.toString() ?? '';
       _jobType = p.jobType;
-      _attachments.addAll(p.attachments);
+      
+      // Load existing attachments from Firestore (similar to post_details_page.dart)
+      _loadExistingAttachments(p.id);
     }
     
     // Add listeners to update button state when fields change
@@ -146,6 +150,43 @@ class _PostCreatePageState extends State<PostCreatePage> {
     }
   }
 
+  // Load attachments from Firestore (similar to post_details_page.dart)
+  Future<void> _loadExistingAttachments(String postId) async {
+    try {
+      final doc = await FirebaseFirestore.instance.collection('posts').doc(postId).get();
+      final data = doc.data();
+      if (data != null && data['attachments'] != null) {
+        final attachments = data['attachments'] as List?;
+        if (attachments != null && attachments.isNotEmpty) {
+          // Extract base64 strings from attachments (supports both old and new format)
+          final List<String> base64Strings = [];
+          for (final a in attachments) {
+            if (a is Map) {
+              // Old format: object with base64 field
+              final base64 = a['base64'] as String?;
+              if (base64 != null && base64.isNotEmpty) {
+                base64Strings.add(base64);
+              }
+            } else if (a is String) {
+              // New format: direct base64 string
+              if (a.isNotEmpty) {
+                base64Strings.add(a);
+              }
+            }
+          }
+          if (mounted && base64Strings.isNotEmpty) {
+            setState(() {
+              _attachments.clear();
+              _attachments.addAll(base64Strings);
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading attachments: $e');
+    }
+  }
+
   Future<void> _loadCategories() async {
     setState(() {
       _categoriesLoading = true;
@@ -180,6 +221,10 @@ class _PostCreatePageState extends State<PostCreatePage> {
           _tagCategoriesWithTags = tagsData;
           _tagsLoading = false;
         });
+        // If editing an existing post, map existing tags to categories
+        if (widget.existing != null && widget.existing!.tags.isNotEmpty) {
+          _mapExistingTagsToCategories(widget.existing!.tags);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -188,6 +233,38 @@ class _PostCreatePageState extends State<PostCreatePage> {
         });
       }
     }
+  }
+
+  /// Maps existing tag names to their category IDs
+  void _mapExistingTagsToCategories(List<String> existingTagNames) {
+    final Map<String, List<String>> mappedTags = {};
+    
+    // Create a map of tag name -> category ID for quick lookup
+    final Map<String, String> tagNameToCategoryId = {};
+    for (final entry in _tagCategoriesWithTags.entries) {
+      final category = entry.key;
+      final tags = entry.value;
+      for (final tag in tags) {
+        tagNameToCategoryId[tag.name] = category.id;
+      }
+    }
+    
+    // Group existing tags by their category
+    for (final tagName in existingTagNames) {
+      final categoryId = tagNameToCategoryId[tagName];
+      if (categoryId != null) {
+        if (!mappedTags.containsKey(categoryId)) {
+          mappedTags[categoryId] = [];
+        }
+        if (!mappedTags[categoryId]!.contains(tagName)) {
+          mappedTags[categoryId]!.add(tagName);
+        }
+      }
+    }
+    
+    setState(() {
+      _selectedTags = mappedTags;
+    });
   }
 
   @override
@@ -205,6 +282,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
     _quotaController.dispose();
     _jobTypeFocusNode.dispose();
     _eventFocusNode.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -273,6 +351,9 @@ class _PostCreatePageState extends State<PostCreatePage> {
     }
     if (maxAge < 17) {
       return 'Maximum age must be 17 or above';
+    }
+    if (maxAge > 50) {
+      return 'Maximum age must be 50 or below';
     }
     if (maxAge < minAge) {
       return 'Maximum age cannot be lower than minimum age';
@@ -389,10 +470,37 @@ class _PostCreatePageState extends State<PostCreatePage> {
         return;
       }
     } else {
-      // For drafts, only validate form fields
+      // For drafts, check if post is already published
+      // If post is already published (not draft and status is active/pending), cannot save as draft
+      if (widget.existing != null && 
+          !widget.existing!.isDraft && 
+          (widget.existing!.status == PostStatus.active || 
+           widget.existing!.status == PostStatus.pending)) {
+        if (mounted) {
+          setState(() => _saving = false);
+          DialogUtils.showWarningMessage(
+            context: context,
+            message: 'Cannot save as draft. This post has already been published.',
+          );
+        }
+        return;
+      }
+      
+      // For drafts, only validate title field (required for draft)
+      // Description and other fields are optional for drafts
       final formState = _formKey.currentState;
-      if (formState == null || !formState.validate()) {
+      if (formState == null) {
         if (mounted) setState(() => _saving = false);
+        return;
+      }
+      
+      // Only validate title field for drafts
+      if (_titleController.text.trim().isEmpty) {
+        if (mounted) {
+          setState(() => _saving = false);
+          // Scroll to first field (Job Title) if validation fails
+          _scrollToFirstField();
+        }
         return;
       }
     }
@@ -404,6 +512,11 @@ class _PostCreatePageState extends State<PostCreatePage> {
     
     final String id = widget.existing?.id ?? _postId; // Use generated ID for new posts
     final selectedTags = _selectedTags.values.expand((list) => list).toList();
+    
+    final minAge = _parseInt(_minAgeController.text);
+    final maxAge = _parseInt(_maxAgeController.text);
+    final quota = _parseInt(_quotaController.text);
+    
     final Post post = Post(
       id: id,
       ownerId: widget.existing?.ownerId ?? _authService.currentUserId,
@@ -418,9 +531,9 @@ class _PostCreatePageState extends State<PostCreatePage> {
       jobType: _jobType,
       tags: selectedTags,
       requiredSkills: selectedTags,
-      minAgeRequirement: _parseInt(_minAgeController.text),
-      maxAgeRequirement: _parseInt(_maxAgeController.text),
-      applicantQuota: _parseInt(_quotaController.text),
+      minAgeRequirement: minAge,
+      maxAgeRequirement: maxAge,
+      applicantQuota: quota,
       attachments: _attachments,
       isDraft: !publish,
       status: widget.existing == null ? PostStatus.pending : widget.existing!.status,
@@ -469,7 +582,47 @@ class _PostCreatePageState extends State<PostCreatePage> {
     return int.tryParse(t);
   }
 
-  
+  /// Checks if the post is already published
+  bool _isPostPublished() {
+    if (widget.existing == null) return false;
+    // Post is considered published if it's not a draft and status is active or pending
+    return !widget.existing!.isDraft && 
+           (widget.existing!.status == PostStatus.active || 
+            widget.existing!.status == PostStatus.pending);
+  }
+
+  /// Scrolls to the first field (Job Title) when validation fails for draft
+  void _scrollToFirstField() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_titleFieldKey.currentContext != null && _scrollController.hasClients) {
+        try {
+          Scrollable.ensureVisible(
+            _titleFieldKey.currentContext!,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            alignment: 0.1,
+          );
+        } catch (e) {
+          debugPrint('Error scrolling to first field: $e');
+          // Fallback: scroll to top
+          if (_scrollController.hasClients) {
+            _scrollController.animateTo(
+              0,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+            );
+          }
+        }
+      } else if (_scrollController.hasClients) {
+        // Fallback: scroll to top if field key not found
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+  }
 
   void _onTagCategoryChanged(String categoryId, List<String> values) {
     setState(() {
@@ -500,6 +653,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
         iconTheme: const IconThemeData(color: Colors.black),
       ),
       body: SingleChildScrollView(
+        controller: _scrollController,
         padding: const EdgeInsets.all(20),
         child: Form(
           key: _formKey,
@@ -580,6 +734,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                     ),
                     const SizedBox(height: 16),
                     _buildTextField(_titleController, 'Job Title*', 
+                      key: _titleFieldKey,
                       validator: (v) => InputValidators.required(v, errorMessage: 'Required')),
                     const SizedBox(height: 16),
                     _buildTextField(_descriptionController, 'Description*', 
@@ -760,6 +915,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                       ],
                     ),
                     const SizedBox(height: 16),
+                    
                     TagSelectionSection(
                       selections: _selectedTags,
                       onCategoryChanged: _onTagCategoryChanged,
@@ -858,6 +1014,10 @@ class _PostCreatePageState extends State<PostCreatePage> {
                                 return 'Maximum age must be 18 or above';
                               }
                               
+                              if (maxAge > 50) {
+                                return 'Maximum age must be 50 or below';
+                              }
+                              
                               if (minAge != null && maxAge < minAge) {
                                 return 'Max age cannot be lower than min age';
                               }
@@ -917,7 +1077,11 @@ class _PostCreatePageState extends State<PostCreatePage> {
                   images: _attachments,
                   onImagesAdded: (newUrls) {
                     setState(() {
-                      _attachments.addAll(newUrls);
+                      // Limit to maximum 3 images
+                      final remainingSlots = 3 - _attachments.length;
+                      if (remainingSlots > 0) {
+                        _attachments.addAll(newUrls.take(remainingSlots));
+                      }
                     });
                   },
                   onImageRemoved: (index) {
@@ -930,6 +1094,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                   storageService: _storage,
                   uploadId: widget.existing?.id ?? _postId,
                   disabled: _saving,
+                  maxImages: 3, // Maximum 3 images allowed
                 ),
               ),
               
@@ -942,7 +1107,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: _saving ? null : () => _save(publish: false),
+                        onPressed: (_saving || _isPostPublished()) ? null : () => _save(publish: false),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.black,
                           side: const BorderSide(color: Colors.black),
@@ -1276,6 +1441,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
   Widget _buildTextField(
     TextEditingController controller, 
     String label, {
+    Key? key,
     int maxLines = 1,
     String? Function(String?)? validator,
     String? hintText,
@@ -1317,6 +1483,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
               ),
               const SizedBox(height: 8),
               TextFormField(
+                key: key,
                 controller: controller,
                 maxLines: maxLines,
                 keyboardType: keyboardType,
@@ -1405,6 +1572,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
         ),
         const SizedBox(height: 8),
         TextFormField(
+          key: key,
           controller: controller,
           maxLines: maxLines,
           keyboardType: keyboardType,

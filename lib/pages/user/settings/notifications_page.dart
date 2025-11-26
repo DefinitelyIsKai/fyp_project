@@ -508,6 +508,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
         return Icons.account_balance_wallet_outlined;
       case NotificationCategory.post:
         return Icons.campaign_outlined;
+      case NotificationCategory.post_approval:
+        return Icons.campaign_outlined;
       case NotificationCategory.application:
         return Icons.work_outline_rounded;
       case NotificationCategory.booking:
@@ -517,6 +519,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
       case NotificationCategory.account_warning:
         return Icons.warning_amber_rounded;
       case NotificationCategory.account_suspension:
+        return Icons.warning_amber_rounded;
+      case NotificationCategory.post_rejection:
         return Icons.warning_amber_rounded;
       case NotificationCategory.account_unsuspension:
         return Icons.check_circle_outline_rounded;
@@ -531,6 +535,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
         return Colors.orange.withOpacity(0.1);
       case NotificationCategory.post:
         return Colors.green.withOpacity(0.1);
+      case NotificationCategory.post_approval:
+        return Colors.green.withOpacity(0.1);
       case NotificationCategory.application:
         return Colors.purple.withOpacity(0.1);
       case NotificationCategory.booking:
@@ -540,6 +546,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
       case NotificationCategory.account_warning:
         return Colors.red.withOpacity(0.1);
       case NotificationCategory.account_suspension:
+        return Colors.red.withOpacity(0.15);
+      case NotificationCategory.post_rejection:
         return Colors.red.withOpacity(0.15);
       case NotificationCategory.account_unsuspension:
         return Colors.green.withOpacity(0.1);
@@ -554,6 +562,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
         return Colors.orange;
       case NotificationCategory.post:
         return Colors.green;
+      case NotificationCategory.post_approval:
+        return Colors.green;
       case NotificationCategory.application:
         return Colors.purple;
       case NotificationCategory.booking:
@@ -563,6 +573,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
       case NotificationCategory.account_warning:
         return Colors.red;
       case NotificationCategory.account_suspension:
+        return Colors.red[800]!;
+      case NotificationCategory.post_rejection:
         return Colors.red[800]!;
       case NotificationCategory.account_unsuspension:
         return Colors.green;

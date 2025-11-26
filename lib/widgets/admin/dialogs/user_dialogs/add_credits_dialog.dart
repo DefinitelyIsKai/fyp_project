@@ -6,7 +6,7 @@ import '../../../../utils/user/button_styles.dart';
 
 /// Dialog for adding credits to wallet
 /// Shows credit packages and handles top-up checkout
-class AddCreditsDialog extends StatelessWidget {
+class AddCreditsDialog extends StatefulWidget {
   final WalletService walletService;
   final VoidCallback? onTopUpStarted;
 
@@ -31,37 +31,56 @@ class AddCreditsDialog extends StatelessWidget {
     );
   }
 
-  Future<void> _startTopUp(BuildContext context, {required int credits, required int amountInCents}) async {
-    // Check for pending payments first
-    final hasPending = await walletService.hasPendingPayments();
-    if (hasPending) {
-      if (!context.mounted) return;
-      DialogUtils.showWarningMessage(
-        context: context,
-        message: 'You have a pending payment. Please complete it before starting a new top-up.',
-      );
-      return;
-    }
+  @override
+  State<AddCreditsDialog> createState() => _AddCreditsDialogState();
+}
 
+class _AddCreditsDialogState extends State<AddCreditsDialog> {
+  bool _isLoading = false;
+
+  Future<void> _startTopUp({required int credits, required int amountInCents}) async {
+    if (_isLoading) return; // Prevent multiple clicks
+    
+    setState(() {
+      _isLoading = true;
+    });
+    
     try {
-      final url = await walletService.createTopUpCheckoutSession(
+      // Check for pending payments first
+      final hasPending = await widget.walletService.hasPendingPayments();
+      if (hasPending) {
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+        });
+        DialogUtils.showWarningMessage(
+          context: context,
+          message: 'You have a pending payment. Please complete it before starting a new top-up.',
+        );
+        return;
+      }
+
+      final url = await widget.walletService.createTopUpCheckoutSession(
         credits: credits,
         amountInCents: amountInCents,
       );
-      if (!context.mounted) return;
+      if (!mounted) return;
       
       Navigator.pop(context); // Close dialog first
-      onTopUpStarted?.call();
+      widget.onTopUpStarted?.call();
       
       final ok = await launchUrl(url, mode: LaunchMode.externalApplication);
-      if (!ok && context.mounted) {
+      if (!ok && mounted) {
         DialogUtils.showWarningMessage(
           context: context,
           message: 'Could not open checkout',
         );
       }
     } catch (e) {
-      if (!context.mounted) return;
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
       DialogUtils.showWarningMessage(
         context: context,
         message: 'Top-up failed: $e',
@@ -69,101 +88,91 @@ class AddCreditsDialog extends StatelessWidget {
     }
   }
 
-  Widget _buildCreditOption(BuildContext context, {
+  Widget _buildCreditOption({
     required int credits,
     required String price,
     required String description,
-    bool isPopular = false,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isPopular ? const Color(0xFF00C8A0) : Colors.grey[300]!,
-          width: isPopular ? 2 : 1,
-        ),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        leading: Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            color: const Color(0xFF00C8A0).withOpacity(0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                credits.toString(),
-                style: const TextStyle(
-                  color: Color(0xFF00C8A0),
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                ),
-              ),
-              Text(
-                'credits',
-                style: TextStyle(
-                  color: const Color(0xFF00C8A0),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
+    return Opacity(
+      opacity: _isLoading ? 0.6 : 1.0,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.grey[50],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: Colors.grey[300]!,
+            width: 1,
           ),
         ),
-        title: Row(
-          children: [
-            Text(
-              price,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                color: Colors.black,
-                fontSize: 16,
-              ),
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          leading: Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: const Color(0xFF00C8A0).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
             ),
-            if (isPopular) ...[
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF00C8A0),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  'POPULAR',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  credits.toString(),
+                  style: const TextStyle(
+                    color: Color(0xFF00C8A0),
                     fontWeight: FontWeight.w700,
+                    fontSize: 16,
                   ),
                 ),
-              ),
-            ],
-          ],
-        ),
-        subtitle: Text(
-          description,
-          style: TextStyle(
-            color: Colors.grey[600],
-            fontSize: 12,
+                Text(
+                  'credits',
+                  style: TextStyle(
+                    color: const Color(0xFF00C8A0),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
           ),
+          title: Text(
+            price,
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              color: Colors.black,
+              fontSize: 16,
+            ),
+          ),
+          subtitle: Text(
+            description,
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 12,
+            ),
+          ),
+          trailing: _isLoading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFF00C8A0),
+                  ),
+                )
+              : const Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: Color(0xFF00C8A0),
+                ),
+          onTap: _isLoading
+              ? null
+              : () {
+                  _startTopUp(
+                    credits: credits,
+                    amountInCents: credits == 100 ? 999 : credits == 500 ? 4499 : 7999,
+                  );
+                },
         ),
-        trailing: const Icon(
-          Icons.arrow_forward_ios,
-          size: 16,
-          color: Color(0xFF00C8A0),
-        ),
-        onTap: () {
-          _startTopUp(
-            context,
-            credits: credits,
-            amountInCents: credits == 100 ? 999 : credits == 500 ? 4499 : 7999,
-          );
-        },
       ),
     );
   }
@@ -213,24 +222,20 @@ class AddCreditsDialog extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             _buildCreditOption(
-              context,
               credits: 100,
-              price: '\$9.99',
+              price: 'RM9.99',
               description: 'Perfect for trying out the platform',
             ),
             const SizedBox(height: 12),
             _buildCreditOption(
-              context,
               credits: 500,
-              price: '\$44.99',
+              price: 'RM44.99',
               description: 'Best value - 10% discount',
-              isPopular: true,
             ),
             const SizedBox(height: 12),
             _buildCreditOption(
-              context,
               credits: 1000,
-              price: '\$79.99',
+              price: 'RM79.99',
               description: 'Maximum savings - 20% discount',
             ),
             const SizedBox(height: 20),
@@ -238,7 +243,7 @@ class AddCreditsDialog extends StatelessWidget {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: _isLoading ? null : () => Navigator.pop(context),
                     style: ButtonStyles.primaryOutlined(),
                     child: const Text('Cancel'),
                   ),

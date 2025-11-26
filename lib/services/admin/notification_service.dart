@@ -79,9 +79,9 @@ class NotificationService {
     required String postTitle,
   }) async {
     await _notificationsRef.add({
-      'title': 'Post Approved',
-      'body': 'Your job post "$postTitle" has been approved and is now active.',
-      'category': 'post_approval',
+      'title': 'Post published',
+      'body': '"$postTitle" is now live.',
+      'category': 'post', // Use 'post' category to match user-side NotificationCategory.post
       'createdAt': FieldValue.serverTimestamp(),
       'isRead': false,
       'userId': userId,

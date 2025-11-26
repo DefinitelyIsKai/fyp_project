@@ -91,6 +91,7 @@ class _SearchDiscoveryJobseekerPageState
         backgroundColor: Colors.white,
         elevation: 1,
         iconTheme: const IconThemeData(color: Colors.black),
+        automaticallyImplyLeading: false,
       ),
       body: Column(
         children: [
@@ -99,10 +100,13 @@ class _SearchDiscoveryJobseekerPageState
           const SizedBox(height: 16),
           // Results Header and View Toggle
           StreamBuilder<List<Post>>(
+            key: ValueKey('${searchQuery}_${locationFilter}_${minBudget}_${maxBudget}_${selectedEvents.join(",")}_${searchRadius}_${userLocation?.latitude}_${userLocation?.longitude}'),
             stream: getPostsStream(),
             builder: (context, snapshot) {
               var posts = snapshot.data ?? [];
               posts = filterPostsForUser(posts);
+              // Apply distance filter to match map markers
+              posts = filterPostsByDistance(posts);
 
               return Padding(
                 padding: const EdgeInsets.symmetric(
@@ -658,12 +662,22 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                             .doc(widget.post.id)
                             .snapshots(),
                         builder: (context, postSnapshot) {
+                          // Helper to safely parse int from Firestore (handles int, double, num)
+                          int? _parseInt(dynamic value) {
+                            if (value == null) return null;
+                            if (value is int) return value;
+                            if (value is double) return value.toInt();
+                            if (value is num) return value.toInt();
+                            if (value is String) return int.tryParse(value);
+                            return null;
+                          }
+                          
                           int approvedCount = 0;
                           
                           if (postSnapshot.hasData) {
                             final data = postSnapshot.data!.data();
                             if (data != null) {
-                              approvedCount = (data['approvedApplicants'] as int?) ?? 0;
+                              approvedCount = _parseInt(data['approvedApplicants']) ?? 0;
                             }
                           }
                           

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../../models/user/post.dart';
 import '../../../models/user/application.dart';
 import '../../../services/user/post_service.dart';
@@ -196,7 +197,11 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                       stream: FirebaseFirestore.instance
                           .collection('posts')
                           .doc(widget.post.id)
-                          .snapshots(),
+                          .snapshots()
+                          .handleError((error) {
+                            // Ignore permission errors during logout - stream will naturally end
+                            debugPrint('Error in post stream (likely during logout): $error');
+                          }),
                       builder: (context, postSnapshot) {
                         Post currentPost = widget.post;
                         int approvedCount = 0;
@@ -204,8 +209,17 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                         if (postSnapshot.hasData) {
                           final data = postSnapshot.data!.data();
                           if (data != null) {
+                            // Helper to safely parse int from Firestore (handles int, double, num)
+                            int? _parseInt(dynamic value) {
+                              if (value == null) return null;
+                              if (value is int) return value;
+                              if (value is double) return value.toInt();
+                              if (value is num) return value.toInt();
+                              if (value is String) return int.tryParse(value);
+                              return null;
+                            }
                             // Get approved count from document
-                            approvedCount = (data['approvedApplicants'] as int?) ?? 0;
+                            approvedCount = _parseInt(data['approvedApplicants']) ?? 0;
                             // Reconstruct post from document data
                             try {
                               currentPost = Post.fromMap({...data, 'id': widget.post.id});
@@ -369,7 +383,16 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                     future: FirebaseFirestore.instance.collection('posts').doc(widget.post.id).get(),
                     builder: (context, snapshot) {
                       final data = snapshot.data?.data();
-                      final views = data?['views'] as int? ?? widget.post.views;
+                      // Helper to safely parse int from Firestore (handles int, double, num)
+                      int? _parseInt(dynamic value) {
+                        if (value == null) return null;
+                        if (value is int) return value;
+                        if (value is double) return value.toInt();
+                        if (value is num) return value.toInt();
+                        if (value is String) return int.tryParse(value);
+                        return null;
+                      }
+                      final views = _parseInt(data?['views']) ?? widget.post.views;
                       return Row(
                         children: [
                           Icon(Icons.remove_red_eye, size: 16, color: Colors.grey[500]),
@@ -511,9 +534,11 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  if (widget.post.latitude != null && widget.post.longitude != null)
-                    _buildMapView()
-                  else
+                  if (widget.post.latitude != null && widget.post.longitude != null) ...[
+                    _buildMapView(),
+                    const SizedBox(height: 12),
+                    _buildLocationText(showAsTextOnly: true),
+                  ] else
                     _buildLocationText(),
                 ],
               ),
@@ -656,32 +681,85 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
     );
   }
 
-  Widget _buildLocationText() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.location_on, color: Colors.grey[500], size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              widget.post.location.isNotEmpty 
-                  ? widget.post.location 
-                  : 'Location not specified',
-              style: TextStyle(
-                color: Colors.grey[700],
-                fontSize: 15,
-              ),
-            ),
+  Widget _buildLocationText({bool showAsTextOnly = false}) {
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('posts')
+          .doc(widget.post.id)
+          .get(),
+      builder: (context, snapshot) {
+        String location = widget.post.location;
+        
+        // 从 Firebase 读取 location 字段
+        if (snapshot.hasData && snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>?;
+          if (data != null && data.containsKey('location')) {
+            final firebaseLocation = data['location'];
+            if (firebaseLocation != null) {
+              location = firebaseLocation.toString();
+            }
+          }
+        }
+        
+        // 如果只是显示文本（地图下方），使用简化样式
+        if (showAsTextOnly) {
+          return snapshot.connectionState == ConnectionState.waiting
+              ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Text(
+                  location.isNotEmpty 
+                      ? location 
+                      : 'Location not specified',
+                  style: TextStyle(
+                    color: Colors.grey[700],
+                    fontSize: 15,
+                  ),
+                );
+        }
+        
+        // 完整样式（没有地图时）
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.grey[50],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey[200]!),
           ),
-        ],
-      ),
+          child: snapshot.connectionState == ConnectionState.waiting
+              ? Row(
+                  children: [
+                    Icon(Icons.location_on, color: Colors.grey[500], size: 20),
+                    const SizedBox(width: 12),
+                    const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Icon(Icons.location_on, color: Colors.grey[500], size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        location.isNotEmpty 
+                            ? location 
+                            : 'Location not specified',
+                        style: TextStyle(
+                          color: Colors.grey[700],
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+        );
+      },
     );
   }
 
@@ -846,34 +924,277 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
 
   Widget _buildMapView() {
     final position = LatLng(widget.post.latitude!, widget.post.longitude!);
-    return Container(
-      height: 200,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[300]!),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: GoogleMap(
-          initialCameraPosition: CameraPosition(
-            target: position,
-            zoom: 14,
-          ),
-          markers: {
-            Marker(
-              markerId: MarkerId(widget.post.id),
-              position: position,
-              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-            ),
-          },
-          onMapCreated: (GoogleMapController controller) {
-            _mapController = controller;
-          },
-          myLocationEnabled: false,
-          myLocationButtonEnabled: false,
-          zoomControlsEnabled: false,
-          mapToolbarEnabled: false,
+    return GestureDetector(
+      onTap: () => _showFullScreenMap(position),
+      onDoubleTap: () => _showFullScreenMap(position),
+      child: Container(
+        height: 200,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[300]!),
         ),
+        child: Stack(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: GoogleMap(
+                initialCameraPosition: CameraPosition(
+                  target: position,
+                  zoom: 14,
+                ),
+                markers: {
+                  Marker(
+                    markerId: MarkerId(widget.post.id),
+                    position: position,
+                    icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+                  ),
+                },
+                onMapCreated: (GoogleMapController controller) {
+                  _mapController = controller;
+                },
+                myLocationEnabled: false,
+                myLocationButtonEnabled: false,
+                zoomControlsEnabled: false,
+                mapToolbarEnabled: false,
+                scrollGesturesEnabled: false,
+                zoomGesturesEnabled: false,
+                tiltGesturesEnabled: false,
+                rotateGesturesEnabled: false,
+                onTap: (LatLng location) {
+                  // 点击地图时打开全屏视图
+                  _showFullScreenMap(position);
+                },
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.fullscreen,
+                  size: 20,
+                  color: Color(0xFF00C8A0),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showFullScreenMap(LatLng postPosition) {
+    // 从 Firebase 读取 location
+    Future<String> getLocationFromFirebase() async {
+      try {
+        final doc = await FirebaseFirestore.instance
+            .collection('posts')
+            .doc(widget.post.id)
+            .get();
+        if (doc.exists) {
+          final data = doc.data();
+          final location = data?['location']?.toString();
+          if (location != null && location.isNotEmpty) {
+            return location;
+          }
+        }
+      } catch (e) {
+        debugPrint('Error loading location from Firebase: $e');
+      }
+      return widget.post.location.isNotEmpty ? widget.post.location : 'Location';
+    }
+
+    // 获取用户当前位置
+    Future<Position?> getCurrentLocation() async {
+      try {
+        // 检查位置服务是否启用
+        bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        if (!serviceEnabled) {
+          debugPrint('Location services are disabled');
+          return null;
+        }
+
+        // 检查位置权限
+        LocationPermission permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied) {
+          permission = await Geolocator.requestPermission();
+          if (permission == LocationPermission.denied) {
+            debugPrint('Location permissions are denied');
+            return null;
+          }
+        }
+
+        if (permission == LocationPermission.deniedForever) {
+          debugPrint('Location permissions are permanently denied');
+          return null;
+        }
+
+        // 获取当前位置
+        Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+        );
+        return position;
+      } catch (e) {
+        debugPrint('Error getting current location: $e');
+        return null;
+      }
+    }
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (context) => FutureBuilder<Map<String, dynamic>>(
+        future: Future.wait([
+          getLocationFromFirebase(),
+          getCurrentLocation(),
+        ]).then((results) => {
+          'locationText': results[0] as String,
+          'userPosition': results[1] as Position?,
+        }),
+        builder: (context, snapshot) {
+          final locationText = snapshot.data?['locationText'] ?? widget.post.location;
+          final userPosition = snapshot.data?['userPosition'] as Position?;
+          
+          // 创建标记集合（只包含 post 位置）
+          Set<Marker> markers = {
+            Marker(
+              markerId: MarkerId('post_${widget.post.id}'),
+              position: postPosition,
+              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+              infoWindow: InfoWindow(
+                title: widget.post.title,
+                snippet: locationText.isNotEmpty ? locationText : 'Job Location',
+              ),
+            ),
+          };
+
+          // 获取用户位置用于计算相机位置（但不添加自定义标记，使用系统位置指示器）
+          LatLng? userLatLng;
+          if (userPosition != null) {
+            userLatLng = LatLng(userPosition.latitude, userPosition.longitude);
+          }
+
+          // 计算相机位置以同时显示两个位置
+          CameraPosition initialCameraPosition;
+          if (userLatLng != null) {
+            // 计算两个位置的中点
+            double centerLat = (postPosition.latitude + userLatLng.latitude) / 2;
+            double centerLng = (postPosition.longitude + userLatLng.longitude) / 2;
+            
+            // 计算距离以确定合适的缩放级别
+            double distance = Geolocator.distanceBetween(
+              postPosition.latitude,
+              postPosition.longitude,
+              userLatLng.latitude,
+              userLatLng.longitude,
+            );
+            
+            // 根据距离调整缩放级别
+            double zoom = 12.0;
+            if (distance > 10000) zoom = 10.0;
+            else if (distance > 5000) zoom = 11.0;
+            else if (distance > 1000) zoom = 12.0;
+            else if (distance > 500) zoom = 13.0;
+            else zoom = 14.0;
+            
+            initialCameraPosition = CameraPosition(
+              target: LatLng(centerLat, centerLng),
+              zoom: zoom,
+            );
+          } else {
+            // 如果没有用户位置，只显示 post 位置
+            initialCameraPosition = CameraPosition(
+              target: postPosition,
+              zoom: 15,
+            );
+          }
+
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: EdgeInsets.zero,
+            child: Stack(
+              children: [
+                Container(
+                  width: double.infinity,
+                  height: double.infinity,
+                  child: GoogleMap(
+                    initialCameraPosition: initialCameraPosition,
+                    markers: markers,
+                    myLocationEnabled: true, // 始终使用系统位置指示器
+                    myLocationButtonEnabled: true,
+                    zoomControlsEnabled: true,
+                    mapToolbarEnabled: true,
+                    onMapCreated: (GoogleMapController controller) {
+                      // 如果有两个位置，调整相机以显示两者
+                      if (userLatLng != null) {
+                        controller.animateCamera(
+                          CameraUpdate.newLatLngBounds(
+                            LatLngBounds(
+                              southwest: LatLng(
+                                postPosition.latitude < userLatLng.latitude 
+                                    ? postPosition.latitude 
+                                    : userLatLng.latitude,
+                                postPosition.longitude < userLatLng.longitude 
+                                    ? postPosition.longitude 
+                                    : userLatLng.longitude,
+                              ),
+                              northeast: LatLng(
+                                postPosition.latitude > userLatLng.latitude 
+                                    ? postPosition.latitude 
+                                    : userLatLng.latitude,
+                                postPosition.longitude > userLatLng.longitude 
+                                    ? postPosition.longitude 
+                                    : userLatLng.longitude,
+                              ),
+                            ),
+                            100.0,
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ),
+                Positioned(
+                  top: 40,
+                  right: 20,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.close, color: Colors.black),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                ),
+                if (snapshot.connectionState == ConnectionState.waiting)
+                  const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

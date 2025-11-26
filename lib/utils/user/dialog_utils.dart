@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../../widgets/user/confirmation_dialog.dart';
 import '../../widgets/user/message_box.dart';
 import '../../services/user/auth_service.dart';
@@ -138,10 +139,23 @@ class DialogUtils {
 
     if (confirmed == true && context.mounted) {
       final service = authService ?? AuthService();
-      await service.signOut();
+      
+      // Navigate away first to stop all streams and listeners
+      // This prevents Firestore permission errors during logout
       if (context.mounted) {
         Navigator.of(context).pushReplacementNamed(AppRoutes.userLogin);
       }
+      
+      // Wait a bit for streams to be cancelled before signing out
+      // This reduces Firestore permission warnings in logs
+      Future.delayed(const Duration(milliseconds: 100), () async {
+        try {
+          await service.signOut();
+        } catch (e) {
+          // Ignore errors during logout - user is already navigated away
+          debugPrint('Error during signOut (non-critical): $e');
+        }
+      });
     }
   }
 }

@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../utils/user/button_styles.dart';
 
-/// Dialog for reporting a jobseeker
-/// Returns a Map with 'reason' and 'description' keys, or null if cancelled
+//Report Dialog
 class ReportJobseekerDialog extends StatefulWidget {
   final String jobseekerName;
 
@@ -31,7 +30,7 @@ class _ReportJobseekerDialogState extends State<ReportJobseekerDialog> {
     
     return Dialog(
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
       ),
       child: Container(
         constraints: BoxConstraints(
@@ -40,7 +39,7 @@ class _ReportJobseekerDialogState extends State<ReportJobseekerDialog> {
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(24),
         ),
         child: SingleChildScrollView(
           child: Padding(
@@ -109,15 +108,15 @@ class _ReportJobseekerDialogState extends State<ReportJobseekerDialog> {
             ),
             const SizedBox(height: 24),
             // Reason Selection
-            Text(
+            const Text(
               'Reason for reporting:',
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
+                color: Colors.black87,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             ...[
               'Unprofessional Behavior',
               'No Show / Cancellation',
@@ -168,15 +167,15 @@ class _ReportJobseekerDialogState extends State<ReportJobseekerDialog> {
             }),
             const SizedBox(height: 20),
             // Description Field
-            Text(
+            const Text(
               'Description (optional):',
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
+                color: Colors.black87,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             TextField(
               controller: _descriptionController,
               maxLines: 4,

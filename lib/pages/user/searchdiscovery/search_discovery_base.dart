@@ -212,6 +212,27 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
     return MapHelper.calculateDistance(point1, point2);
   }
 
+  // Filter posts by distance from user location if search radius is set
+  List<Post> filterPostsByDistance(List<Post> posts) {
+    if (_userLocation == null || _searchRadius == null) {
+      return posts;
+    }
+
+    return posts.where((post) {
+      if (post.latitude != null && post.longitude != null) {
+        final postLocation = LatLng(post.latitude!, post.longitude!);
+        final distance = calculateDistance(_userLocation!, postLocation);
+        return distance <= _searchRadius!;
+      } else if (post.location.isNotEmpty) {
+        // Include posts with location text but no coordinates
+        // They will be filtered during marker creation if needed
+        return true;
+      } else {
+        return false; // Skip posts without location
+      }
+    }).toList();
+  }
+
   // Create a simple circular dot marker bitmap
   Future<BitmapDescriptor> createDotMarker(
     Color color, {
@@ -284,6 +305,8 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
               strokeWidth: 1,
             ),
           );
+        // Clear cache when user location changes to recalculate distance filters
+        _cachedPostsStream = null;
       });
 
       // Center map on user location if map view is active
@@ -681,24 +704,11 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
     double initialZoom = _userLocation != null ? 12 : 5;
 
     // Combine user location marker and job markers
+    // 只显示 job 标记，用户位置使用系统位置指示器（myLocationEnabled）
     Set<Marker> allMarkers = _showJobMarkers
         ? Set.from(_markers.values)
         : <Marker>{};
-    if (_userLocation != null) {
-      allMarkers.add(
-        Marker(
-          markerId: const MarkerId('user_location'),
-          position: _userLocation!,
-          icon:
-              _userLocationIcon ??
-              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-          infoWindow: const InfoWindow(
-            title: 'Your Location',
-            snippet: 'Your current location',
-          ),
-        ),
-      );
-    }
+    // 移除自定义用户位置标记，使用系统位置指示器
 
     return Stack(
       children: [

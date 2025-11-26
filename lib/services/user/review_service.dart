@@ -16,6 +16,23 @@ class ReviewService {
   }) async {
     final recruiterId = _auth.currentUserId;
     
+    // Validate rating value
+    if (rating < 1 || rating > 5) {
+      throw StateError('Rating must be between 1 and 5');
+    }
+    
+    // Check if rating already exists
+    final existingReviewQuery = await _col
+        .where('postId', isEqualTo: postId)
+        .where('jobseekerId', isEqualTo: jobseekerId)
+        .where('recruiterId', isEqualTo: recruiterId)
+        .limit(1)
+        .get();
+    
+    if (existingReviewQuery.docs.isNotEmpty) {
+      throw StateError('You have already rated this applicant for this post');
+    }
+    
     // Verify post exists, is completed, and owned by recruiter
     final postDoc = await _firestore.collection('posts').doc(postId).get();
     if (!postDoc.exists) {
@@ -85,6 +102,21 @@ class ReviewService {
         .map((d) => (d.data()['rating'] as num?)?.toDouble() ?? 0.0)
         .fold<double>(0.0, (a, b) => a + b);
     return total / qs.docs.length;
+  }
+
+  /// Stream to check if a rating exists for a specific post and applicant
+  Stream<bool> streamRatingExists({
+    required String postId,
+    required String jobseekerId,
+    required String recruiterId,
+  }) {
+    return _col
+        .where('postId', isEqualTo: postId)
+        .where('jobseekerId', isEqualTo: jobseekerId)
+        .where('recruiterId', isEqualTo: recruiterId)
+        .limit(1)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.isNotEmpty);
   }
 }
 
