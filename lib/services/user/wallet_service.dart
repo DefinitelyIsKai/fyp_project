@@ -7,6 +7,16 @@ import '../../models/user/wallet.dart';
 import '../../utils/user/timestamp_utils.dart';
 import 'notification_service.dart';
 
+// Helper function to safely parse int from Firestore (handles int, double, num)
+int _parseIntFromFirestore(dynamic value) {
+  if (value == null) return 0;
+  if (value is int) return value;
+  if (value is double) return value.toInt();
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? 0;
+  return 0;
+}
+
 class WalletService {
   WalletService({
     FirebaseFirestore? firestore,
@@ -273,7 +283,7 @@ class WalletService {
     await _firestore.runTransaction((tx) async {
       final snap = await tx.get(_walletDoc);
       final data = snap.data() ?? <String, dynamic>{'balance': 0};
-      final int current = (data['balance'] as int?) ?? 0;
+      final int current = _parseIntFromFirestore(data['balance']);
       final int next = current + amount;
       tx.update(_walletDoc, {'balance': next, 'updatedAt': FieldValue.serverTimestamp()});
       tx.set(txnRef, {
@@ -306,8 +316,8 @@ class WalletService {
     await _firestore.runTransaction((tx) async {
       final snap = await tx.get(_walletDoc);
       final data = snap.data() ?? <String, dynamic>{'balance': 0, 'heldCredits': 0};
-      final int balance = (data['balance'] as int?) ?? 0;
-      final int heldCredits = (data['heldCredits'] as int?) ?? 0;
+      final int balance = _parseIntFromFirestore(data['balance']);
+      final int heldCredits = _parseIntFromFirestore(data['heldCredits']);
       final int available = balance - heldCredits;
 
       if (available < feeCredits) {
@@ -355,7 +365,7 @@ class WalletService {
     await _firestore.runTransaction((tx) async {
       final snap = await tx.get(_walletDoc);
       final data = snap.data() ?? <String, dynamic>{'balance': 0, 'heldCredits': 0};
-      final int heldCredits = (data['heldCredits'] as int?) ?? 0;
+      final int heldCredits = _parseIntFromFirestore(data['heldCredits']);
 
       if (heldCredits < feeCredits) {
         // Already processed or no credits held - silently return false
@@ -414,7 +424,7 @@ class WalletService {
         }
 
         final walletData = walletSnap.data()!;
-        final int currentHeldCredits = (walletData['heldCredits'] as int?) ?? 0;
+        final int currentHeldCredits = _parseIntFromFirestore(walletData['heldCredits']);
 
         // Read the "On Hold" transaction document if it exists
         DocumentReference? onHoldTxnRef;
@@ -519,8 +529,8 @@ class WalletService {
         }
 
         final walletData = walletSnap.data()!;
-        final int currentBalance = (walletData['balance'] as int?) ?? 0;
-        final int currentHeldCredits = (walletData['heldCredits'] as int?) ?? 0;
+        final int currentBalance = _parseIntFromFirestore(walletData['balance']);
+        final int currentHeldCredits = _parseIntFromFirestore(walletData['heldCredits']);
 
         // Read the "On Hold" transaction document if it exists
         DocumentReference? onHoldTxnRef;
@@ -670,8 +680,17 @@ class WalletService {
     await _firestore.runTransaction((tx) async {
       final snap = await tx.get(_walletDoc);
       final data = snap.data() ?? <String, dynamic>{'balance': 0, 'heldCredits': 0};
-      final int balance = (data['balance'] as int?) ?? 0;
-      final int heldCredits = (data['heldCredits'] as int?) ?? 0;
+      // Helper to safely parse int from Firestore (handles int, double, num)
+      int _parseInt(dynamic value) {
+        if (value == null) return 0;
+        if (value is int) return value;
+        if (value is double) return value.toInt();
+        if (value is num) return value.toInt();
+        if (value is String) return int.tryParse(value) ?? 0;
+        return 0;
+      }
+      final int balance = _parseInt(data['balance']);
+      final int heldCredits = _parseInt(data['heldCredits']);
       final int available = balance - heldCredits;
 
       if (available < feeCredits) {
@@ -736,7 +755,7 @@ class WalletService {
         }
 
         final walletData = walletSnap.data()!;
-        final int currentHeldCredits = (walletData['heldCredits'] as int?) ?? 0;
+        final int currentHeldCredits = _parseIntFromFirestore(walletData['heldCredits']);
 
         // Read the "On Hold" transaction document if it exists
         DocumentReference? onHoldTxnRef;
@@ -823,8 +842,8 @@ class WalletService {
         }
 
         final walletData = walletSnap.data()!;
-        final int currentBalance = (walletData['balance'] as int?) ?? 0;
-        final int currentHeldCredits = (walletData['heldCredits'] as int?) ?? 0;
+        final int currentBalance = _parseIntFromFirestore(walletData['balance']);
+        final int currentHeldCredits = _parseIntFromFirestore(walletData['heldCredits']);
 
         // Read the "On Hold" transaction document if it exists
         DocumentReference? onHoldTxnRef;
@@ -931,7 +950,7 @@ class WalletService {
       for (final doc in pendingPayments.docs) {
         final data = doc.data();
         final sessionId = data['sessionId'] as String? ?? '';
-        final credits = data['credits'] as int? ?? 0;
+        final credits = _parseIntFromFirestore(data['credits']);
 
         if (sessionId.isNotEmpty && credits > 0) {
           try {

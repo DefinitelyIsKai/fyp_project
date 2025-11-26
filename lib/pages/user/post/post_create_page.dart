@@ -349,6 +349,9 @@ class _PostCreatePageState extends State<PostCreatePage> {
     if (maxAge < 17) {
       return 'Maximum age must be 17 or above';
     }
+    if (maxAge > 50) {
+      return 'Maximum age must be 50 or below';
+    }
     if (maxAge < minAge) {
       return 'Maximum age cannot be lower than minimum age';
     }
@@ -479,6 +482,11 @@ class _PostCreatePageState extends State<PostCreatePage> {
     
     final String id = widget.existing?.id ?? _postId; // Use generated ID for new posts
     final selectedTags = _selectedTags.values.expand((list) => list).toList();
+    
+    final minAge = _parseInt(_minAgeController.text);
+    final maxAge = _parseInt(_maxAgeController.text);
+    final quota = _parseInt(_quotaController.text);
+    
     final Post post = Post(
       id: id,
       ownerId: widget.existing?.ownerId ?? _authService.currentUserId,
@@ -493,9 +501,9 @@ class _PostCreatePageState extends State<PostCreatePage> {
       jobType: _jobType,
       tags: selectedTags,
       requiredSkills: selectedTags,
-      minAgeRequirement: _parseInt(_minAgeController.text),
-      maxAgeRequirement: _parseInt(_maxAgeController.text),
-      applicantQuota: _parseInt(_quotaController.text),
+      minAgeRequirement: minAge,
+      maxAgeRequirement: maxAge,
+      applicantQuota: quota,
       attachments: _attachments,
       isDraft: !publish,
       status: widget.existing == null ? PostStatus.pending : widget.existing!.status,
@@ -932,6 +940,10 @@ class _PostCreatePageState extends State<PostCreatePage> {
                               
                               if (maxAge < 18) {
                                 return 'Maximum age must be 18 or above';
+                              }
+                              
+                              if (maxAge > 50) {
+                                return 'Maximum age must be 50 or below';
                               }
                               
                               if (minAge != null && maxAge < minAge) {

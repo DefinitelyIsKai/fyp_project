@@ -6,6 +6,16 @@ import 'hybrid_matching_engine.dart';
 // Re-export MatchingStrategy for convenience
 export 'hybrid_matching_engine.dart' show MatchingStrategy;
 
+// Helper to safely parse int from Firestore (handles int, double, num)
+int? _parseInt(dynamic value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is double) return value.toInt();
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
+}
+
 class MatchingService {
   MatchingService({
     FirebaseFirestore? firestore,
@@ -58,7 +68,7 @@ class MatchingService {
             companyName: data['companyName'] as String? ?? '',
             recruiterId: data['recruiterId'] as String? ?? '',
             status: data['status'] as String? ?? 'pending',
-            matchPercentage: (data['matchPercentage'] as int?) ?? null,
+            matchPercentage: _parseInt(data['matchPercentage']),
             matchedSkills: (data['matchedSkills'] as List?)?.cast<String>() ?? null,
             candidateName: data['candidateName'] as String? ?? null,
             matchingStrategy: data['matchingStrategy'] as String? ?? null,
@@ -83,7 +93,7 @@ class MatchingService {
             companyName: data['companyName'] as String? ?? '',
             recruiterId: data['recruiterId'] as String? ?? '',
             status: data['status'] as String? ?? 'pending',
-            matchPercentage: (data['matchPercentage'] as int?) ?? null,
+            matchPercentage: _parseInt(data['matchPercentage']),
             matchedSkills: (data['matchedSkills'] as List?)?.cast<String>() ?? null,
             candidateName: data['candidateName'] as String? ?? null,
             matchingStrategy: data['matchingStrategy'] as String? ?? null,

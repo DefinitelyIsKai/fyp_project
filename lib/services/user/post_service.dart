@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -265,25 +266,33 @@ class PostService {
     // Credits will be deducted when post is approved (status changes to active)
     // Credits will be released when post is rejected
     if (!post.isDraft) {
-      await _walletService.holdPostCreationCredits(postId: doc.id, feeCredits: 200);
+      try {
+        await _walletService.holdPostCreationCredits(postId: doc.id, feeCredits: 200);
+      } catch (e) {
+        throw Exception('Failed to hold credits for post creation: $e');
+      }
     }
 
-    await doc.set(data, SetOptions(merge: true)); // Use merge to preserve existing attachments if any
+    try {
+      await doc.set(data, SetOptions(merge: true)).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw TimeoutException('Saving post to Firestore timed out after 10 seconds');
+        },
+      );
+    } catch (e) {
+      if (e is TimeoutException) {
+        rethrow;
+      }
+      throw Exception('Failed to save post to Firestore: $e');
+    }
     
     // Increment jobCount for the category/event when post is not a draft
     // Note: Only increment when post is approved (status = active), not when pending
     // This will be handled when status changes to active
     
-    // Only send notification if post is not a draft and is pending (for admin review)
-    if (!post.isDraft && initialStatus == PostStatus.pending) {
-      final ownerId = _auth.currentUser?.uid;
-      if (ownerId != null && ownerId.isNotEmpty) {
-        await _notificationService.notifyPostPublished(
-          userId: ownerId,
-          postTitle: post.title,
-        );
-      }
-    }
+    // Notification will be sent when post status changes to 'active' (when admin approves)
+    // This is handled in the admin PostService.approvePost() method
     return toSave;
   }
 
@@ -406,18 +415,15 @@ class PostService {
 
     final data = post.toMap();
     data.remove('createdAt');
-    await _col.doc(post.id).set(data, SetOptions(merge: true));
-
-    // Send notification when publishing draft (status is pending)
-    if (wasDraft && !post.isDraft && post.status == PostStatus.pending) {
-      final currentUserId = _auth.currentUser?.uid;
-      if (currentUserId != null && currentUserId.isNotEmpty) {
-        await _notificationService.notifyPostPublished(
-          userId: currentUserId,
-          postTitle: post.title,
-        );
-      }
+    
+    try {
+      await _col.doc(post.id).set(data, SetOptions(merge: true));
+    } catch (e) {
+      throw Exception('Failed to update post in Firestore: $e');
     }
+
+    // Notification will be sent when post status changes to 'active' (when admin approves)
+    // This is handled in the admin PostService.approvePost() method
     return post;
   }
 
@@ -654,13 +660,20 @@ class PostService {
 
   Post _fromDoc(DocumentSnapshot<Map<String, dynamic>> d) {
     final data = d.data() ?? <String, dynamic>{};
-    return Post.fromMap({
-      ...data,
-      'id': d.id,
-      'createdAt': (data['createdAt'] is Timestamp)
-          ? (data['createdAt'] as Timestamp).toDate()
-          : data['createdAt'],
-    });
+    try {
+      return Post.fromMap({
+        ...data,
+        'id': d.id,
+        'createdAt': (data['createdAt'] is Timestamp)
+            ? (data['createdAt'] as Timestamp).toDate()
+            : data['createdAt'],
+      });
+    } catch (e) {
+      throw FormatException(
+        'Failed to parse Post document ${d.id} from Firestore: $e',
+        e,
+      );
+    }
   }
 
   Future<void> markCompleted({required String postId}) async {

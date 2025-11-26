@@ -17,6 +17,16 @@ class CreditWalletPage extends StatefulWidget {
   State<CreditWalletPage> createState() => _CreditWalletPageState();
 }
 
+// Helper to safely parse int from Firestore (handles int, double, num)
+int _parseInt(dynamic value) {
+  if (value == null) return 0;
+  if (value is int) return value;
+  if (value is double) return value.toInt();
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? 0;
+  return 0;
+}
+
 class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBindingObserver {
   final WalletService _walletService = WalletService();
   WalletTxnType? _selectedFilter;
@@ -102,7 +112,7 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
         }
 
         for (final payment in latestCancelledPayments!) {
-          final credits = payment['credits'] as int? ?? 0;
+          final credits = _parseInt(payment['credits']);
           final createdAt = TimestampUtils.parseTimestamp(payment['createdAt']);
           unified.add(_UnifiedTransaction(
             id: payment['id'] as String? ?? '',
@@ -489,8 +499,8 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
                     ),
                     const SizedBox(height: 12),
                     ...pendingPayments.map((payment) {
-                      final credits = payment['credits'] as int? ?? 0;
-                      final amount = payment['amount'] as int? ?? 0;
+                      final credits = _parseInt(payment['credits']);
+                      final amount = _parseInt(payment['amount']);
                       final checkoutUrl = payment['checkoutUrl'] as String? ?? '';
                       final createdAt = TimestampUtils.parseTimestamp(payment['createdAt']);
                       final dateStr = DateUtilsHelper.DateUtils.formatRelativeDate(createdAt);

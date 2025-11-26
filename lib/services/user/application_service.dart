@@ -294,10 +294,20 @@ class ApplicationService {
       throw StateError('Recruiter ID not found in application');
     }
 
+    // Helper to safely parse int from Firestore (handles int, double, num)
+    int? _parseInt(dynamic value) {
+      if (value == null) return null;
+      if (value is int) return value;
+      if (value is double) return value.toInt();
+      if (value is num) return value.toInt();
+      if (value is String) return int.tryParse(value);
+      return null;
+    }
+
     // Check if applicant quota has been reached (based on approved applications)
     final postSnap = await _firestore.collection('posts').doc(postId).get();
     final postData = postSnap.data();
-    final applicantQuota = postData?['applicantQuota'] as int?;
+    final applicantQuota = _parseInt(postData?['applicantQuota']);
 
     // Check current status to see if already approved
     final currentStatus = data['status'] as String? ?? 'pending';
@@ -305,7 +315,7 @@ class ApplicationService {
 
     // Get current approved count from post document
     // If field is missing, initialize it first
-    int currentApprovedCount = (postData?['approvedApplicants'] as int?) ?? 0;
+    int currentApprovedCount = _parseInt(postData?['approvedApplicants']) ?? 0;
 
     // If field is missing (old post), calculate and initialize it
     if (postData?.containsKey('approvedApplicants') != true) {
@@ -512,10 +522,20 @@ class ApplicationService {
       }
       final postData = postDoc.data();
 
+      // Helper to safely parse int from Firestore (handles int, double, num)
+      int? _parseInt(dynamic value) {
+        if (value == null) return null;
+        if (value is int) return value;
+        if (value is double) return value.toInt();
+        if (value is num) return value.toInt();
+        if (value is String) return int.tryParse(value);
+        return null;
+      }
+
       // Check if approvedApplicants field exists
       if (postData?.containsKey('approvedApplicants') == true) {
         // Field exists, return the value
-        final approvedCount = (postData?['approvedApplicants'] as int?) ?? 0;
+        final approvedCount = _parseInt(postData?['approvedApplicants']) ?? 0;
         return approvedCount;
       }
 

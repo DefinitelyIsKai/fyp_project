@@ -42,10 +42,20 @@ class Wallet {
       }
     }
     
+    // Helper function to safely parse int from Firestore (handles int, double, num)
+    int? _parseInt(dynamic value) {
+      if (value == null) return null;
+      if (value is int) return value;
+      if (value is double) return value.toInt();
+      if (value is num) return value.toInt();
+      if (value is String) return int.tryParse(value);
+      return null;
+    }
+    
     return Wallet(
       userId: uid,
-      balance: (data['balance'] as int?) ?? 0,
-      heldCredits: (data['heldCredits'] as int?) ?? 0,
+      balance: _parseInt(data['balance']) ?? 0,
+      heldCredits: _parseInt(data['heldCredits']) ?? 0,
       updatedAt: updatedAt,
     );
   }
@@ -99,11 +109,21 @@ class WalletTransaction {
       }
     }
     
+    // Helper function to safely parse int from Firestore (handles int, double, num)
+    int? _parseInt(dynamic value) {
+      if (value == null) return null;
+      if (value is int) return value;
+      if (value is double) return value.toInt();
+      if (value is num) return value.toInt();
+      if (value is String) return int.tryParse(value);
+      return null;
+    }
+    
     return WalletTransaction(
       id: (map['id'] as String?) ?? '',
       userId: (map['userId'] as String?) ?? '',
       type: (map['type'] as String?) == 'debit' ? WalletTxnType.debit : WalletTxnType.credit,
-      amount: (map['amount'] as int?) ?? 0,
+      amount: _parseInt(map['amount']) ?? 0,
       description: (map['description'] as String?) ?? '',
       createdAt: createdAt,
       referenceId: map['referenceId'] as String?,

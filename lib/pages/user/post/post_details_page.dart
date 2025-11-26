@@ -205,8 +205,17 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                         if (postSnapshot.hasData) {
                           final data = postSnapshot.data!.data();
                           if (data != null) {
+                            // Helper to safely parse int from Firestore (handles int, double, num)
+                            int? _parseInt(dynamic value) {
+                              if (value == null) return null;
+                              if (value is int) return value;
+                              if (value is double) return value.toInt();
+                              if (value is num) return value.toInt();
+                              if (value is String) return int.tryParse(value);
+                              return null;
+                            }
                             // Get approved count from document
-                            approvedCount = (data['approvedApplicants'] as int?) ?? 0;
+                            approvedCount = _parseInt(data['approvedApplicants']) ?? 0;
                             // Reconstruct post from document data
                             try {
                               currentPost = Post.fromMap({...data, 'id': widget.post.id});
@@ -370,7 +379,16 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                     future: FirebaseFirestore.instance.collection('posts').doc(widget.post.id).get(),
                     builder: (context, snapshot) {
                       final data = snapshot.data?.data();
-                      final views = data?['views'] as int? ?? widget.post.views;
+                      // Helper to safely parse int from Firestore (handles int, double, num)
+                      int? _parseInt(dynamic value) {
+                        if (value == null) return null;
+                        if (value is int) return value;
+                        if (value is double) return value.toInt();
+                        if (value is num) return value.toInt();
+                        if (value is String) return int.tryParse(value);
+                        return null;
+                      }
+                      final views = _parseInt(data?['views']) ?? widget.post.views;
                       return Row(
                         children: [
                           Icon(Icons.remove_red_eye, size: 16, color: Colors.grey[500]),

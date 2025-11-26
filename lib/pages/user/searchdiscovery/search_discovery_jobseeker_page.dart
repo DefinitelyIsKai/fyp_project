@@ -662,12 +662,22 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                             .doc(widget.post.id)
                             .snapshots(),
                         builder: (context, postSnapshot) {
+                          // Helper to safely parse int from Firestore (handles int, double, num)
+                          int? _parseInt(dynamic value) {
+                            if (value == null) return null;
+                            if (value is int) return value;
+                            if (value is double) return value.toInt();
+                            if (value is num) return value.toInt();
+                            if (value is String) return int.tryParse(value);
+                            return null;
+                          }
+                          
                           int approvedCount = 0;
                           
                           if (postSnapshot.hasData) {
                             final data = postSnapshot.data!.data();
                             if (data != null) {
-                              approvedCount = (data['approvedApplicants'] as int?) ?? 0;
+                              approvedCount = _parseInt(data['approvedApplicants']) ?? 0;
                             }
                           }
                           
