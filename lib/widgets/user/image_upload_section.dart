@@ -56,6 +56,8 @@ class ImageUploadSection extends StatefulWidget {
 }
 
 class _ImageUploadSectionState extends State<ImageUploadSection> {
+  bool _isUploading = false;
+
   /// Build widget to display base64 image
   Widget _buildBase64Image(String base64String) {
     try {
@@ -140,7 +142,7 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
   }
 
   Future<void> _pickAndUploadImages() async {
-    if (widget.disabled) return;
+    if (widget.disabled || _isUploading) return;
     
     // Check if we've reached the maximum number of images
     if (widget.maxImages != null && widget.images.length >= widget.maxImages!) {
@@ -156,14 +158,20 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
       return;
     }
     
+    // Set uploading state
+    if (mounted) {
+      setState(() {
+        _isUploading = true;
+      });
+    }
+    
     try {
       List<String> urls;
       if (widget.customUploadFunction != null) {
         urls = await widget.customUploadFunction!();
       } else {
-        urls = await widget.storageService.pickAndUploadPostImages(
-          postId: widget.uploadId,
-        );
+        // Only pick images and convert to base64, don't upload to Firestore yet
+        urls = await widget.storageService.pickPostImages();
       }
       
       if (urls.isNotEmpty && mounted) {
@@ -220,6 +228,13 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
             duration: const Duration(seconds: 4),
           ),
         );
+      }
+    } finally {
+      // Reset uploading state
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
       }
     }
   }
@@ -415,6 +430,7 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
           width: double.infinity,
           child: OutlinedButton.icon(
             onPressed: (widget.disabled || 
+                        _isUploading ||
                         (widget.maxImages != null && widget.images.length >= widget.maxImages!))
                 ? null 
                 : _pickAndUploadImages,
@@ -432,17 +448,28 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            icon: Icon(
-              Icons.add_photo_alternate, 
-              size: 20,
-              color: (widget.maxImages != null && widget.images.length >= widget.maxImages!)
-                  ? Colors.grey
-                  : const Color(0xFF00C8A0),
-            ),
+            icon: _isUploading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00C8A0)),
+                    ),
+                  )
+                : Icon(
+                    Icons.add_photo_alternate, 
+                    size: 20,
+                    color: (widget.maxImages != null && widget.images.length >= widget.maxImages!)
+                        ? Colors.grey
+                        : const Color(0xFF00C8A0),
+                  ),
             label: Text(
-              widget.maxImages != null && widget.images.length >= widget.maxImages!
-                  ? 'Maximum Reached (${widget.maxImages}/${widget.maxImages})'
-                  : 'Add Images${widget.maxImages != null ? ' (${widget.images.length}/${widget.maxImages})' : ''}',
+              _isUploading
+                  ? 'Uploading...'
+                  : (widget.maxImages != null && widget.images.length >= widget.maxImages!
+                      ? 'Maximum Reached (${widget.maxImages}/${widget.maxImages})'
+                      : 'Add Images${widget.maxImages != null ? ' (${widget.images.length}/${widget.maxImages})' : ''}'),
               style: TextStyle(
                 fontWeight: FontWeight.w600,
                 color: (widget.maxImages != null && widget.images.length >= widget.maxImages!)
