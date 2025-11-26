@@ -100,10 +100,13 @@ class _SearchDiscoveryJobseekerPageState
           const SizedBox(height: 16),
           // Results Header and View Toggle
           StreamBuilder<List<Post>>(
+            key: ValueKey('${searchQuery}_${locationFilter}_${minBudget}_${maxBudget}_${selectedEvents.join(",")}_${searchRadius}_${userLocation?.latitude}_${userLocation?.longitude}'),
             stream: getPostsStream(),
             builder: (context, snapshot) {
               var posts = snapshot.data ?? [];
               posts = filterPostsForUser(posts);
+              // Apply distance filter to match map markers
+              posts = filterPostsByDistance(posts);
 
               return Padding(
                 padding: const EdgeInsets.symmetric(
