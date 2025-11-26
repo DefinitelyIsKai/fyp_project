@@ -44,28 +44,91 @@ class PostAnalyticsService {
     final completedInPeriod = postsInRange.where((p) => p.status == 'completed').length;
     final rejectedInPeriod = postsInRange.where((p) => p.status == 'rejected').length;
 
-    // Category breakdown
-    final categoryBreakdown = <String, int>{};
+    // Event breakdown (using event field instead of category) - All Time
+    final eventBreakdown = <String, int>{};
     for (final post in allPosts) {
-      categoryBreakdown[post.category] = (categoryBreakdown[post.category] ?? 0) + 1;
+      final event = post.event ?? 'No Event';
+      eventBreakdown[event] = (eventBreakdown[event] ?? 0) + 1;
     }
 
-    // Location breakdown
+    // Event breakdown for the period
+    final eventBreakdownInPeriod = <String, int>{};
+    for (final post in postsInRange) {
+      final event = post.event ?? 'No Event';
+      eventBreakdownInPeriod[event] = (eventBreakdownInPeriod[event] ?? 0) + 1;
+    }
+
+    // Location breakdown - extract state only - All Time
     final locationBreakdown = <String, int>{};
     for (final post in allPosts) {
-      locationBreakdown[post.location] = (locationBreakdown[post.location] ?? 0) + 1;
+      if (post.location.isNotEmpty) {
+        // Extract state from location (format: "Address, City, State, Country")
+        // State is usually the second to last part
+        final parts = post.location.split(',').map((p) => p.trim()).toList();
+        String state = post.location; // fallback to full location
+        if (parts.length >= 2) {
+          // Try to get the state (second to last part before country)
+          state = parts.length >= 3 ? parts[parts.length - 2] : parts.last;
+        }
+        locationBreakdown[state] = (locationBreakdown[state] ?? 0) + 1;
+      }
     }
 
-    // Industry breakdown
+    // Location breakdown for the period
+    final locationBreakdownInPeriod = <String, int>{};
+    for (final post in postsInRange) {
+      if (post.location.isNotEmpty) {
+        final parts = post.location.split(',').map((p) => p.trim()).toList();
+        String state = post.location;
+        if (parts.length >= 2) {
+          state = parts.length >= 3 ? parts[parts.length - 2] : parts.last;
+        }
+        locationBreakdownInPeriod[state] = (locationBreakdownInPeriod[state] ?? 0) + 1;
+      }
+    }
+
+    // Tags breakdown - All Time
+    final tagsBreakdown = <String, int>{};
+    for (final post in allPosts) {
+      for (final tag in post.tags) {
+        if (tag.isNotEmpty) {
+          tagsBreakdown[tag] = (tagsBreakdown[tag] ?? 0) + 1;
+        }
+      }
+    }
+
+    // Tags breakdown for the period
+    final tagsBreakdownInPeriod = <String, int>{};
+    for (final post in postsInRange) {
+      for (final tag in post.tags) {
+        if (tag.isNotEmpty) {
+          tagsBreakdownInPeriod[tag] = (tagsBreakdownInPeriod[tag] ?? 0) + 1;
+        }
+      }
+    }
+
+    // Industry breakdown - All Time
     final industryBreakdown = <String, int>{};
     for (final post in allPosts) {
       industryBreakdown[post.industry] = (industryBreakdown[post.industry] ?? 0) + 1;
     }
 
-    // Job type breakdown
+    // Industry breakdown for the period
+    final industryBreakdownInPeriod = <String, int>{};
+    for (final post in postsInRange) {
+      industryBreakdownInPeriod[post.industry] = (industryBreakdownInPeriod[post.industry] ?? 0) + 1;
+    }
+
+    // Job type breakdown - All Time
     final jobTypeBreakdown = <String, int>{};
     for (final post in allPosts) {
       jobTypeBreakdown[post.jobType] = (jobTypeBreakdown[post.jobType] ?? 0) + 1;
+    }
+
+    // Job type breakdown for the period
+    final jobTypeBreakdownInPeriod = <String, int>{};
+    for (final post in postsInRange) {
+      jobTypeBreakdownInPeriod[post.jobType] = (jobTypeBreakdownInPeriod[post.jobType] ?? 0) + 1;
     }
 
     // Daily breakdown for the period
@@ -75,7 +138,7 @@ class PostAnalyticsService {
       dailyBreakdown[dateKey] = (dailyBreakdown[dateKey] ?? 0) + 1;
     }
 
-    // Budget analysis
+    // Budget analysis - All Time
     final postsWithBudget = allPosts.where((p) => p.budgetMin != null || p.budgetMax != null).toList();
     double? avgBudgetMin;
     double? avgBudgetMax;
@@ -93,14 +156,38 @@ class PostAnalyticsService {
       avgBudgetMax = countMax > 0 ? totalMax / countMax : null;
     }
 
-    // Approval rate: Pending → Active/Completed (approved) or Rejected
+    // Budget analysis for the period
+    final postsWithBudgetInPeriod = postsInRange.where((p) => p.budgetMin != null || p.budgetMax != null).toList();
+    double? avgBudgetMinInPeriod;
+    double? avgBudgetMaxInPeriod;
+    if (postsWithBudgetInPeriod.isNotEmpty) {
+      final totalMin = postsWithBudgetInPeriod
+          .where((p) => p.budgetMin != null)
+          .fold<double>(0, (sum, p) => sum + (p.budgetMin ?? 0));
+      final totalMax = postsWithBudgetInPeriod
+          .where((p) => p.budgetMax != null)
+          .fold<double>(0, (sum, p) => sum + (p.budgetMax ?? 0));
+      final countMin = postsWithBudgetInPeriod.where((p) => p.budgetMin != null).length;
+      final countMax = postsWithBudgetInPeriod.where((p) => p.budgetMax != null).length;
+      
+      avgBudgetMinInPeriod = countMin > 0 ? totalMin / countMin : null;
+      avgBudgetMaxInPeriod = countMax > 0 ? totalMax / countMax : null;
+    }
+
+    // Approval rate: Pending → Active/Completed (approved) or Rejected - All Time
     // Approved posts = active + completed (both went through approval process)
     final approvedPosts = active + completed;
     final totalProcessed = approvedPosts + rejected;
     final approvalRate = totalProcessed > 0 ? (approvedPosts / totalProcessed) * 100 : 0.0;
 
-    // Rejection rate
+    // Rejection rate - All Time
     final rejectionRate = totalProcessed > 0 ? (rejected / totalProcessed) * 100 : 0.0;
+
+    // Approval and rejection rates for the period
+    final approvedPostsInPeriod = activeInPeriod + completedInPeriod;
+    final totalProcessedInPeriod = approvedPostsInPeriod + rejectedInPeriod;
+    final approvalRateInPeriod = totalProcessedInPeriod > 0 ? (approvedPostsInPeriod / totalProcessedInPeriod) * 100 : 0.0;
+    final rejectionRateInPeriod = totalProcessedInPeriod > 0 ? (rejectedInPeriod / totalProcessedInPeriod) * 100 : 0.0;
 
     // Average processing time (if we have approval/rejection timestamps)
     // This would require additional fields in the model
@@ -116,15 +203,26 @@ class PostAnalyticsService {
       'activeInPeriod': activeInPeriod,
       'completedInPeriod': completedInPeriod,
       'rejectedInPeriod': rejectedInPeriod,
-      'categoryBreakdown': categoryBreakdown,
+      'eventBreakdown': eventBreakdown,
+      'eventBreakdownInPeriod': eventBreakdownInPeriod,
+      'categoryBreakdown': eventBreakdown, // Keep for backward compatibility
       'locationBreakdown': locationBreakdown,
+      'locationBreakdownInPeriod': locationBreakdownInPeriod,
+      'tagsBreakdown': tagsBreakdown,
+      'tagsBreakdownInPeriod': tagsBreakdownInPeriod,
       'industryBreakdown': industryBreakdown,
+      'industryBreakdownInPeriod': industryBreakdownInPeriod,
       'jobTypeBreakdown': jobTypeBreakdown,
+      'jobTypeBreakdownInPeriod': jobTypeBreakdownInPeriod,
       'dailyBreakdown': dailyBreakdown,
       'avgBudgetMin': avgBudgetMin,
       'avgBudgetMax': avgBudgetMax,
+      'avgBudgetMinInPeriod': avgBudgetMinInPeriod,
+      'avgBudgetMaxInPeriod': avgBudgetMaxInPeriod,
       'approvalRate': approvalRate,
       'rejectionRate': rejectionRate,
+      'approvalRateInPeriod': approvalRateInPeriod,
+      'rejectionRateInPeriod': rejectionRateInPeriod,
       'startDate': start,
       'endDate': end,
     };

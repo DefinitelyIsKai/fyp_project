@@ -119,12 +119,14 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   }
 
   Color _getStatusColor(UserModel user) {
+    if (user.status == 'Deleted') return Colors.grey;
     if (user.isSuspended) return Colors.orange;
     if (!user.isActive) return Colors.red;
     return Colors.green;
   }
 
   String _getStatusText(UserModel user) {
+    if (user.status == 'Deleted') return 'Deleted';
     if (user.isSuspended) return 'Suspended';
     if (!user.isActive) return 'Inactive';
     return 'Active';
@@ -145,83 +147,110 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   }
 
   Widget _buildActionButtons(UserModel user) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        // View Profile Button
-        ElevatedButton.icon(
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => UserDetailPage(user: user),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          // View Profile Button
+          ElevatedButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => UserDetailPage(user: user),
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue[50],
+              foregroundColor: Colors.blue[700],
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            ),
+            icon: const Icon(Icons.person, size: 16),
+            label: const Text(
+              'View',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
             ),
           ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue[50],
-            foregroundColor: Colors.blue[700],
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          ),
-          icon: const Icon(Icons.person, size: 16),
-          label: const Text(
-            'View Profile',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-          ),
-        ),
+          const SizedBox(width: 6),
 
-        // Warning Button (replaces Suspend)
-        ElevatedButton.icon(
-          onPressed: () {
-            if (user.isSuspended) {
-              _unsuspendUser(user);
-            } else {
-              _showWarningDialog(user);
-            }
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: user.isSuspended ? Colors.green[50] : Colors.orange[50],
-            foregroundColor: user.isSuspended ? Colors.green[700] : Colors.orange[700],
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+          // Warning Button
+          ElevatedButton.icon(
+            onPressed: () {
+              if (user.isSuspended) {
+                _unsuspendUser(user);
+              } else {
+                _showWarningDialog(user);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: user.isSuspended ? Colors.green[50] : Colors.orange[50],
+              foregroundColor: user.isSuspended ? Colors.green[700] : Colors.orange[700],
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            icon: Icon(
+              user.isSuspended ? Icons.check_circle : Icons.warning_amber,
+              size: 16,
+            ),
+            label: Text(
+              user.isSuspended ? 'Activate' : 'Warning',
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+            ),
           ),
-          icon: Icon(
-            user.isSuspended ? Icons.check_circle : Icons.warning_amber,
-            size: 16,
-          ),
-          label: Text(
-            user.isSuspended ? 'Activate' : 'Give Warning',
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-          ),
-        ),
+          const SizedBox(width: 6),
 
-        // Delete Button
-        ElevatedButton.icon(
-          onPressed: () {
-            _showDeleteDialog(user);
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.red[50],
-            foregroundColor: Colors.red[700],
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+          // Direct Suspend Button (only show if not suspended)
+          if (!user.isSuspended) ...[
+            ElevatedButton.icon(
+              onPressed: () {
+                _showSuspendDialog(user);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red[50],
+                foregroundColor: Colors.red[700],
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              ),
+              icon: const Icon(Icons.block, size: 16),
+              label: const Text(
+                'Suspend',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+              ),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            const SizedBox(width: 6),
+          ],
+
+          // Delete Button
+          ElevatedButton.icon(
+            onPressed: () {
+              _showDeleteDialog(user);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red[50],
+              foregroundColor: Colors.red[700],
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            ),
+            icon: const Icon(Icons.delete, size: 16),
+            label: const Text(
+              'Delete',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+            ),
           ),
-          icon: const Icon(Icons.delete, size: 16),
-          label: const Text(
-            'Delete',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -559,6 +588,174 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     }
   }
 
+  Future<void> _showSuspendDialog(UserModel user) async {
+    final reasonController = TextEditingController();
+    final durationController = TextEditingController(text: '30'); // Default 30 days
+
+    await showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.block, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Suspend User Account'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'You are about to suspend ${user.fullName}\'s account immediately.',
+                style: const TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red[200]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber, color: Colors.red[700], size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'This will suspend the user immediately without waiting for 3 warnings.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.red[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Suspension Reason *',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: reasonController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  hintText: 'Explain why this account is being suspended...',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.all(12),
+                ),
+                textInputAction: TextInputAction.done,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Suspension Duration (Days)',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: durationController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: false),
+                decoration: const InputDecoration(
+                  hintText: 'Enter number of days (e.g., 30)',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.all(12),
+                  prefixIcon: Icon(Icons.calendar_today, size: 20),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Leave empty or enter 0 for indefinite suspension',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final suspensionReason = reasonController.text.trim();
+              final durationText = durationController.text.trim();
+
+              if (suspensionReason.isEmpty) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please provide a suspension reason'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              int? durationDays;
+              if (durationText.isNotEmpty) {
+                durationDays = int.tryParse(durationText);
+                if (durationDays == null || durationDays < 0) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter a valid number of days (0 or positive)'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+                // If 0, set to null for indefinite suspension
+                if (durationDays == 0) {
+                  durationDays = null;
+                }
+              }
+
+              Navigator.pop(context);
+              await _suspendUser(user, suspensionReason, durationDays);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Suspend Account'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _suspendUser(UserModel user, String suspensionReason, int? durationDays) async {
+    try {
+      await _userService.suspendUser(
+        user.id,
+        violationReason: suspensionReason,
+        durationDays: durationDays,
+      );
+
+      if (!mounted) return;
+
+      final durationText = durationDays != null 
+          ? ' for $durationDays day${durationDays == 1 ? '' : 's'}'
+          : ' indefinitely';
+      _showSnackBar('${user.fullName}\'s account has been suspended$durationText');
+
+      _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('Failed to suspend user: $e', isError: true);
+    }
+  }
+
   Future<void> _showDeleteDialog(UserModel user) async {
     final reasonController = TextEditingController();
 
@@ -676,8 +873,8 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
           style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
         backgroundColor: AppColors.primaryDark,
+        foregroundColor: Colors.white,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: RefreshIndicator(
         onRefresh: _loadData,
@@ -1022,21 +1219,42 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     final emailController = TextEditingController();
     final passwordController = TextEditingController();
     final confirmPasswordController = TextEditingController();
+    final currentPasswordController = TextEditingController();
     String selectedRole = _adminRoles.isNotEmpty ? _adminRoles.first.name : 'staff';
     bool obscurePassword = true;
     bool obscureConfirmPassword = true;
+    bool obscureCurrentPassword = true;
 
     showDialog(
       context: context,
       barrierDismissible: true,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.person_add, color: Colors.blue),
-              SizedBox(width: 8),
-              Text('Add New Admin User'),
-            ],
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Container(
+            padding: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: Colors.grey[300]!),
+              ),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.person_add, color: Colors.blue, size: 28),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Add New Admin User',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
           content: SingleChildScrollView(
             child: SizedBox(
@@ -1045,81 +1263,161 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Full Name Field
                   TextField(
                     controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Full Name *',
+                    decoration: InputDecoration(
+                      labelText: 'Full Name',
                       hintText: 'Enter full name',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.person),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      prefixIcon: const Icon(Icons.person_outline),
+                      filled: true,
+                      fillColor: Colors.grey[50],
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 16,
+                      ),
                     ),
                     textCapitalization: TextCapitalization.words,
                   ),
                   const SizedBox(height: 16),
+                  
+                  // Email Field
                   TextField(
                     controller: emailController,
-                    decoration: const InputDecoration(
-                      labelText: 'Email *',
-                      hintText: 'Enter email address',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.email),
+                    decoration: InputDecoration(
+                      labelText: 'Email Address',
+                      hintText: 'example@email.com',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      prefixIcon: const Icon(Icons.email_outlined),
+                      filled: true,
+                      fillColor: Colors.grey[50],
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 16,
+                      ),
                     ),
                     keyboardType: TextInputType.emailAddress,
                     textCapitalization: TextCapitalization.none,
                   ),
                   const SizedBox(height: 16),
+                  
+                  // Password Field
                   TextField(
                     controller: passwordController,
                     decoration: InputDecoration(
-                      labelText: 'Password *',
-                      hintText: 'Enter password',
-                      border: const OutlineInputBorder(),
-                      prefixIcon: const Icon(Icons.lock),
+                      labelText: 'Password',
+                      hintText: 'Minimum 6 characters',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
-                        icon: Icon(obscurePassword ? Icons.visibility : Icons.visibility_off),
+                        icon: Icon(
+                          obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                          color: Colors.grey[600],
+                        ),
                         onPressed: () {
                           setDialogState(() => obscurePassword = !obscurePassword);
                         },
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey[50],
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 16,
                       ),
                     ),
                     obscureText: obscurePassword,
                   ),
                   const SizedBox(height: 16),
+                  
+                  // Confirm Password Field
                   TextField(
                     controller: confirmPasswordController,
                     decoration: InputDecoration(
-                      labelText: 'Confirm Password *',
-                      hintText: 'Confirm password',
-                      border: const OutlineInputBorder(),
+                      labelText: 'Confirm Password',
+                      hintText: 'Re-enter password',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
-                        icon: Icon(obscureConfirmPassword ? Icons.visibility : Icons.visibility_off),
+                        icon: Icon(
+                          obscureConfirmPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                          color: Colors.grey[600],
+                        ),
                         onPressed: () {
                           setDialogState(() => obscureConfirmPassword = !obscureConfirmPassword);
                         },
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey[50],
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 16,
                       ),
                     ),
                     obscureText: obscureConfirmPassword,
                   ),
                   const SizedBox(height: 16),
+                  
+                  // Current User Password Field (to restore session)
+                  TextField(
+                    controller: currentPasswordController,
+                    decoration: InputDecoration(
+                      labelText: 'Your Password',
+                      hintText: 'Enter your current password to stay logged in',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          obscureCurrentPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                          color: Colors.grey[600],
+                        ),
+                        onPressed: () {
+                          setDialogState(() => obscureCurrentPassword = !obscureCurrentPassword);
+                        },
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey[50],
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 16,
+                      ),
+                    ),
+                    obscureText: obscureCurrentPassword,
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Role Field
                   const Text(
-                    'Role *',
+                    'Role',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
+                      color: Colors.black87,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Container(
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey[300]!),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.grey[50],
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: selectedRole,
                         isExpanded: true,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        icon: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
                         items: _adminRoles.map((role) {
                           return DropdownMenuItem(
                             value: role.name,
@@ -1129,18 +1427,23 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                               children: [
                                 Text(
                                   _getRoleDisplayName(role.name),
-                                  style: const TextStyle(fontWeight: FontWeight.w500),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 15,
+                                  ),
                                 ),
-                                if (role.description.isNotEmpty)
+                                if (role.description.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
                                   Text(
                                     role.description,
                                     style: TextStyle(
-                                      fontSize: 11,
+                                      fontSize: 12,
                                       color: Colors.grey[600],
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
+                                ],
                               ],
                             ),
                           );
@@ -1153,13 +1456,32 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'The new admin will be able to log in immediately with the provided credentials.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                      fontStyle: FontStyle.italic,
+                  const SizedBox(height: 16),
+                  
+                  // Info Box
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.blue[200]!),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'The new admin will be able to log in immediately with the provided credentials. Enter your current password to stay logged in after creating the new admin.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.blue[900],
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -1171,7 +1493,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
               onPressed: () => Navigator.pop(context),
               child: const Text('Cancel'),
             ),
-            ElevatedButton(
+            ElevatedButton.icon(
               onPressed: () async {
                 final name = nameController.text.trim();
                 final email = emailController.text.trim();
@@ -1254,13 +1576,25 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                 }
                 
                 Navigator.pop(context);
-                await _createAdminUser(name, email, password, selectedRole);
+                await _createAdminUser(name, email, password, selectedRole, currentPasswordController.text);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryDark,
                 foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                elevation: 2,
               ),
-              child: const Text('Create Admin'),
+              icon: const Icon(Icons.person_add, size: 18),
+              label: const Text(
+                'Create Admin',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ],
         ),
@@ -1268,7 +1602,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     );
   }
 
-  Future<void> _createAdminUser(String name, String email, String password, String role) async {
+  Future<void> _createAdminUser(String name, String email, String password, String role, String currentPassword) async {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       
@@ -1281,81 +1615,38 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
         ),
       );
 
-      final result = await authService.register(name, email, password, role: role);
+      final result = await authService.register(name, email, password, role: role, originalUserPassword: currentPassword.isNotEmpty ? currentPassword : null);
 
       if (!mounted) return;
       
       Navigator.pop(context); // Close loading dialog
 
       if (result.success) {
-        // If re-authentication is required, show a dialog and redirect to login
-        // DO NOT call _loadData() or _showSnackBar() as we're signed out
+        // If re-authentication is required, navigate immediately to prevent crashes
         if (result.requiresReauth) {
           if (!mounted) return;
-          await showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => AlertDialog(
-              title: const Row(
-                children: [
-                  Icon(Icons.info_outline, color: Colors.blue),
-                  SizedBox(width: 8),
-                  Text('Admin Created Successfully'),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    result.message ?? 'Admin user "$name" created successfully.',
-                  ),
-                  if (result.originalUserEmail != null) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.blue[50],
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.blue[200]!),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'You were logged in as: ${result.originalUserEmail}\nUse that email to log back in.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.blue[900],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop(); // Close dialog
-                    Navigator.of(context).pushNamedAndRemoveUntil(
-                      '/login',
-                      (route) => false,
-                    );
-                  },
-                  child: const Text('Go to Login'),
-                ),
-              ],
-            ),
+          
+          // Show message first
+          _showSnackBar(result.message ?? 'Admin user "$name" created successfully. Please log in again.');
+          
+          // Wait a moment for the message to show, then navigate
+          await Future.delayed(const Duration(milliseconds: 500));
+          
+          if (!mounted) return;
+          
+          // Navigate immediately to prevent any Firestore listeners from causing crashes
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            '/login',
+            (route) => false,
           );
         } else {
-          // Only refresh if we're still authenticated
+          // Session was restored successfully - refresh data
           _showSnackBar(result.message ?? 'Admin user "$name" created successfully');
-          _loadData();
+          // Wait a moment before reloading to ensure session is fully restored
+          await Future.delayed(const Duration(milliseconds: 300));
+          if (mounted) {
+            _loadData();
+          }
         }
       } else {
         _showSnackBar(result.error ?? 'Failed to create admin user.', isError: true);

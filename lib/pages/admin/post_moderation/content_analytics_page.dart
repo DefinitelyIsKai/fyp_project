@@ -209,12 +209,34 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                   [
                     'Approval Rate',
                     '${(analytics['approvalRate'] as double).toStringAsFixed(1)}%',
-                    '',
+                    () {
+                      final activeInPeriod = analytics['activeInPeriod'] as int;
+                      final completedInPeriod = analytics['completedInPeriod'] as int;
+                      final rejectedInPeriod = analytics['rejectedInPeriod'] as int;
+                      final approvedInPeriod = activeInPeriod + completedInPeriod;
+                      final totalProcessedInPeriod = approvedInPeriod + rejectedInPeriod;
+                      if (totalProcessedInPeriod > 0) {
+                        final rate = (approvedInPeriod / totalProcessedInPeriod) * 100;
+                        return '${rate.toStringAsFixed(1)}%';
+                      }
+                      return '0.0%';
+                    }(),
                   ],
                   [
                     'Rejection Rate',
                     '${(analytics['rejectionRate'] as double).toStringAsFixed(1)}%',
-                    '',
+                    () {
+                      final activeInPeriod = analytics['activeInPeriod'] as int;
+                      final completedInPeriod = analytics['completedInPeriod'] as int;
+                      final rejectedInPeriod = analytics['rejectedInPeriod'] as int;
+                      final approvedInPeriod = activeInPeriod + completedInPeriod;
+                      final totalProcessedInPeriod = approvedInPeriod + rejectedInPeriod;
+                      if (totalProcessedInPeriod > 0) {
+                        final rate = (rejectedInPeriod / totalProcessedInPeriod) * 100;
+                        return '${rate.toStringAsFixed(1)}%';
+                      }
+                      return '0.0%';
+                    }(),
                   ],
                 ],
               ),
@@ -269,11 +291,11 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                 pw.SizedBox(height: 20),
               ],
 
-              // Category Breakdown
-              if (analytics['categoryBreakdown'] != null &&
-                  (analytics['categoryBreakdown'] as Map).isNotEmpty) ...[
+              // Event Breakdown (using event field)
+              if (analytics['eventBreakdown'] != null &&
+                  (analytics['eventBreakdown'] as Map).isNotEmpty) ...[
                 pw.Text(
-                  'Category Breakdown (Top 10)',
+                  'Event Breakdown (Top 10)',
                   style: pw.TextStyle(
                     fontSize: 16,
                     fontWeight: pw.FontWeight.bold,
@@ -301,58 +323,10 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                       ),
                     ),
                   ),
-                  headers: ['Category', 'Posts'],
+                  headers: ['Event', 'Posts'],
                   data: () {
                     final entries =
-                        (analytics['categoryBreakdown'] as Map<String, dynamic>)
-                            .entries
-                            .toList();
-                    entries.sort((a, b) => b.value.compareTo(a.value));
-                    return entries
-                        .take(10)
-                        .map((entry) => [entry.key, entry.value.toString()])
-                        .toList();
-                  }(),
-                ),
-                pw.SizedBox(height: 20),
-              ],
-
-              // Industry Breakdown
-              if (analytics['industryBreakdown'] != null &&
-                  (analytics['industryBreakdown'] as Map).isNotEmpty) ...[
-                pw.Text(
-                  'Industry Breakdown (Top 10)',
-                  style: pw.TextStyle(
-                    fontSize: 16,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-                pw.SizedBox(height: 10),
-                pw.TableHelper.fromTextArray(
-                  context: context,
-                  border: pw.TableBorder.all(
-                    color: PdfColors.grey400,
-                    width: 0.5,
-                  ),
-                  cellAlignment: pw.Alignment.centerLeft,
-                  headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
-                  headerStyle: pw.TextStyle(
-                    fontSize: 10,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                  cellStyle: pw.TextStyle(fontSize: 9),
-                  rowDecoration: pw.BoxDecoration(
-                    border: pw.Border(
-                      bottom: pw.BorderSide(
-                        color: PdfColors.grey300,
-                        width: 0.5,
-                      ),
-                    ),
-                  ),
-                  headers: ['Industry', 'Posts'],
-                  data: () {
-                    final entries =
-                        (analytics['industryBreakdown'] as Map<String, dynamic>)
+                        (analytics['eventBreakdown'] as Map<String, dynamic>)
                             .entries
                             .toList();
                     entries.sort((a, b) => b.value.compareTo(a.value));
@@ -412,11 +386,11 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                 pw.SizedBox(height: 20),
               ],
 
-              // Location Breakdown
+              // Location Breakdown (State only)
               if (analytics['locationBreakdown'] != null &&
                   (analytics['locationBreakdown'] as Map).isNotEmpty) ...[
                 pw.Text(
-                  'Location Breakdown (Top 10)',
+                  'Location Breakdown by State (Top 10)',
                   style: pw.TextStyle(
                     fontSize: 16,
                     fontWeight: pw.FontWeight.bold,
@@ -444,7 +418,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                       ),
                     ),
                   ),
-                  headers: ['Location', 'Posts'],
+                  headers: ['State', 'Posts'],
                   data: () {
                     final entries =
                         (analytics['locationBreakdown'] as Map<String, dynamic>)
@@ -460,11 +434,11 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                 pw.SizedBox(height: 20),
               ],
 
-              // Daily Breakdown
-              if (analytics['dailyBreakdown'] != null &&
-                  (analytics['dailyBreakdown'] as Map).isNotEmpty) ...[
+              // Tags Breakdown
+              if (analytics['tagsBreakdown'] != null &&
+                  (analytics['tagsBreakdown'] as Map).isNotEmpty) ...[
                 pw.Text(
-                  'Daily Post Activity',
+                  'Tags Breakdown (Top 10)',
                   style: pw.TextStyle(
                     fontSize: 16,
                     fontWeight: pw.FontWeight.bold,
@@ -492,22 +466,20 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                       ),
                     ),
                   ),
-                  headers: ['Date', 'Posts'],
+                  headers: ['Tag', 'Posts'],
                   data: () {
                     final entries =
-                        (analytics['dailyBreakdown'] as Map<String, dynamic>)
+                        (analytics['tagsBreakdown'] as Map<String, dynamic>)
                             .entries
                             .toList();
-                    entries.sort((a, b) => a.key.compareTo(b.key));
-                    return entries.map((entry) {
-                      final date = DateTime.parse(entry.key);
-                      return [
-                        DateFormat('dd MMM yyyy').format(date),
-                        entry.value.toString(),
-                      ];
-                    }).toList();
+                    entries.sort((a, b) => b.value.compareTo(a.value));
+                    return entries
+                        .take(10)
+                        .map((entry) => [entry.key, entry.value.toString()])
+                        .toList();
                   }(),
                 ),
+                pw.SizedBox(height: 20),
               ],
             ];
           },
@@ -534,7 +506,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Content Analytics'),
         backgroundColor: AppColors.primaryDark,
         foregroundColor: Colors.white,
         actions: [
@@ -558,7 +529,14 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
             width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.blue[700],
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.primaryDark,
+                  AppColors.primaryMedium,
+                ],
+              ),
               borderRadius: const BorderRadius.only(
                 bottomLeft: Radius.circular(20),
                 bottomRight: Radius.circular(20),
@@ -677,28 +655,60 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                         _buildStatusChart(),
                         const SizedBox(height: 20),
 
-                        // Category Breakdown
-                        _buildCategoryChart(),
+                        // Status Comparison
+                        _buildStatusComparison(),
+                        const SizedBox(height: 20),
+
+                        // Event Breakdown
+                        _buildEventChart(),
+                        const SizedBox(height: 20),
+
+                        // Event Comparison
+                        _buildEventComparison(),
+                        const SizedBox(height: 20),
+
+                        // Tags Breakdown
+                        _buildTagsChart(),
+                        const SizedBox(height: 20),
+
+                        // Tags Comparison
+                        _buildTagsComparison(),
                         const SizedBox(height: 20),
 
                         // Industry Breakdown
                         _buildIndustryChart(),
                         const SizedBox(height: 20),
 
+                        // Industry Comparison
+                        _buildIndustryComparison(),
+                        const SizedBox(height: 20),
+
                         // Job Type Breakdown
                         _buildJobTypeChart(),
+                        const SizedBox(height: 20),
+
+                        // Job Type Comparison
+                        _buildJobTypeComparison(),
                         const SizedBox(height: 20),
 
                         // Location Breakdown
                         _buildLocationChart(),
                         const SizedBox(height: 20),
 
+                        // Location Comparison
+                        _buildLocationComparison(),
+                        const SizedBox(height: 20),
+
                         // Budget Analysis
                         _buildBudgetAnalysis(),
                         const SizedBox(height: 20),
 
-                        // Detailed Statistics
-                        _buildDetailedStats(),
+                        // Budget Comparison
+                        _buildBudgetComparison(),
+                        const SizedBox(height: 20),
+
+                        // Detailed Statistics Comparison
+                        _buildDetailedStatsComparison(),
                       ],
                     ),
                   ),
@@ -710,51 +720,102 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
 
   Widget _buildQuickStats() {
     final analytics = _analytics!;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
+    return SizedBox(
+      height: 140,
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.45,
-            child: _StatCard(
-              title: 'Total Posts',
-              value: analytics['totalPosts'].toString(),
-              subtitle: 'All Time',
-              icon: Icons.article,
-              color: Colors.blue,
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.only(right: 50),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.45,
+                  child: _StatCard(
+                    title: 'Total Posts',
+                    value: analytics['totalPosts'].toString(),
+                    subtitle: 'All Time',
+                    icon: Icons.article,
+                    color: Colors.blue,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.45,
+                  child: _StatCard(
+                    title: 'In Period',
+                    value: analytics['postsInPeriod'].toString(),
+                    subtitle: 'Selected Range',
+                    icon: Icons.timeline,
+                    color: Colors.purple,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.45,
+                  child: _StatCard(
+                    title: 'Active',
+                    value: analytics['active'].toString(),
+                    subtitle: '${analytics['activeInPeriod']} in period',
+                    icon: Icons.check_circle,
+                    color: Colors.green,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.45,
+                  child: _StatCard(
+                    title: 'Pending',
+                    value: analytics['pending'].toString(),
+                    subtitle: '${analytics['pendingInPeriod']} in period',
+                    icon: Icons.pending,
+                    color: Colors.orange,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 10),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.45,
-            child: _StatCard(
-              title: 'In Period',
-              value: analytics['postsInPeriod'].toString(),
-              subtitle: 'Selected Range',
-              icon: Icons.timeline,
-              color: Colors.purple,
-            ),
-          ),
-          const SizedBox(width: 10),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.45,
-            child: _StatCard(
-              title: 'Active',
-              value: analytics['active'].toString(),
-              subtitle: '${analytics['activeInPeriod']} in period',
-              icon: Icons.check_circle,
-              color: Colors.green,
-            ),
-          ),
-          const SizedBox(width: 10),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.45,
-            child: _StatCard(
-              title: 'Pending',
-              value: analytics['pending'].toString(),
-              subtitle: '${analytics['pendingInPeriod']} in period',
-              icon: Icons.pending,
-              color: Colors.orange,
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            child: IgnorePointer(
+              child: Container(
+                width: 50,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      Colors.white.withOpacity(0),
+                      Colors.white.withOpacity(0.8),
+                      Colors.white,
+                    ],
+                  ),
+                ),
+                child: Center(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.arrow_forward_ios,
+                        size: 16,
+                        color: Colors.grey[600],
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        'Scroll',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
         ],
@@ -879,11 +940,12 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
 
   Widget _buildStatusChart() {
     final analytics = _analytics!;
+    // Show selected period data
     final data = [
-      ChartData('Active', analytics['active'].toDouble(), Colors.green),
-      ChartData('Pending', analytics['pending'].toDouble(), Colors.orange),
-      ChartData('Completed', analytics['completed'].toDouble(), Colors.blue),
-      ChartData('Rejected', analytics['rejected'].toDouble(), Colors.red),
+      ChartData('Active', analytics['activeInPeriod'].toDouble(), Colors.green),
+      ChartData('Pending', analytics['pendingInPeriod'].toDouble(), Colors.orange),
+      ChartData('Completed', analytics['completedInPeriod'].toDouble(), Colors.blue),
+      ChartData('Rejected', analytics['rejectedInPeriod'].toDouble(), Colors.red),
     ].where((item) => item.value > 0).toList();
 
     if (data.isEmpty) {
@@ -899,7 +961,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Status Distribution (All Time)',
+              'Status Distribution (Selected Period)',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
@@ -927,17 +989,18 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
     );
   }
 
-  Widget _buildCategoryChart() {
+  Widget _buildEventChart() {
     final analytics = _analytics!;
-    final categoryBreakdown =
-        analytics['categoryBreakdown'] as Map<String, dynamic>?;
+    // Use period data
+    final eventBreakdown =
+        analytics['eventBreakdownInPeriod'] as Map<String, dynamic>?;
 
-    if (categoryBreakdown == null || categoryBreakdown.isEmpty) {
+    if (eventBreakdown == null || eventBreakdown.isEmpty) {
       return const SizedBox.shrink();
     }
 
     // Filter out empty keys and ensure values are valid
-    final validCategories = categoryBreakdown.entries
+    final validEvents = eventBreakdown.entries
         .where(
           (entry) =>
               entry.key.isNotEmpty &&
@@ -946,14 +1009,14 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
         )
         .toList();
 
-    if (validCategories.isEmpty) {
+    if (validEvents.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    final sortedCategories = validCategories
+    final sortedEvents = validEvents
       ..sort((a, b) => (b.value as int).compareTo(a.value as int));
-    final topCategories = sortedCategories.take(10).toList();
-    final totalPosts = analytics['totalPosts'] as int;
+    final topEvents = sortedEvents.take(10).toList();
+    final totalPosts = analytics['postsInPeriod'] as int;
 
     return Card(
       elevation: 2,
@@ -964,76 +1027,121 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Top Categories',
+              'Top Events (Selected Period)',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
-              'Top 10 categories by post count',
+              'Top 10 events by post count in selected period',
               style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
-            // Statistics List
-            Container(
-              constraints: const BoxConstraints(maxHeight: 200),
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: topCategories.length,
-                itemBuilder: (context, index) {
-                  final entry = topCategories[index];
-                  final count = entry.value as int;
-                  final percentage = totalPosts > 0
-                      ? (count / totalPosts * 100)
-                      : 0.0;
+            // Statistics List with scroll indicator
+            Stack(
+              children: [
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: topEvents.length,
+                    itemBuilder: (context, index) {
+                      final entry = topEvents[index];
+                      final count = entry.value as int;
+                      final percentage = totalPosts > 0
+                          ? (count / totalPosts * 100)
+                          : 0.0;
 
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            entry.key,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                entry.key,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Text(
-                            '$count posts',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[700],
+                            Expanded(
+                              child: Text(
+                                '$count posts',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[700],
+                                ),
+                                textAlign: TextAlign.right,
+                              ),
                             ),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                        SizedBox(
-                          width: 60,
-                          child: Text(
-                            '${percentage.toStringAsFixed(1)}%',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.blue[700],
-                              fontWeight: FontWeight.w600,
+                            SizedBox(
+                              width: 60,
+                              child: Text(
+                                '${percentage.toStringAsFixed(1)}%',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.blue[700],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                textAlign: TextAlign.right,
+                              ),
                             ),
-                            textAlign: TextAlign.right,
-                          ),
+                          ],
                         ),
-                      ],
+                      );
+                    },
+                  ),
+                ),
+                if (topEvents.length > 3)
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      height: 40,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.white.withOpacity(0),
+                            Colors.white.withOpacity(0.8),
+                            Colors.white,
+                          ],
+                        ),
+                      ),
+                      child: Center(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.keyboard_arrow_down,
+                              size: 16,
+                              color: Colors.grey[600],
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Scroll for more',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  );
-                },
-              ),
+                  ),
+              ],
             ),
             const SizedBox(height: 16),
             SizedBox(
               height: 300,
               child: SfCartesianChart(
                 primaryXAxis: CategoryAxis(
-                  labelRotation: topCategories.length > 5 ? -45 : 0,
+                  isVisible: false,
                 ),
                 primaryYAxis: NumericAxis(),
                 legend: const Legend(isVisible: false),
@@ -1041,7 +1149,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                 series: <CartesianSeries>[
                   ColumnSeries<MapEntry<String, dynamic>, String>(
                     name: 'Posts',
-                    dataSource: topCategories,
+                    dataSource: topEvents,
                     xValueMapper: (entry, _) =>
                         entry.key.isNotEmpty ? entry.key : 'Unknown',
                     yValueMapper: (entry, _) => (entry.value as int? ?? 0),
@@ -1061,10 +1169,191 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
     );
   }
 
+  Widget _buildTagsChart() {
+    final analytics = _analytics!;
+    // Use period data
+    final tagsBreakdown =
+        analytics['tagsBreakdownInPeriod'] as Map<String, dynamic>?;
+
+    if (tagsBreakdown == null || tagsBreakdown.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Filter out empty keys and ensure values are valid
+    final validTags = tagsBreakdown.entries
+        .where(
+          (entry) =>
+              entry.key.isNotEmpty &&
+              entry.value != null &&
+              (entry.value as int) > 0,
+        )
+        .toList();
+
+    if (validTags.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final sortedTags = validTags
+      ..sort((a, b) => (b.value as int).compareTo(a.value as int));
+    final topTags = sortedTags.take(10).toList();
+    final totalPosts = analytics['postsInPeriod'] as int;
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Top Tags (Selected Period)',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Top 10 tags by post count in selected period',
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 16),
+            // Statistics List with scroll indicator
+            Stack(
+              children: [
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: topTags.length,
+                    itemBuilder: (context, index) {
+                      final entry = topTags[index];
+                      final count = entry.value as int;
+                      final percentage = totalPosts > 0
+                          ? (count / totalPosts * 100)
+                          : 0.0;
+
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                entry.key,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                '$count posts',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[700],
+                                ),
+                                textAlign: TextAlign.right,
+                              ),
+                            ),
+                            SizedBox(
+                              width: 60,
+                              child: Text(
+                                '${percentage.toStringAsFixed(1)}%',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.orange[700],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                textAlign: TextAlign.right,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                if (topTags.length > 3)
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      height: 40,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.white.withOpacity(0),
+                            Colors.white.withOpacity(0.8),
+                            Colors.white,
+                          ],
+                        ),
+                      ),
+                      child: Center(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.keyboard_arrow_down,
+                              size: 16,
+                              color: Colors.grey[600],
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Scroll for more',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 300,
+              child: SfCartesianChart(
+                primaryXAxis: CategoryAxis(
+                  isVisible: false,
+                ),
+                primaryYAxis: NumericAxis(),
+                legend: const Legend(isVisible: false),
+                tooltipBehavior: TooltipBehavior(enable: true),
+                series: <CartesianSeries>[
+                  ColumnSeries<MapEntry<String, dynamic>, String>(
+                    name: 'Posts',
+                    dataSource: topTags,
+                    xValueMapper: (entry, _) =>
+                        entry.key.isNotEmpty ? entry.key : 'Unknown',
+                    yValueMapper: (entry, _) => (entry.value as int? ?? 0),
+                    color: Colors.orange,
+                    dataLabelSettings: DataLabelSettings(
+                      isVisible: true,
+                      labelPosition: ChartDataLabelPosition.outside,
+                      textStyle: const TextStyle(fontSize: 10),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildIndustryChart() {
     final analytics = _analytics!;
+    // Use period data
     final industryBreakdown =
-        analytics['industryBreakdown'] as Map<String, dynamic>?;
+        analytics['industryBreakdownInPeriod'] as Map<String, dynamic>?;
 
     if (industryBreakdown == null || industryBreakdown.isEmpty) {
       return const SizedBox.shrink();
@@ -1097,7 +1386,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Top Industries',
+              'Top Industries (Selected Period)',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
@@ -1135,8 +1424,9 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
 
   Widget _buildJobTypeChart() {
     final analytics = _analytics!;
+    // Use period data
     final jobTypeBreakdown =
-        analytics['jobTypeBreakdown'] as Map<String, dynamic>?;
+        analytics['jobTypeBreakdownInPeriod'] as Map<String, dynamic>?;
 
     if (jobTypeBreakdown == null || jobTypeBreakdown.isEmpty) {
       return const SizedBox.shrink();
@@ -1168,7 +1458,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Job Type Distribution',
+              'Job Type Distribution (Selected Period)',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
@@ -1204,8 +1494,9 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
 
   Widget _buildLocationChart() {
     final analytics = _analytics!;
+    // Use period data
     final locationBreakdown =
-        analytics['locationBreakdown'] as Map<String, dynamic>?;
+        analytics['locationBreakdownInPeriod'] as Map<String, dynamic>?;
 
     if (locationBreakdown == null || locationBreakdown.isEmpty) {
       return const SizedBox.shrink();
@@ -1224,12 +1515,12 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Top Locations',
+              'Top Locations (Selected Period)',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
-              'Top 10 locations by post count',
+              'Top 10 locations by post count in selected period',
               style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
@@ -1296,8 +1587,9 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
 
   Widget _buildBudgetAnalysis() {
     final analytics = _analytics!;
-    final avgBudgetMin = analytics['avgBudgetMin'] as double?;
-    final avgBudgetMax = analytics['avgBudgetMax'] as double?;
+    // Use period data
+    final avgBudgetMin = analytics['avgBudgetMinInPeriod'] as double?;
+    final avgBudgetMax = analytics['avgBudgetMaxInPeriod'] as double?;
 
     if (avgBudgetMin == null && avgBudgetMax == null) {
       return const SizedBox.shrink();
@@ -1312,7 +1604,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Budget Analysis',
+              'Budget Analysis (Selected Period)',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
@@ -1346,7 +1638,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
     );
   }
 
-  Widget _buildDetailedStats() {
+  Widget _buildStatusComparison() {
     final analytics = _analytics!;
     return Card(
       elevation: 2,
@@ -1357,50 +1649,396 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Detailed Statistics',
+              'Status Distribution: All Time vs Selected Period',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            _buildStatRow(
-              'Approval Rate',
-              '${(analytics['approvalRate'] as double).toStringAsFixed(1)}%',
-            ),
-            _buildStatRow(
-              'Rejection Rate',
-              '${(analytics['rejectionRate'] as double).toStringAsFixed(1)}%',
-            ),
-            _buildStatRow(
-              'Active Posts (Period)',
-              analytics['activeInPeriod'].toString(),
-            ),
-            _buildStatRow(
-              'Pending Posts (Period)',
-              analytics['pendingInPeriod'].toString(),
-            ),
-            _buildStatRow(
-              'Completed Posts (Period)',
-              analytics['completedInPeriod'].toString(),
-            ),
-            _buildStatRow(
-              'Rejected Posts (Period)',
-              analytics['rejectedInPeriod'].toString(),
-            ),
+            _buildComparisonHeader(),
+            _buildComparisonRow('Active', analytics['active'], analytics['activeInPeriod']),
+            _buildComparisonRow('Pending', analytics['pending'], analytics['pendingInPeriod']),
+            _buildComparisonRow('Completed', analytics['completed'], analytics['completedInPeriod']),
+            _buildComparisonRow('Rejected', analytics['rejected'], analytics['rejectedInPeriod']),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStatRow(String label, String value) {
+  Widget _buildEventComparison() {
+    final analytics = _analytics!;
+    final allTime = analytics['eventBreakdown'] as Map<String, dynamic>? ?? {};
+    final period = analytics['eventBreakdownInPeriod'] as Map<String, dynamic>? ?? {};
+    
+    if (allTime.isEmpty && period.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Get top 5 from each
+    final allTimeTop = allTime.entries.toList()
+      ..sort((a, b) => (b.value as int).compareTo(a.value as int));
+    final periodTop = period.entries.toList()
+      ..sort((a, b) => (b.value as int).compareTo(a.value as int));
+
+    final allKeys = {...allTimeTop.take(5).map((e) => e.key), ...periodTop.take(5).map((e) => e.key)};
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Top Events: All Time vs Selected Period',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            _buildComparisonHeader(),
+            ...allKeys.take(5).map((key) => _buildComparisonRow(
+              key,
+              allTime[key] ?? 0,
+              period[key] ?? 0,
+            )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTagsComparison() {
+    final analytics = _analytics!;
+    final allTime = analytics['tagsBreakdown'] as Map<String, dynamic>? ?? {};
+    final period = analytics['tagsBreakdownInPeriod'] as Map<String, dynamic>? ?? {};
+    
+    if (allTime.isEmpty && period.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final allTimeTop = allTime.entries.toList()
+      ..sort((a, b) => (b.value as int).compareTo(a.value as int));
+    final periodTop = period.entries.toList()
+      ..sort((a, b) => (b.value as int).compareTo(a.value as int));
+
+    final allKeys = {...allTimeTop.take(5).map((e) => e.key), ...periodTop.take(5).map((e) => e.key)};
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Top Tags: All Time vs Selected Period',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            _buildComparisonHeader(),
+            ...allKeys.take(5).map((key) => _buildComparisonRow(
+              key,
+              allTime[key] ?? 0,
+              period[key] ?? 0,
+            )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIndustryComparison() {
+    final analytics = _analytics!;
+    final allTime = analytics['industryBreakdown'] as Map<String, dynamic>? ?? {};
+    final period = analytics['industryBreakdownInPeriod'] as Map<String, dynamic>? ?? {};
+    
+    if (allTime.isEmpty && period.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final allTimeTop = allTime.entries.toList()
+      ..sort((a, b) => (b.value as int).compareTo(a.value as int));
+    final periodTop = period.entries.toList()
+      ..sort((a, b) => (b.value as int).compareTo(a.value as int));
+
+    final allKeys = {...allTimeTop.take(5).map((e) => e.key), ...periodTop.take(5).map((e) => e.key)};
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Top Industries: All Time vs Selected Period',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            _buildComparisonHeader(),
+            ...allKeys.take(5).map((key) => _buildComparisonRow(
+              key,
+              allTime[key] ?? 0,
+              period[key] ?? 0,
+            )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildJobTypeComparison() {
+    final analytics = _analytics!;
+    final allTime = analytics['jobTypeBreakdown'] as Map<String, dynamic>? ?? {};
+    final period = analytics['jobTypeBreakdownInPeriod'] as Map<String, dynamic>? ?? {};
+    
+    if (allTime.isEmpty && period.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final allKeys = {...allTime.keys, ...period.keys};
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Job Types: All Time vs Selected Period',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            _buildComparisonHeader(),
+            ...allKeys.map((key) => _buildComparisonRow(
+              key,
+              allTime[key] ?? 0,
+              period[key] ?? 0,
+            )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLocationComparison() {
+    final analytics = _analytics!;
+    final allTime = analytics['locationBreakdown'] as Map<String, dynamic>? ?? {};
+    final period = analytics['locationBreakdownInPeriod'] as Map<String, dynamic>? ?? {};
+    
+    if (allTime.isEmpty && period.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final allTimeTop = allTime.entries.toList()
+      ..sort((a, b) => (b.value as int).compareTo(a.value as int));
+    final periodTop = period.entries.toList()
+      ..sort((a, b) => (b.value as int).compareTo(a.value as int));
+
+    final allKeys = {...allTimeTop.take(5).map((e) => e.key), ...periodTop.take(5).map((e) => e.key)};
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Top Locations: All Time vs Selected Period',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            _buildComparisonHeader(),
+            ...allKeys.take(5).map((key) => _buildComparisonRow(
+              key,
+              allTime[key] ?? 0,
+              period[key] ?? 0,
+            )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBudgetComparison() {
+    final analytics = _analytics!;
+    final allTimeMin = analytics['avgBudgetMin'] as double?;
+    final allTimeMax = analytics['avgBudgetMax'] as double?;
+    final periodMin = analytics['avgBudgetMinInPeriod'] as double?;
+    final periodMax = analytics['avgBudgetMaxInPeriod'] as double?;
+
+    if (allTimeMin == null && allTimeMax == null && periodMin == null && periodMax == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Budget Analysis: All Time vs Selected Period',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            _buildComparisonHeader(),
+            if (allTimeMin != null || periodMin != null)
+              _buildComparisonRow(
+                'Average Min Budget',
+                allTimeMin != null ? 'RM ${allTimeMin.toStringAsFixed(2)}' : 'N/A',
+                periodMin != null ? 'RM ${periodMin.toStringAsFixed(2)}' : 'N/A',
+                isString: true,
+              ),
+            if (allTimeMax != null || periodMax != null)
+              _buildComparisonRow(
+                'Average Max Budget',
+                allTimeMax != null ? 'RM ${allTimeMax.toStringAsFixed(2)}' : 'N/A',
+                periodMax != null ? 'RM ${periodMax.toStringAsFixed(2)}' : 'N/A',
+                isString: true,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailedStatsComparison() {
+    final analytics = _analytics!;
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Detailed Statistics: All Time vs Selected Period',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            _buildComparisonHeader(),
+            _buildComparisonRow(
+              'Approval Rate',
+              '${(analytics['approvalRate'] as double).toStringAsFixed(1)}%',
+              '${(analytics['approvalRateInPeriod'] as double).toStringAsFixed(1)}%',
+              isString: true,
+            ),
+            _buildComparisonRow(
+              'Rejection Rate',
+              '${(analytics['rejectionRate'] as double).toStringAsFixed(1)}%',
+              '${(analytics['rejectionRateInPeriod'] as double).toStringAsFixed(1)}%',
+              isString: true,
+            ),
+            _buildComparisonRow('Active Posts', analytics['active'], analytics['activeInPeriod']),
+            _buildComparisonRow('Pending Posts', analytics['pending'], analytics['pendingInPeriod']),
+            _buildComparisonRow('Completed Posts', analytics['completed'], analytics['completedInPeriod']),
+            _buildComparisonRow('Rejected Posts', analytics['rejected'], analytics['rejectedInPeriod']),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildComparisonHeader() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: Text(
+              'Metric',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              'All Time',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Selected Period',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.blue[700],
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComparisonRow(String label, dynamic allTimeValue, dynamic periodValue, {bool isString = false}) {
+    final allTimeStr = isString ? allTimeValue.toString() : allTimeValue.toString();
+    final periodStr = isString ? periodValue.toString() : periodValue.toString();
+    
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontSize: 14, color: Colors.grey[700])),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          Expanded(
+            flex: 2,
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+          ),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                allTimeStr,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                periodStr,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue[700],
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
           ),
         ],
       ),

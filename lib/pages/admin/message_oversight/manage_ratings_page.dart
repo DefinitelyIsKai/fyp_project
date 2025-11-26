@@ -261,23 +261,24 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
                     }),
                   ),
                   const Spacer(),
-                  // Status Badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: statusColor),
-                    ),
-                    child: Text(
-                      _getStatusLabel(rating.status),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: statusColor,
-                        fontWeight: FontWeight.w600,
+                  // Status Badge (only show if not active)
+                  if (rating.status != RatingStatus.active)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: statusColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: statusColor),
+                      ),
+                      child: Text(
+                        _getStatusLabel(rating.status),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: statusColor,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
               if (rating.comment != null && rating.comment!.isNotEmpty) ...[

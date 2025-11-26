@@ -9,7 +9,10 @@ class AnalyticsDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Detailed Analytics')),
+      appBar: AppBar(
+        title: const Text('Detailed Analytics'),
+        foregroundColor: Colors.white,
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(

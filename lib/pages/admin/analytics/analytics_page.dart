@@ -26,12 +26,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   DateTime _startDate = DateTime.now().subtract(const Duration(days: 30));
   DateTime _endDate = DateTime.now();
 
-  // Helper to set start of day
   DateTime _startOfDay(DateTime date) {
     return DateTime(date.year, date.month, date.day, 0, 0, 0);
   }
   
-  // Helper to set end of day
   DateTime _endOfDay(DateTime date) {
     return DateTime(date.year, date.month, date.day, 23, 59, 59);
   }
@@ -49,14 +47,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      // Load all-time analytics (from beginning to now)
       final allTimeStart = DateTime(2020, 1, 1);
       final allTimeAnalytics = await _analyticsService.getAnalyticsForRange(allTimeStart, DateTime.now());
       
-      // Load period analytics (selected date range)
       final periodAnalytics = await _analyticsService.getAnalyticsForRange(_startDate, _endDate);
       
-      // Load trend data for charts (daily breakdown)
       List<AnalyticsModel> trendData = [];
       final daysDiff = _endDate.difference(_startDate).inDays;
       final daysToLoad = daysDiff > 30 ? 30 : daysDiff;
@@ -66,11 +61,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         final dayStart = DateTime(day.year, day.month, day.day);
         final dayEnd = DateTime(day.year, day.month, day.day, 23, 59, 59);
         final dayAnalytics = await _analyticsService.getAnalyticsForRange(dayStart, dayEnd);
-        // Update the date to the specific day for chart display
         trendData.add(dayAnalytics.copyWith(date: dayStart));
       }
       
-      // Load credit logs
       final creditLogs = await _analyticsService.getCreditLogs(_startDate, _endDate);
       
       if (mounted) {
@@ -127,6 +120,18 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return DateFormat('dd/MM/yyyy').format(date);
   }
 
+  double _capEngagementRate(double rate) {
+    return rate > 100.0 ? 100.0 : rate;
+  }
+
+  double _capGrowthRate(double rate) {
+    // Cap growth rate at 100% to avoid misleading high percentages
+    if (rate > 100.0) return 100.0;
+    // Hide negative growth rates (show as 0)
+    if (rate < 0) return 0.0;
+    return rate;
+  }
+
   String _getDateRangeText() {
     final daysDiff = _endDate.difference(_startDate).inDays;
     if (daysDiff == 0) {
@@ -151,7 +156,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           margin: const pw.EdgeInsets.all(40),
           build: (pw.Context context) {
             return [
-              // Header
               pw.Header(
                 level: 0,
                 child: pw.Row(
@@ -294,6 +298,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           ),
         ),
         backgroundColor: AppColors.primaryDark,
+        foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           IconButton(
@@ -311,7 +316,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       ),
       body: Column(
         children: [
-          // Header Section
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -437,15 +441,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  // Quick Stats Row
                   _buildQuickStats(),
                   const SizedBox(height: 20),
 
-                  // Visual Dashboards
                   _buildTrendCharts(),
                   const SizedBox(height: 20),
 
-                  // Main Analytics Cards
                   _buildAnalyticsCards(),
                   const SizedBox(height: 20),
 
@@ -518,7 +519,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             trend: _analytics!.activeUserGrowth,
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 4),
         Expanded(
           child: _QuickStatCard(
             title: 'Job Posts',
@@ -529,7 +530,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             trend: _analytics!.jobPostGrowth,
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 4),
         Expanded(
           child: _QuickStatCard(
             title: 'Flagged Content',
@@ -732,56 +733,26 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Widget _buildAnalyticsCards() {
     return Column(
       children: [
-        // Usage Statistics
+        // User Engagement
         _AnalyticsSectionCard(
-          title: 'Usage Statistics',
-          icon: Icons.analytics, // Changed to existing icon
-          color: Colors.blue,
-          children: [
-            _MetricRow(
-              label: 'Total Users',
-              value: _analytics!.totalUsers.toString(),
-              trend: _analytics!.userGrowthRate,
-            ),
-            _MetricRow(
-              label: 'Active Users',
-              value: _analytics!.activeUsers.toString(),
-              trend: _analytics!.activeUserGrowth,
-            ),
-            _MetricRow(
-              label: 'New Registrations',
-              value: _analytics!.newRegistrations.toString(),
-              trend: _analytics!.registrationGrowth,
-            ),
-            _MetricRow(
-              label: 'Session Duration',
-              value: '${_analytics!.avgSessionDuration.toStringAsFixed(1)} min',
-              trend: _analytics!.sessionGrowth,
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-
-        // Engagement Tracking
-        _AnalyticsSectionCard(
-          title: 'Engagement Tracking',
-          icon: Icons.trending_up, // Correct icon for engagement
+          title: 'User Engagement',
+          icon: Icons.trending_up,
           color: Colors.green,
           children: [
             _MetricRow(
               label: 'Engagement Rate',
-              value: '${_analytics!.engagementRate.toStringAsFixed(1)}%',
-              trend: _analytics!.engagementGrowth,
+              value: '${_capEngagementRate(_analytics!.engagementRate).toStringAsFixed(1)}%',
+              trend: _capGrowthRate(_analytics!.engagementGrowth),
             ),
             _MetricRow(
               label: 'Messages Sent',
               value: _analytics!.totalMessages.toString(),
-              trend: _analytics!.messageGrowth,
+              trend: _capGrowthRate(_analytics!.messageGrowth),
             ),
             _MetricRow(
-              label: 'Profile Views',
-              value: _analytics!.profileViews.toString(),
-              trend: _analytics!.profileViewGrowth,
+              label: 'Job Applications',
+              value: _analytics!.totalApplications.toString(),
+              trend: _capGrowthRate(_analytics!.applicationGrowth),
             ),
           ],
         ),
@@ -885,15 +856,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 _buildSubMetric('Pending', _analytics!.pendingReports, _allTimeAnalytics!.pendingReports),
                 _buildSubMetric('Resolved', _analytics!.resolvedReports, _allTimeAnalytics!.resolvedReports),
               ],
-            ),
-            const SizedBox(height: 20),
-            
-            // Reported Messages
-            _buildComparisonRow(
-              'Reported Messages',
-              _analytics!.reportedMessages,
-              _allTimeAnalytics!.reportedMessages,
-              null,
             ),
           ],
         ),
@@ -1232,7 +1194,7 @@ class _QuickStatCard extends StatelessWidget {
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1240,12 +1202,12 @@ class _QuickStatCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
                     color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Icon(icon, size: 20, color: color),
+                  child: Icon(icon, size: 18, color: color),
                 ),
                 Flexible(
                   child: Column(
@@ -1255,7 +1217,7 @@ class _QuickStatCard extends StatelessWidget {
                       Text(
                         value,
                         style: const TextStyle(
-                          fontSize: 24,
+                          fontSize: 20,
                           fontWeight: FontWeight.bold,
                           color: Colors.black87,
                         ),
@@ -1263,51 +1225,27 @@ class _QuickStatCard extends StatelessWidget {
                       ),
                     if (trend != 0 && trend != -999.0)
                       Container(
-                        margin: const EdgeInsets.only(top: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        margin: const EdgeInsets.only(top: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                         decoration: BoxDecoration(
                           color: trend > 0 ? Colors.green[50] : Colors.red[50],
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
                               trend > 0 ? Icons.arrow_upward : Icons.arrow_downward,
-                              size: 12,
+                              size: 10,
                               color: trend > 0 ? Colors.green[700] : Colors.red[700],
                             ),
-                            const SizedBox(width: 2),
+                            const SizedBox(width: 1),
                             Text(
                               '${(trend.abs().clamp(0.0, 100.0)).toStringAsFixed(1)}%',
                               style: TextStyle(
-                                fontSize: 10,
+                                fontSize: 9,
                                 fontWeight: FontWeight.w600,
                                 color: trend > 0 ? Colors.green[700] : Colors.red[700],
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else if (trend == -999.0)
-                      Container(
-                        margin: const EdgeInsets.only(top: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.blue[50],
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.new_releases, size: 12, color: Colors.blue[700]),
-                            const SizedBox(width: 2),
-                            Text(
-                              'NEW',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.blue[700],
                               ),
                             ),
                           ],
@@ -1318,19 +1256,19 @@ class _QuickStatCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text(
               title,
               style: const TextStyle(
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               subtitle,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 color: Colors.grey[600],
               ),
             ),
@@ -1397,13 +1335,11 @@ class _MetricRow extends StatelessWidget {
   final String label;
   final String value;
   final double trend;
-  final Map<String, String>? subMetrics;
 
   const _MetricRow({
     required this.label,
     required this.value,
     required this.trend,
-    this.subMetrics,
   });
 
   @override
@@ -1465,30 +1401,6 @@ class _MetricRow extends StatelessWidget {
             ),
           ],
         ),
-        if (subMetrics != null && subMetrics!.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 12,
-            runSpacing: 4,
-            children: subMetrics!.entries.map((entry) {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  '${entry.key}: ${entry.value}',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey[700],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ],
         const SizedBox(height: 12),
       ],
     );
@@ -1515,7 +1427,6 @@ class _DateRangePickerDialogState extends State<_DateRangePickerDialog> {
   @override
   void initState() {
     super.initState();
-    // Extract just the date part (remove time)
     _tempStartDate = DateTime(widget.startDate.year, widget.startDate.month, widget.startDate.day);
     _tempEndDate = DateTime(widget.endDate.year, widget.endDate.month, widget.endDate.day);
   }

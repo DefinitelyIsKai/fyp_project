@@ -3,6 +3,9 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:fyp_project/models/admin/analytics_model.dart';
 import 'package:fyp_project/services/admin/analytics_service.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 
 class UserAnalyticsPage extends StatefulWidget {
@@ -16,6 +19,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
   final AnalyticsService _analyticsService = AnalyticsService();
   bool _isLoading = true;
   AnalyticsModel? _analytics;
+  AnalyticsModel? _allTimeAnalytics;
   List<AnalyticsModel> _weeklyAnalytics = [];
   DateTime _startDate = DateTime.now().subtract(const Duration(days: 30));
   DateTime _endDate = DateTime.now();
@@ -41,10 +45,17 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
 
   Future<void> _loadAnalytics() async {
     if (!mounted) return;
+    
     setState(() => _isLoading = true);
     try {
       // Use the selected date range for analytics
       final analytics = await _analyticsService.getAnalyticsForRange(_startDate, _endDate);
+      
+      // Get all-time analytics (from beginning to end date)
+      final allTimeAnalytics = await _analyticsService.getAnalyticsForRange(
+        DateTime(2020, 1, 1),
+        _endDate,
+      );
       
       // Load data for charts - use the selected date range
       List<AnalyticsModel> weekly = [];
@@ -68,15 +79,14 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
       if (mounted) {
         setState(() {
           _analytics = analytics;
+          _allTimeAnalytics = allTimeAnalytics;
           _weeklyAnalytics = weekly;
+          _isLoading = false;
         });
       }
     } catch (e) {
       if (mounted) {
         _showSnackBar('Error loading analytics: $e', isError: true);
-      }
-    } finally {
-      if (mounted) {
         setState(() => _isLoading = false);
       }
     }
@@ -128,6 +138,302 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
     return '${_formatDate(_startDate)} - ${_formatDate(_endDate)}';
   }
 
+  String _formatGrowthRate(double rate, String metricType, AnalyticsModel analytics) {
+    const double newDataIndicator = -999.0;
+    if (rate == newDataIndicator) {
+      // Show percentage based on current value when it's new data
+      // Cap all calculated percentages at 100%
+      switch (metricType) {
+        case 'userGrowth':
+          return '100.0%';
+        case 'activeUserGrowth':
+          if (analytics.totalUsers > 0) {
+            final calculated = (analytics.activeUsers / analytics.totalUsers * 100);
+            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
+          }
+          return '0.0%';
+        case 'registrationGrowth':
+          if (analytics.totalUsers > 0) {
+            final calculated = (analytics.newRegistrations / analytics.totalUsers * 100);
+            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
+          }
+          return '100.0%';
+        case 'engagementGrowth':
+          return '${_capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%';
+        case 'messageGrowth':
+          if (analytics.totalUsers > 0) {
+            final calculated = (analytics.totalMessages / analytics.totalUsers * 100);
+            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
+          }
+          return '0.0%';
+        case 'applicationGrowth':
+          if (analytics.totalUsers > 0) {
+            final calculated = (analytics.totalApplications / analytics.totalUsers * 100);
+            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
+          }
+          return '0.0%';
+        case 'reportGrowth':
+          if (analytics.totalUsers > 0) {
+            final calculated = (analytics.totalReports / analytics.totalUsers * 100);
+            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
+          }
+          return '0.0%';
+        default:
+          return '0.0%';
+      }
+    }
+    // Hide negative growth rates for registration, engagement, application, and message
+    if (rate < 0 && (metricType == 'registrationGrowth' || metricType == 'engagementGrowth' || metricType == 'applicationGrowth' || metricType == 'messageGrowth')) {
+      return '0.0%';
+    }
+    // Cap ALL growth rates at 100% to avoid misleading high percentages (for PDF and UI consistency)
+    if (rate > 100) {
+      return '100.0%';
+    }
+    return '${rate.toStringAsFixed(1)}%';
+  }
+
+  double _capEngagementRate(double rate) {
+    return rate > 100.0 ? 100.0 : rate;
+  }
+
+  double _capGrowthRate(double rate) {
+    // Cap growth rate at 100% to avoid misleading high percentages
+    if (rate > 100.0) return 100.0;
+    // Hide negative growth rates (show as 0)
+    if (rate < 0) return 0.0;
+    return rate;
+  }
+
+  Future<void> _downloadPDF() async {
+    if (_analytics == null || _allTimeAnalytics == null) return;
+
+    try {
+      final pdf = pw.Document();
+      final analytics = _analytics!;
+      final allTime = _allTimeAnalytics!;
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(40),
+          build: (pw.Context context) {
+            return [
+              // Header
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'User Analytics Report',
+                    style: pw.TextStyle(
+                      fontSize: 20,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.blue700,
+                    ),
+                  ),
+                  pw.Text(
+                    DateFormat('dd MMM yyyy HH:mm').format(DateTime.now()),
+                    style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 15),
+
+              // Date Range
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                  borderRadius: pw.BorderRadius.circular(6),
+                ),
+                child: pw.Row(
+                  children: [
+                    pw.Text(
+                      'Period: ',
+                      style: pw.TextStyle(
+                        fontSize: 12,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.Text(
+                      '${_formatDate(_startDate)} - ${_formatDate(_endDate)}',
+                      style: pw.TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+
+              // Overview Statistics
+              pw.Text(
+                'Overview Statistics',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey400,
+                  width: 0.5,
+                ),
+                cellAlignment: pw.Alignment.centerLeft,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                headerStyle: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                cellStyle: pw.TextStyle(fontSize: 9),
+                rowDecoration: pw.BoxDecoration(
+                  border: pw.Border(
+                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  ),
+                ),
+                headers: ['Metric', 'All Time', 'Selected Period'],
+                data: [
+                  ['Total Users', allTime.totalUsers.toString(), analytics.totalUsers.toString()],
+                  ['Active Users', allTime.activeUsers.toString(), analytics.activeUsers.toString()],
+                  ['Inactive Users', allTime.inactiveUsers.toString(), analytics.inactiveUsers.toString()],
+                  ['New Registrations', allTime.newRegistrations.toString(), analytics.newRegistrations.toString()],
+                ],
+              ),
+              pw.SizedBox(height: 20),
+
+              // User Engagement
+              pw.Text(
+                'User Engagement',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey400,
+                  width: 0.5,
+                ),
+                cellAlignment: pw.Alignment.centerLeft,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                headerStyle: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                cellStyle: pw.TextStyle(fontSize: 9),
+                rowDecoration: pw.BoxDecoration(
+                  border: pw.Border(
+                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  ),
+                ),
+                headers: ['Metric', 'All Time', 'Selected Period'],
+                data: [
+                  ['Engagement Rate', '${_capEngagementRate(allTime.engagementRate).toStringAsFixed(1)}%', '${_capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%'],
+                  ['Job Applications', allTime.totalApplications.toString(), analytics.totalApplications.toString()],
+                  ['Messages Sent', allTime.totalMessages.toString(), analytics.totalMessages.toString()],
+                ],
+              ),
+              pw.SizedBox(height: 20),
+
+              // User Reports & Moderation
+              pw.Text(
+                'User Reports & Moderation',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey400,
+                  width: 0.5,
+                ),
+                cellAlignment: pw.Alignment.centerLeft,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                headerStyle: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                cellStyle: pw.TextStyle(fontSize: 9),
+                rowDecoration: pw.BoxDecoration(
+                  border: pw.Border(
+                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  ),
+                ),
+                headers: ['Metric', 'All Time', 'Selected Period'],
+                data: [
+                  ['Total Reports', allTime.totalReports.toString(), analytics.totalReports.toString()],
+                  ['Pending Reports', allTime.pendingReports.toString(), analytics.pendingReports.toString()],
+                  ['Resolved Reports', allTime.resolvedReports.toString(), analytics.resolvedReports.toString()],
+                  ['Dismissed Reports', allTime.dismissedReports.toString(), analytics.dismissedReports.toString()],
+                  ['Report Resolution Rate', '${allTime.reportResolutionRate.toStringAsFixed(1)}%', '${analytics.reportResolutionRate.toStringAsFixed(1)}%'],
+                ],
+              ),
+              pw.SizedBox(height: 20),
+
+              // Growth Rates
+              pw.Text(
+                'Growth Rates',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey400,
+                  width: 0.5,
+                ),
+                cellAlignment: pw.Alignment.centerLeft,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                headerStyle: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                cellStyle: pw.TextStyle(fontSize: 9),
+                rowDecoration: pw.BoxDecoration(
+                  border: pw.Border(
+                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  ),
+                ),
+                headers: ['Metric', 'Growth Rate'],
+                data: [
+                  ['User Growth', _formatGrowthRate(analytics.userGrowthRate, 'userGrowth', analytics)],
+                  ['Active User Growth', _formatGrowthRate(analytics.activeUserGrowth, 'activeUserGrowth', analytics)],
+                  ['Registration Growth', _formatGrowthRate(analytics.registrationGrowth, 'registrationGrowth', analytics)],
+                  ['Engagement Growth', _formatGrowthRate(analytics.engagementGrowth, 'engagementGrowth', analytics)],
+                  ['Message Growth', _formatGrowthRate(analytics.messageGrowth, 'messageGrowth', analytics)],
+                  ['Application Growth', _formatGrowthRate(analytics.applicationGrowth, 'applicationGrowth', analytics)],
+                  ['Report Growth', _formatGrowthRate(analytics.reportGrowth, 'reportGrowth', analytics)],
+                ],
+              ),
+            ];
+          },
+        ),
+      );
+
+      // Show PDF preview and allow download
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error generating PDF: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -142,6 +448,12 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
             onPressed: _loadAnalytics,
             tooltip: 'Refresh',
           ),
+          if (_analytics != null)
+            IconButton(
+              icon: const Icon(Icons.picture_as_pdf),
+              onPressed: _downloadPDF,
+              tooltip: 'Download PDF',
+            ),
         ],
       ),
       body: Column(
@@ -151,7 +463,14 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
             width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.blue[700],
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.primaryDark,
+                  AppColors.primaryMedium,
+                ],
+              ),
               borderRadius: const BorderRadius.only(
                 bottomLeft: Radius.circular(20),
                 bottomRight: Radius.circular(20),
@@ -246,7 +565,33 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
           // Analytics Content
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryDark),
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          'Loading analytics...',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[800],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Please wait a moment',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
                 : _analytics == null
                     ? _buildEmptyState()
                     : SingleChildScrollView(
@@ -299,7 +644,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
               subtitle: 'All registered',
               color: Colors.blue,
               icon: Icons.people,
-              trend: _analytics!.userGrowthRate,
+              trend: _capGrowthRate(_analytics!.userGrowthRate),
             ),
           ),
           const SizedBox(width: 10),
@@ -311,19 +656,19 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
               subtitle: 'Currently online',
               color: Colors.green,
               icon: Icons.online_prediction,
-              trend: _analytics!.activeUserGrowth,
+              trend: _capGrowthRate(_analytics!.activeUserGrowth),
             ),
           ),
           const SizedBox(width: 10),
           SizedBox(
             width: MediaQuery.of(context).size.width * 0.45,
-            child: _QuickStatCard(
+            child:             _QuickStatCard(
               title: 'New Users',
               value: _analytics!.newRegistrations.toString(),
               subtitle: 'This period',
               color: Colors.orange,
               icon: Icons.person_add,
-              trend: _analytics!.registrationGrowth,
+              trend: _capGrowthRate(_analytics!.registrationGrowth),
             ),
           ),
           const SizedBox(width: 10),
@@ -424,12 +769,12 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
             _MetricRow(
               label: 'Total Users',
               value: _analytics!.totalUsers.toString(),
-              trend: _analytics!.userGrowthRate,
+              trend: _capGrowthRate(_analytics!.userGrowthRate),
             ),
             _MetricRow(
               label: 'Active Users',
               value: '${_analytics!.activeUsers.toString()} (${_analytics!.activeUserPercentage.toStringAsFixed(1)}%)',
-              trend: _analytics!.activeUserGrowth,
+              trend: _capGrowthRate(_analytics!.activeUserGrowth),
               subMetrics: {
                 'Inactive': _analytics!.inactiveUsers.toString(),
               },
@@ -437,12 +782,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
             _MetricRow(
               label: 'New Registrations',
               value: _analytics!.newRegistrations.toString(),
-              trend: _analytics!.registrationGrowth,
-            ),
-            _MetricRow(
-              label: 'Average Session Duration',
-              value: '${_analytics!.avgSessionDuration.toStringAsFixed(1)} min',
-              trend: _analytics!.sessionGrowth,
+              trend: _capGrowthRate(_analytics!.registrationGrowth),
             ),
           ],
         ),
@@ -482,23 +822,18 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
             const SizedBox(height: 16),
             _MetricRow(
               label: 'Engagement Rate',
-              value: '${_analytics!.engagementRate.toStringAsFixed(1)}%',
-              trend: _analytics!.engagementGrowth,
-            ),
-            _MetricRow(
-              label: 'Profile Views',
-              value: _analytics!.profileViews.toString(),
-              trend: _analytics!.profileViewGrowth,
+              value: '${_capEngagementRate(_analytics!.engagementRate).toStringAsFixed(1)}%',
+              trend: _capGrowthRate(_analytics!.engagementGrowth),
             ),
             _MetricRow(
               label: 'Messages Sent',
               value: _analytics!.totalMessages.toString(),
-              trend: _analytics!.messageGrowth,
+              trend: _capGrowthRate(_analytics!.messageGrowth),
             ),
             _MetricRow(
               label: 'Job Applications',
               value: _analytics!.totalApplications.toString(),
-              trend: _analytics!.applicationGrowth,
+              trend: _capGrowthRate(_analytics!.applicationGrowth),
             ),
           ],
         ),
@@ -765,16 +1100,12 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
             _MetricRow(
               label: 'Total Reports',
               value: _analytics!.totalReports.toString(),
-              trend: _analytics!.reportGrowth,
+              trend: _capGrowthRate(_analytics!.reportGrowth),
               subMetrics: {
                 'Pending': _analytics!.pendingReports.toString(),
                 'Resolved': _analytics!.resolvedReports.toString(),
+                'Dismissed': _analytics!.dismissedReports.toString(),
               },
-            ),
-            _MetricRow(
-              label: 'Reported Messages',
-              value: _analytics!.reportedMessages.toString(),
-              trend: _analytics!.reportedMessageGrowth,
             ),
             _MetricRow(
               label: 'Report Resolution Rate',
@@ -997,36 +1328,8 @@ class _TrendBadge extends StatelessWidget {
     const double newDataIndicator = -999.0;
     
     if (trend == newDataIndicator) {
-      // Show "New" badge for new data
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: Colors.blue[50],
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: Colors.blue[100]!,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.new_releases,
-              size: 12,
-              color: Colors.blue[700],
-            ),
-            const SizedBox(width: 2),
-            Text(
-              'New',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: Colors.blue[700],
-              ),
-            ),
-          ],
-        ),
-      );
+      // Don't show badge for new data
+      return const SizedBox.shrink();
     }
     
     // Regular growth/decline badge
@@ -1101,7 +1404,7 @@ class _MetricRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                if (trend != 0)
+                if (trend != 0 && value != '0' && !value.startsWith('0 '))
                   _TrendBadge(trend),
               ],
             ),

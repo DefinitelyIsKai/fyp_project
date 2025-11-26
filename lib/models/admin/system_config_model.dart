@@ -3,7 +3,7 @@ class SystemConfigModel {
   final String key;
   final dynamic value;
   final String? description;
-  final String? dataType; // 'string', 'number', 'boolean', 'json'
+  final String? dataType;
   final DateTime updatedAt;
   final String? updatedBy;
 

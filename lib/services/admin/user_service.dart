@@ -166,14 +166,41 @@ class UserService {
         currentBalance = 0.0;
       }
 
-      // Allow negative balances - just deduct the amount regardless of current balance
-      final newBalance = currentBalance - amount;
+      final amountInt = amount.toInt();
+      
+      final walletRef = _walletsRef.doc(userId);
+      final transactionsRef = walletRef.collection('transactions');
+      final txnRef = transactionsRef.doc();
+      
+      // Use Firestore transaction to atomically update balance and create transaction record
+      await FirebaseFirestore.instance.runTransaction((tx) async {
+        final snap = await tx.get(walletRef);
+        final data = snap.data() ?? <String, dynamic>{'balance': 0};
+        final int current = (data['balance'] as num?)?.toInt() ?? 0;
+        final int next = current - amountInt;
+        
+        // Update wallet balance
+        tx.update(walletRef, {
+          'balance': next,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        
+        // Create transaction record in subcollection
+        tx.set(txnRef, {
+          'id': txnRef.id,
+          'userId': userId,
+          'type': 'debit',
+          'amount': amountInt,
+          'description': reason,
+          'createdAt': FieldValue.serverTimestamp(),
+          'referenceId': null,
+        });
+      });
 
-      await _walletsRef.doc(userId).set({
-        'userId': userId,
-        'balance': newBalance,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      // Get final balance after transaction
+      final finalWalletDoc = await walletRef.get();
+      final finalData = finalWalletDoc.data();
+      final finalBalance = (finalData?['balance'] as num?)?.toDouble() ?? 0.0;
 
       // Create log entry
       try {
@@ -183,7 +210,7 @@ class UserService {
           'userName': userName,
           'amount': amount,
           'previousBalance': currentBalance,
-          'newBalance': newBalance,
+          'newBalance': finalBalance,
           'reason': reason,
           'createdAt': FieldValue.serverTimestamp(),
           'createdBy': currentAdminId,
@@ -197,7 +224,7 @@ class UserService {
         'success': true,
         'amountDeducted': amount,
         'previousBalance': currentBalance,
-        'newBalance': newBalance,
+        'newBalance': finalBalance,
       };
     } catch (e) {
       print('Error deducting marks: $e');
@@ -458,7 +485,7 @@ class UserService {
 
   Future<void> deleteUser(String userId, {String? deletionReason}) async {
     await _usersRef.doc(userId).update({
-      'status': 'Deleted',
+      'status': 'Inactive',
       'isActive': false,
       'deletedAt': FieldValue.serverTimestamp(),
       'deletionReason': deletionReason,

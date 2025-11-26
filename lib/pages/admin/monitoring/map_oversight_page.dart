@@ -516,6 +516,7 @@ class _MapOversightPageState extends State<MapOversightPage> {
           ),
         ),
         backgroundColor: Colors.orange[700],
+        foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           IconButton(

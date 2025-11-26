@@ -47,8 +47,8 @@ class MonitoringPage extends StatelessWidget {
           ),
         ),
         backgroundColor: AppColors.cardOrange,
+        foregroundColor: Colors.white,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

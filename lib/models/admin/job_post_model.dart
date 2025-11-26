@@ -13,12 +13,11 @@ class JobPostModel {
   final double? budgetMax;
   final DateTime createdAt;
   final String? submitterName;
-  final String? ownerId; // Store ownerId separately
+  final String? ownerId;
   final List<String> tags;
   final List<String> requiredSkills;
   final String? rejectionReason;
   
-  // New fields
   final int? applicantQuota;
   final int? applicants;
   final int? approvedApplicants;

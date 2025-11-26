@@ -144,12 +144,33 @@ class ReportService {
       reportType: _parseReportType(data['type'] ?? data['reportType']),
       reason: data['reason']?.toString() ?? '',
       description: data['description']?.toString(),
-      reportedAt: (data['createdAt'] as Timestamp?)?.toDate() ?? 
-                  (data['reportedAt'] as Timestamp?)?.toDate() ?? 
-                  DateTime.now(),
+      reportedAt: () {
+        final timestamp = (data['createdAt'] as Timestamp?) ?? (data['reportedAt'] as Timestamp?);
+        if (timestamp != null) {
+          // Firestore Timestamp stores time in UTC
+          // Convert to local time explicitly
+          // Use seconds since epoch to create UTC DateTime, then convert to local
+          return DateTime.fromMillisecondsSinceEpoch(
+            timestamp.millisecondsSinceEpoch,
+            isUtc: true,
+          ).toLocal();
+        }
+        return DateTime.now();
+      }(),
       status: _parseReportStatus(data['status']),
       reviewedBy: data['reviewedBy']?.toString(),
-      reviewedAt: (data['reviewedAt'] as Timestamp?)?.toDate(),
+      reviewedAt: () {
+        final timestamp = data['reviewedAt'] as Timestamp?;
+        if (timestamp != null) {
+          // Firestore Timestamp stores time in UTC
+          // Convert to local time explicitly
+          return DateTime.fromMillisecondsSinceEpoch(
+            timestamp.millisecondsSinceEpoch,
+            isUtc: true,
+          ).toLocal();
+        }
+        return null;
+      }(),
       reviewNotes: data['reviewNotes']?.toString(),
       actionTaken: data['actionTaken']?.toString(),
       reportedEmployeeId: data['reportedEmployeeId']?.toString(),

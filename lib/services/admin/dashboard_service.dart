@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 class DashboardService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -6,17 +7,53 @@ class DashboardService {
   Future<int> getPendingPostsCount() async {
     final snapshot = await _firestore
         .collection('posts')
-        .where('status', isEqualTo: 'Pending')
+        .where('status', isEqualTo: 'pending')
         .get();
     return snapshot.docs.length;
   }
 
   Future<int> getActiveUsersCount() async {
-    final snapshot = await _firestore
-        .collection('users')
-        .where('status', isEqualTo: 'Active')
-        .get();
-    return snapshot.docs.length;
+    try {
+      // Query for users with status 'Active'
+      final snapshot = await _firestore
+          .collection('users')
+          .where('status', isEqualTo: 'Active')
+          .get();
+      
+      // Filter to ensure isActive is also true (in case some have status Active but isActive false)
+      int count = 0;
+      for (final doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data == null) continue;
+        final isActive = data['isActive'] as bool?;
+        // Count only if status is Active AND isActive is true
+        if (isActive == true) {
+          count++;
+        }
+      }
+      return count;
+    } catch (e) {
+      // If query fails, try fallback: Get all users and filter in memory
+      try {
+        final allUsers = await _firestore.collection('users').get();
+        int count = 0;
+        for (final doc in allUsers.docs) {
+          final data = doc.data() as Map<String, dynamic>?;
+          if (data == null) continue;
+          final status = data['status'] as String?;
+          final isActive = data['isActive'] as bool?;
+          // Count users that are both Active status and isActive true
+          if (status == 'Active' && isActive == true) {
+            count++;
+          }
+        }
+        return count;
+      } catch (e2) {
+        // Handle permission errors gracefully
+        debugPrint('Error getting active users count: $e2');
+        return 0;
+      }
+    }
   }
 
   Future<int> getMessagesCount() async {
@@ -76,6 +113,10 @@ class DashboardService {
         }
       }
       return count;
+    }).handleError((error) {
+      // Handle permission errors gracefully
+      // Return 0 if permission is denied
+      return 0;
     });
   }
 }

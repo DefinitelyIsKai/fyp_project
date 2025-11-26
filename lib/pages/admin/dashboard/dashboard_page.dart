@@ -59,13 +59,27 @@ class _DashboardPageState extends State<DashboardPage> {
 
   void _setupRealtimeUpdates() {
     // Listen to real-time updates for unresolved reports
-    _reportsSubscription = _dashboardService.streamUnresolvedReportsCount().listen((count) {
-      if (mounted) {
-        setState(() {
-          _unresolvedReports = count;
-        });
-      }
-    });
+    _reportsSubscription = _dashboardService.streamUnresolvedReportsCount().listen(
+      (count) {
+        if (mounted) {
+          setState(() {
+            _unresolvedReports = count;
+          });
+        }
+      },
+      onError: (error) {
+        // Handle permission errors gracefully
+        debugPrint('Error listening to reports stream: $error');
+        if (mounted) {
+          setState(() {
+            _unresolvedReports = 0; // Set to 0 on error
+          });
+        }
+        // Cancel subscription to prevent repeated errors
+        _reportsSubscription?.cancel();
+        _reportsSubscription = null;
+      },
+    );
   }
 
   @override
@@ -138,10 +152,22 @@ class _DashboardPageState extends State<DashboardPage> {
             color: Colors.transparent,
             child: InkWell(
               onTap: () async {
-                await authService.logout();
+                // Cancel any active subscriptions first
+                await _reportsSubscription?.cancel();
+                _reportsSubscription = null;
+                
+                // Navigate immediately to prevent ANR
                 if (context.mounted) {
-                  Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    AppRoutes.login,
+                    (route) => false, // Remove all previous routes
+                  );
                 }
+                
+                // Perform logout in background (non-blocking)
+                authService.logout().catchError((e) {
+                  debugPrint('Logout error (non-critical): $e');
+                });
               },
               borderRadius: BorderRadius.circular(24),
               child: Container(
@@ -361,10 +387,23 @@ class _DashboardPageState extends State<DashboardPage> {
                     ElevatedButton(
                       onPressed: () async {
                         Navigator.of(context).pop();
-                        await authService.logout();
+                        
+                        // Cancel any active subscriptions first
+                        await _reportsSubscription?.cancel();
+                        _reportsSubscription = null;
+                        
+                        // Navigate immediately to prevent ANR
                         if (context.mounted) {
-                          Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+                          Navigator.of(context).pushNamedAndRemoveUntil(
+                            AppRoutes.login,
+                            (route) => false, // Remove all previous routes
+                          );
                         }
+                        
+                        // Perform logout in background (non-blocking)
+                        authService.logout().catchError((e) {
+                          debugPrint('Logout error (non-critical): $e');
+                        });
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF1E3A5F),

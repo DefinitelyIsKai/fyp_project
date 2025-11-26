@@ -15,6 +15,38 @@ enum MatchingStrategy {
   stableOptimal,      // Strategy B: Precise matching (one-to-one)
 }
 
+/// Matching weights configuration class
+class _MatchingWeights {
+  const _MatchingWeights({
+    required this.textSimilarity,
+    required this.tagMatching,
+    required this.requiredSkills,
+    required this.distance,
+    required this.jobTypePreference,
+    required this.maxDistanceKm,
+    required this.decayFactor,
+  });
+
+  final double textSimilarity;
+  final double tagMatching;
+  final double requiredSkills;
+  final double distance;
+  final double jobTypePreference;
+  final double maxDistanceKm;
+  final double decayFactor;
+}
+
+// Default weights (fallback if rules not found or disabled)
+const _defaultWeights = _MatchingWeights(
+  textSimilarity: 0.35,
+  tagMatching: 0.35,
+  requiredSkills: 0.15,
+  distance: 0.10,
+  jobTypePreference: 0.02,
+  maxDistanceKm: 50.0,
+  decayFactor: 3.0,
+);
+
 /// A hybrid matching engine that supports two strategies:
 /// - Embeddings + ANN: Quick recommendation for browsing
 /// - Gale-Shapley + Hungarian: Precise matching for optimal assignment
@@ -39,6 +71,11 @@ class HybridMatchingEngine {
   static const int _maxCandidatesPerRecruiter = 60;
   static const int _defaultJobseekerResults = 10;
 
+  // Cache for matching rule weights
+  _MatchingWeights? _cachedWeights;
+  DateTime? _weightsCacheTimestamp;
+  static const _weightsCacheExpiryDuration = Duration(minutes: 15);
+
   /// Fetch tag categories and tags from Firestore with caching
   Future<Map<TagCategory, List<Tag>>> _getTagData() async {
     final now = DateTime.now();
@@ -56,6 +93,83 @@ class HybridMatchingEngine {
     } catch (e) {
       // Return cached data if available, otherwise empty map
       return _cachedTagData ?? {};
+    }
+  }
+
+  /// Fetch matching rule weights from Firestore with caching
+  Future<_MatchingWeights> _getMatchingWeights() async {
+    final now = DateTime.now();
+    if (_cachedWeights != null &&
+        _weightsCacheTimestamp != null &&
+        now.difference(_weightsCacheTimestamp!) < _weightsCacheExpiryDuration) {
+      return _cachedWeights!;
+    }
+
+    try {
+      final snapshot = await _firestore
+          .collection('matching_rules')
+          .where('isEnabled', isEqualTo: true)
+          .get();
+
+      if (snapshot.docs.isEmpty) {
+        // No rules found, use defaults
+        _cachedWeights = _defaultWeights;
+        _weightsCacheTimestamp = now;
+        return _defaultWeights;
+      }
+
+      // Map rule IDs to weights
+      double textSimilarity = _defaultWeights.textSimilarity;
+      double tagMatching = _defaultWeights.tagMatching;
+      double requiredSkills = _defaultWeights.requiredSkills;
+      double distance = _defaultWeights.distance;
+      double jobTypePreference = _defaultWeights.jobTypePreference;
+      double maxDistanceKm = _defaultWeights.maxDistanceKm;
+      double decayFactor = _defaultWeights.decayFactor;
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final ruleId = doc.id;
+        final weight = (data['weight'] as num?)?.toDouble() ?? 0.0;
+        final parameters = Map<String, dynamic>.from(data['parameters'] ?? {});
+
+        switch (ruleId) {
+          case 'text_similarity':
+            textSimilarity = weight;
+            break;
+          case 'tag_matching':
+            tagMatching = weight;
+            break;
+          case 'required_skills':
+            requiredSkills = weight;
+            break;
+          case 'distance':
+            distance = weight;
+            maxDistanceKm = (parameters['maxDistanceKm'] as num?)?.toDouble() ?? maxDistanceKm;
+            decayFactor = (parameters['decayFactor'] as num?)?.toDouble() ?? decayFactor;
+            break;
+          case 'job_type_preference':
+            jobTypePreference = weight;
+            break;
+        }
+      }
+
+      final weights = _MatchingWeights(
+        textSimilarity: textSimilarity,
+        tagMatching: tagMatching,
+        requiredSkills: requiredSkills,
+        distance: distance,
+        jobTypePreference: jobTypePreference,
+        maxDistanceKm: maxDistanceKm,
+        decayFactor: decayFactor,
+      );
+
+      _cachedWeights = weights;
+      _weightsCacheTimestamp = now;
+      return weights;
+    } catch (e) {
+      // Return cached weights if available, otherwise defaults
+      return _cachedWeights ?? _defaultWeights;
     }
   }
 
@@ -112,6 +226,9 @@ class HybridMatchingEngine {
     String userId,
     Map<String, dynamic> data,
   ) async {
+    // Fetch matching weights from Firestore
+    final weights = await _getMatchingWeights();
+    
     // Fetch tag data for matching
     final tagData = await _getTagData();
     final skillCategoryIds = await _getSkillCategoryIds();
@@ -175,7 +292,7 @@ class HybridMatchingEngine {
     for (final neighbor in annNeighbors) {
       final similarity = neighbor.similarity;
       final jobVector = neighbor.payload;
-      final score = _scoreJobseekerMatch(candidate, jobVector, similarity);
+      final score = await _scoreJobseekerMatch(candidate, jobVector, similarity, weights);
       if (score <= 0.05) continue;
 
       final matchedSkills = _matchedSkills(
@@ -205,6 +322,9 @@ class HybridMatchingEngine {
     String userId,
     MatchingStrategy strategy,
   ) async {
+    // Fetch matching weights from Firestore
+    final weights = await _getMatchingWeights();
+    
     final jobs = await _loadRecruiterJobs(userId);
     if (jobs.isEmpty) return;
 
@@ -254,7 +374,7 @@ class HybridMatchingEngine {
       final scores = <String, double>{};
       for (final neighbor in annResults) {
         final candidate = neighbor.payload;
-        final score = _scoreRecruiterMatch(job, candidate, neighbor.similarity);
+        final score = await _scoreRecruiterMatch(job, candidate, neighbor.similarity, weights);
         if (score <= 0.05) continue;
         scores[candidate.id] = score;
       }
@@ -273,6 +393,7 @@ class HybridMatchingEngine {
         compatibility,
         jobVectors,
         candidateProfiles,
+        weights,
       ));
     } else {
       // Strategy A: Simple score-based selection (Quick recommendation)
@@ -325,6 +446,7 @@ class HybridMatchingEngine {
     Map<String, Map<String, double>> compatibility,
     List<_JobVector> jobVectors,
     List<_CandidateProfile> candidateProfiles,
+    _MatchingWeights weights,
   ) async {
     // Step 1: Calculate candidate preferences (candidate → job scores)
     final candidatePreferences = <String, Map<String, double>>{};
@@ -347,7 +469,7 @@ class HybridMatchingEngine {
         if (!_meetsAgeRequirement(candidate, job.post)) continue;
         
         // Calculate score from candidate's perspective
-        final score = _scoreJobseekerMatch(candidate, job, neighbor.similarity);
+        final score = await _scoreJobseekerMatch(candidate, job, neighbor.similarity, weights);
         if (score > 0.05) {
           jobScores[job.post.id] = score;
         }
@@ -871,24 +993,28 @@ double _calculateDistance(
 
 /// Calculate distance score (0-1, where 1 is closest and 0 is farthest)
 /// Uses exponential decay: closer = higher score
-double _calculateDistanceScore(double distanceKm, {double maxDistanceKm = 50.0}) {
+double _calculateDistanceScore(
+  double distanceKm, {
+  double maxDistanceKm = 50.0,
+  double decayFactor = 3.0,
+}) {
   if (distanceKm <= 0) return 1.0; // Same location
   if (distanceKm >= maxDistanceKm) return 0.0; // Beyond max distance
   
   // Exponential decay: score = e^(-distance/maxDistance * decayFactor)
   // Adjust decayFactor to control how quickly score decreases with distance
-  const decayFactor = 3.0; // Higher = faster decay
   final normalizedDistance = distanceKm / maxDistanceKm;
   return exp(-normalizedDistance * decayFactor);
 }
 
-double _scoreJobseekerMatch(
+Future<double> _scoreJobseekerMatch(
   _CandidateProfile candidate,
   _JobVector job,
   double similarity,
-) {
+  _MatchingWeights weights,
+) async {
   // Base score from embedding similarity (tags, skills, description similarity)
-  var score = similarity * 0.35; // 35% weight for text similarity (reduced from 40%)
+  var score = similarity * weights.textSimilarity;
 
   // Step 3: Direct tags matching (post.tags vs jobseeker.tags)
   // This is the core matching logic you requested
@@ -899,7 +1025,7 @@ double _scoreJobseekerMatch(
   if (postTags.isNotEmpty) {
     // Calculate tag overlap percentage
     final tagOverlap = matchedTags.length / postTags.length;
-    score += 0.35 * tagOverlap; // 35% weight for tag matching (reduced from 40%)
+    score += weights.tagMatching * tagOverlap;
   }
 
   // Step 4: Required skills matching (post.requiredSkills vs jobseeker skill tags)
@@ -908,7 +1034,7 @@ double _scoreJobseekerMatch(
     final skillOverlap =
         candidate.skillSet.intersection(requiredSkills).length /
         requiredSkills.length;
-    score += 0.15 * skillOverlap; // 15% weight for required skills
+    score += weights.requiredSkills * skillOverlap;
   }
 
   // Step 5: Distance factor (NEW)
@@ -925,33 +1051,38 @@ double _scoreJobseekerMatch(
     );
     
     // Distance score: closer = higher score (exponential decay)
-    final distanceScore = _calculateDistanceScore(distanceKm, maxDistanceKm: 50.0);
-    score += 0.10 * distanceScore; // 10% weight for distance (closer = better)
+    final distanceScore = _calculateDistanceScore(
+      distanceKm,
+      maxDistanceKm: weights.maxDistanceKm,
+      decayFactor: weights.decayFactor,
+    );
+    score += weights.distance * distanceScore;
   } else {
     // Fallback: location string matching (if coordinates not available)
     if (candidate.locationPreferences.contains(
       _normalizeToken(job.post.location),
     )) {
-      score += 0.03; // 3% bonus for location string match
+      score += weights.distance * 0.3; // 30% of distance weight for string match
     }
   }
 
   // Additional bonuses (smaller weights)
   final jobTypeToken = _normalizeToken(job.post.jobType.label);
   if (candidate.jobPreferences.contains(jobTypeToken)) {
-    score += 0.02; // 2% bonus for job type preference
+    score += weights.jobTypePreference;
   }
 
   return score.clamp(0, 1);
 }
 
-double _scoreRecruiterMatch(
+Future<double> _scoreRecruiterMatch(
   _JobVector job,
   _CandidateProfile candidate,
   double similarity,
-) {
+  _MatchingWeights weights,
+) async {
   // Base score from embedding similarity
-  var score = similarity * 0.35; // 35% weight for text similarity
+  var score = similarity * weights.textSimilarity;
 
   // Direct tags matching (post.tags vs jobseeker.tags)
   final postTags = job.post.tags.map(_normalizeToken).toSet();
@@ -960,7 +1091,7 @@ double _scoreRecruiterMatch(
   
   if (postTags.isNotEmpty) {
     final tagOverlap = matchedTags.length / postTags.length;
-    score += 0.35 * tagOverlap; // 35% weight for tag matching
+    score += weights.tagMatching * tagOverlap;
   }
 
   // Required skills matching
@@ -969,7 +1100,7 @@ double _scoreRecruiterMatch(
     final skillOverlap =
         candidate.skillSet.intersection(requiredSkills).length /
         requiredSkills.length;
-    score += 0.15 * skillOverlap; // 15% weight for required skills
+    score += weights.requiredSkills * skillOverlap;
   }
 
   // Distance factor (NEW)
@@ -984,21 +1115,25 @@ double _scoreRecruiterMatch(
       job.post.longitude!,
     );
     
-    final distanceScore = _calculateDistanceScore(distanceKm, maxDistanceKm: 50.0);
-    score += 0.10 * distanceScore; // 10% weight for distance
+    final distanceScore = _calculateDistanceScore(
+      distanceKm,
+      maxDistanceKm: weights.maxDistanceKm,
+      decayFactor: weights.decayFactor,
+    );
+    score += weights.distance * distanceScore;
   } else {
     // Fallback: location string matching
     if (candidate.locationPreferences.contains(
       _normalizeToken(job.post.location),
     )) {
-      score += 0.03; // 3% bonus for location string match
+      score += weights.distance * 0.3; // 30% of distance weight for string match
     }
   }
 
   // Additional bonuses
   final jobTypeToken = _normalizeToken(job.post.jobType.label);
   if (candidate.jobPreferences.contains(jobTypeToken)) {
-    score += 0.02; // 2% bonus for job type preference
+    score += weights.jobTypePreference;
   }
 
   return score.clamp(0, 1);

@@ -7,8 +7,8 @@ class RoleModel {
   final List<String> permissions;
   final DateTime createdAt;
   final DateTime? updatedAt;
-  final bool isSystemRole; // System roles (manager, HR, staff) cannot be deleted
-  final int userCount; // Number of users with this role
+  final bool isSystemRole;
+  final int userCount;
 
   RoleModel({
     required this.id,

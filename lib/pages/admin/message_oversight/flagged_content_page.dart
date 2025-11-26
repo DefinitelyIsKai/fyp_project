@@ -16,12 +16,19 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
   String _selectedStatus = 'all';
   String _selectedType = 'all';
   String _searchQuery = '';
+  bool _isFiltersExpanded = true;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Flagged Content & Reports'),
+        title: const Text(
+          'Flagged Content & Reports',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
         backgroundColor: AppColors.cardRed,
         foregroundColor: Colors.white,
         actions: [
@@ -36,7 +43,7 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
       ),
       body: Column(
         children: [
-          // Header Section
+          // Header Section with Description
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -50,15 +57,6 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Flagged Content',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 8),
                 Text(
                   'Monitor and review flagged content and user reports',
                   style: TextStyle(
@@ -109,61 +107,128 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
                 ),
                 const SizedBox(height: 12),
 
-                // Filter Row
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        value: _selectedStatus,
-                        decoration: InputDecoration(
-                          labelText: 'Status',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
+                // Filter Section (Expandable)
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _isFiltersExpanded = !_isFiltersExpanded;
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.filter_list,
+                          size: 20,
+                          color: Colors.blue[700],
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Filters',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[800],
                           ),
                         ),
-                        items: const [
-                          DropdownMenuItem(value: 'all', child: Text('All Status')),
-                          DropdownMenuItem(value: 'pending', child: Text('Pending')),
-                          DropdownMenuItem(value: 'underReview', child: Text('Under Review')),
-                          DropdownMenuItem(value: 'resolved', child: Text('Resolved')),
-                          DropdownMenuItem(value: 'dismissed', child: Text('Dismissed')),
-                        ],
-                        onChanged: (value) {
-                          setState(() => _selectedStatus = value ?? 'all');
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        value: _selectedType,
-                        decoration: InputDecoration(
-                          labelText: 'Type',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
+                        const Spacer(),
+                        // Show active filter count
+                        if (_hasActiveFilters())
+                          Container(
+                            margin: const EdgeInsets.only(right: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.blue[700],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '${_getActiveFilterCount()}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
+                        Icon(
+                          _isFiltersExpanded
+                              ? Icons.expand_less
+                              : Icons.expand_more,
+                          color: Colors.grey[600],
                         ),
-                        items: const [
-                          DropdownMenuItem(value: 'all', child: Text('All Types')),
-                          DropdownMenuItem(value: 'post', child: Text('Post Report')),
-                          DropdownMenuItem(value: 'employee', child: Text('Employee Report')),
-                          DropdownMenuItem(value: 'message', child: Text('Message')),
-                          DropdownMenuItem(value: 'other', child: Text('Other')),
-                        ],
-                        onChanged: (value) {
-                          setState(() => _selectedType = value ?? 'all');
-                        },
-                      ),
+                      ],
                     ),
-                  ],
+                  ),
+                ),
+                // Expandable Filters Content
+                ClipRect(
+                  child: AnimatedSize(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                    child: _isFiltersExpanded
+                        ? Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _FilterChip(
+                                        label: 'Status',
+                                        value: _selectedStatus == 'all' ? 'All' : _getStatusDisplayName(_selectedStatus),
+                                        onTap: () => _showStatusFilter(),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: _FilterChip(
+                                        label: 'Type',
+                                        value: _selectedType == 'all' ? 'All' : _getTypeDisplayName(_selectedType),
+                                        onTap: () => _showTypeFilter(),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                // Active Filters Indicator
+                                if (_hasActiveFilters()) ...[
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue[50],
+                                          borderRadius: BorderRadius.circular(20),
+                                        ),
+                                        child: Text(
+                                          '${_getActiveFilterCount()} filter${_getActiveFilterCount() > 1 ? 's' : ''} active',
+                                          style: TextStyle(
+                                            color: Colors.blue[700],
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      TextButton.icon(
+                                        onPressed: _clearFilters,
+                                        icon: const Icon(Icons.clear_all, size: 16),
+                                        label: const Text('Clear All'),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ],
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
                 ),
               ],
             ),
@@ -264,6 +329,117 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  bool _hasActiveFilters() {
+    return _selectedStatus != 'all' || _selectedType != 'all';
+  }
+
+  int _getActiveFilterCount() {
+    int count = 0;
+    if (_selectedStatus != 'all') count++;
+    if (_selectedType != 'all') count++;
+    return count;
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _selectedStatus = 'all';
+      _selectedType = 'all';
+      _searchQuery = '';
+    });
+  }
+
+  String _getStatusDisplayName(String status) {
+    switch (status) {
+      case 'pending':
+        return 'Pending';
+      case 'underReview':
+        return 'Under Review';
+      case 'resolved':
+        return 'Resolved';
+      case 'dismissed':
+        return 'Dismissed';
+      default:
+        return 'All';
+    }
+  }
+
+  String _getTypeDisplayName(String type) {
+    switch (type) {
+      case 'post':
+        return 'Post Report';
+      case 'employee':
+        return 'Employee Report';
+      case 'message':
+        return 'Message';
+      case 'other':
+        return 'Other';
+      default:
+        return 'All';
+    }
+  }
+
+  void _showStatusFilter() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Select Status',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            ...['all', 'pending', 'underReview', 'resolved', 'dismissed'].map((status) {
+              return ListTile(
+                title: Text(status == 'all' ? 'All Status' : _getStatusDisplayName(status)),
+                trailing: _selectedStatus == status
+                    ? const Icon(Icons.check, color: Colors.blue)
+                    : null,
+                onTap: () {
+                  setState(() => _selectedStatus = status);
+                  Navigator.pop(context);
+                },
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showTypeFilter() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Select Type',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            ...['all', 'post', 'employee', 'message', 'other'].map((type) {
+              return ListTile(
+                title: Text(type == 'all' ? 'All Types' : _getTypeDisplayName(type)),
+                trailing: _selectedType == type
+                    ? const Icon(Icons.check, color: Colors.blue)
+                    : null,
+                onTap: () {
+                  setState(() => _selectedType = type);
+                  Navigator.pop(context);
+                },
+              );
+            }),
+          ],
+        ),
       ),
     );
   }
@@ -509,6 +685,78 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
     } else {
       return 'Just now';
     }
+  }
+}
+
+// Filter Chip Widget (Similar to map_oversight_page)
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  const _FilterChip({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = value != 'All';
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.blue[50] : Colors.grey[100],
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isActive ? Colors.blue[300]! : Colors.grey[300]!,
+            width: isActive ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: isActive ? Colors.blue[700] : Colors.grey[800],
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 18,
+              color: isActive ? Colors.blue[700] : Colors.grey[600],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

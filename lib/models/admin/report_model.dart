@@ -25,10 +25,9 @@ class ReportModel {
   final DateTime? reviewedAt;
   final String? reviewNotes;
   final String? actionTaken;
-  // Additional IDs for different report types
-  final String? reportedEmployeeId; // For employee reports
-  final String? reportedEmployerId; // For post reports (post owner)
-  final String? reportedPostId; // For post reports
+  final String? reportedEmployeeId;
+  final String? reportedEmployerId;
+  final String? reportedPostId;
 
   ReportModel({
     required this.id,

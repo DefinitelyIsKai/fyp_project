@@ -1829,6 +1829,8 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
   }
 
   String _formatDateTime(DateTime date) {
+    // The date should already be in local time from report_service
+    // Just format it directly without any conversion
     final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     final day = date.day;
     final month = months[date.month - 1];

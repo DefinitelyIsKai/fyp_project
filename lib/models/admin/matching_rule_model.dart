@@ -3,7 +3,7 @@ class MatchingRuleModel {
   final String name;
   final String description;
   final bool isEnabled;
-  final double weight; // 0.0 to 1.0 for algorithm weighting
+  final double weight; 
   final Map<String, dynamic> parameters;
   final DateTime updatedAt;
   final String? updatedBy;

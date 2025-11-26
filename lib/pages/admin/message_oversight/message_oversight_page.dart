@@ -61,6 +61,7 @@ class _MessageOversightPageState extends State<MessageOversightPage> {
           ),
         ),
         backgroundColor: AppColors.primaryDark,
+        foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           IconButton(

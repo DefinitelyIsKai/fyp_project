@@ -226,6 +226,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
       appBar: AppBar(
         title: const Text('Post Details'),
         backgroundColor: AppColors.primaryDark,
+        foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: SingleChildScrollView(

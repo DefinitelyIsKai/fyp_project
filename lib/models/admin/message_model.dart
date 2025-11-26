@@ -17,7 +17,7 @@ class MessageModel {
   final String? reportReason;
   final String? reviewedBy;
   final DateTime? reviewedAt;
-  final String? reviewAction; // 'approved', 'removed', 'warning'
+  final String? reviewAction;
 
   MessageModel({
     required this.id,
@@ -33,12 +33,10 @@ class MessageModel {
   });
 
   factory MessageModel.fromJson(Map<String, dynamic> json) {
-    // Handle sentAt - can be Timestamp, DateTime, or String
     DateTime parseSentAt(dynamic value) {
       if (value == null) return DateTime.now();
       if (value is DateTime) return value;
       if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
-      // Assume it's a Timestamp
       try {
         return (value as Timestamp).toDate();
       } catch (e) {
@@ -46,12 +44,10 @@ class MessageModel {
       }
     }
 
-    // Handle reviewedAt - can be Timestamp, DateTime, or String
     DateTime? parseReviewedAt(dynamic value) {
       if (value == null) return null;
       if (value is DateTime) return value;
       if (value is String) return DateTime.tryParse(value);
-      // Assume it's a Timestamp
       try {
         return (value as Timestamp).toDate();
       } catch (e) {

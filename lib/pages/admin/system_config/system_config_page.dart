@@ -12,159 +12,271 @@ class SystemConfigPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('System Configuration'),
+        title: const Text(
+          'System Configuration',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
         backgroundColor: AppColors.cardPurple,
         foregroundColor: Colors.white,
+        elevation: 0,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header Section
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [AppColors.cardPurple, Color(0xFF9C27B0)],
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Manage matching rules, booking rules, and platform settings',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.white70,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            
-            // Matching Rules Section
-            _buildSectionHeader('Matching & Algorithm Rules', Icons.tune, Colors.blue),
-            const SizedBox(height: 12),
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.rule, color: Colors.blue, size: 28),
-                ),
-                title: const Text('Matching Rules', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('Configure job matching algorithms, weights, and criteria'),
-                trailing: const Icon(Icons.arrow_forward_ios),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const MatchingRulesPage()),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.orange[50],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.settings_applications, color: Colors.orange, size: 28),
-                ),
-                title: const Text('General Rules & Settings', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('Set parameters such as matching logic, credit allocation, and abuse thresholds'),
-                trailing: const Icon(Icons.arrow_forward_ios),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const RulesSettingsPage()),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            
-            // Booking Rules Section
-            _buildSectionHeader('Booking & Appointment Rules', Icons.event, Colors.green),
-            const SizedBox(height: 12),
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.green[50],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.event_busy, color: Colors.green, size: 28),
-                ),
-                title: const Text('Booking Rules', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('Configure booking windows, cancellation policies, and limits'),
-                trailing: const Icon(Icons.arrow_forward_ios),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const BookingRulesPage()),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            
-            // Platform Settings Section
-            _buildSectionHeader('Platform Settings', Icons.settings, Colors.purple),
-            const SizedBox(height: 12),
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.purple[50],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.business, color: Colors.purple, size: 28),
-                ),
-                title: const Text('Platform Settings', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('Update platform settings and policy terms'),
-                trailing: const Icon(Icons.arrow_forward_ios),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const PlatformSettingsPage()),
-                ),
-              ),
-            ),
-          ],
-        ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildHeaderSection(),
+          Expanded(child: _buildOptionsGrid(context)),
+        ],
       ),
     );
   }
 
-  Widget _buildSectionHeader(String title, IconData icon, Color color) {
-    return Row(
-      children: [
-        Icon(icon, color: color, size: 24),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.blue[700],
+  // -------------------------------------------------------
+  // Header
+  // -------------------------------------------------------
+  Widget _buildHeaderSection() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.cardPurple, Color(0xFF9C27B0)],
+        ),
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(20),
+          bottomRight: Radius.circular(20),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Manage matching rules, booking rules, and platform settings',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.white.withOpacity(0.9),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // -------------------------------------------------------
+  // Grid options
+  // -------------------------------------------------------
+  Widget _buildOptionsGrid(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: GridView(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 16,
+          crossAxisSpacing: 16,
+          childAspectRatio: 0.9,
+        ),
+        children: [
+          _ManagementCard(
+            title: 'Matching Rules',
+            description: 'Configure job matching algorithms, weights, and criteria',
+            icon: Icons.rule,
+            iconColor: Colors.blue[700]!,
+            backgroundColor: Colors.blue[50]!,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const MatchingRulesPage()),
+              );
+            },
+            stats: 'Algorithm config',
+            badgeCount: 0,
+          ),
+          _ManagementCard(
+            title: 'General Rules',
+            description: 'Set parameters such as matching logic, credit allocation, and abuse thresholds',
+            icon: Icons.settings_applications,
+            iconColor: Colors.orange[700]!,
+            backgroundColor: Colors.orange[50]!,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const RulesSettingsPage()),
+              );
+            },
+            stats: 'System rules',
+            badgeCount: 0,
+          ),
+          _ManagementCard(
+            title: 'Booking Rules',
+            description: 'Configure booking windows, cancellation policies, and limits',
+            icon: Icons.event_busy,
+            iconColor: Colors.green[700]!,
+            backgroundColor: Colors.green[50]!,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const BookingRulesPage()),
+              );
+            },
+            stats: 'Booking config',
+            badgeCount: 0,
+          ),
+          _ManagementCard(
+            title: 'Platform Settings',
+            description: 'Update platform settings and policy terms',
+            icon: Icons.business,
+            iconColor: Colors.purple[700]!,
+            backgroundColor: Colors.purple[50]!,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PlatformSettingsPage()),
+              );
+            },
+            stats: 'Platform config',
+            badgeCount: 0,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// -------------------------------------------------------
+// Reusable Management Card (Same as Post Moderation)
+// -------------------------------------------------------
+class _ManagementCard extends StatelessWidget {
+  final String title;
+  final String description;
+  final String stats;
+  final IconData icon;
+  final Color iconColor;
+  final Color backgroundColor;
+  final VoidCallback onTap;
+  final int badgeCount;
+
+  const _ManagementCard({
+    required this.title,
+    required this.description,
+    required this.stats,
+    required this.icon,
+    required this.iconColor,
+    required this.backgroundColor,
+    required this.onTap,
+    required this.badgeCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          child: Stack(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Icon with badge
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: backgroundColor,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(icon, size: 28, color: iconColor),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Title
+                  SizedBox(
+                    height: 40,
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        height: 1.2,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+
+                  const SizedBox(height: 6),
+
+                  // Description
+                  Expanded(
+                    child: Text(
+                      description,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey[600],
+                        height: 1.3,
+                      ),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  // Footer
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        stats,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Icon(
+                        Icons.arrow_forward_ios,
+                        size: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
+              // Badge in top-right corner
+              if (badgeCount > 0)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      badgeCount > 99 ? '99+' : badgeCount.toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }

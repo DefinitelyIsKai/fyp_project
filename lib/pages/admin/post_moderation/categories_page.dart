@@ -494,6 +494,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
           ),
         ),
         backgroundColor: AppColors.primaryDark,
+        foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: Column(
