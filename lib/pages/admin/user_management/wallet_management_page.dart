@@ -436,7 +436,7 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
           }
         }
       } catch (e) {
-        debugPrint('Error checking user role for wallet $userId: $e');
+        // Error checking user role - continue with next wallet
       }
     }
     
@@ -466,7 +466,7 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
           }
         }
       } catch (e) {
-        debugPrint('Error checking user role for wallet $userId: $e');
+        // Error checking user role - continue with next wallet
       }
     }
     
@@ -1578,7 +1578,7 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
           'createdBy': currentAdminId,
         });
       } catch (logError) {
-        debugPrint('Error creating log entry: $logError');
+        // Error creating log entry - continue
       }
 
       // Send notification to user
@@ -1589,7 +1589,6 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
           reason: reason.isEmpty ? 'Credit added by admin' : reason,
         );
       } catch (notifError) {
-        debugPrint('Error sending notification: $notifError');
         // Don't fail the operation if notification fails
       }
 
@@ -1692,7 +1691,6 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
             reason: reason,
           );
         } catch (notifError) {
-          debugPrint('Error sending notification: $notifError');
           // Don't fail the operation if notification fails
         }
 
@@ -2184,7 +2182,7 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
 
   Widget _buildHistoryTab() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: widget.rewardService.streamRewardHistory(limit: 20),
+      stream: widget.rewardService.streamRewardHistory(limit: 50),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -2222,23 +2220,30 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
         }
 
         return ListView.builder(
+          padding: const EdgeInsets.all(8),
           itemCount: rewards.length,
           itemBuilder: (context, index) {
-            final reward = rewards[index];
-            final month = reward['month'] as String? ?? 'Unknown';
-            final eligibleUsers = reward['eligibleUsers'] as int? ?? 0;
-            final successCount = reward['successCount'] as int? ?? 0;
-            final failCount = reward['failCount'] as int? ?? 0;
-            final calculatedAt = reward['calculatedAt'] as DateTime?;
-            final rewardAmount = reward['rewardAmount'] as int? ?? 0;
+            final distribution = rewards[index];
+            final distributionDate = distribution['distributionDate'] as DateTime?;
+            final month = distribution['month'] as String? ?? 'Unknown';
+            final successCount = distribution['successCount'] as int? ?? 0;
+            final totalAmount = distribution['totalAmount'] as int? ?? 0;
+            final rewardAmount = distribution['rewardAmount'] as int? ?? 0;
 
             return Container(
-              margin: const EdgeInsets.only(bottom: 12),
+              margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.grey[50],
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: Colors.grey[200]!),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2251,7 +2256,7 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
                           color: Colors.orange[100],
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Icon(Icons.calendar_month, color: Colors.orange[700], size: 20),
+                        child: Icon(Icons.card_giftcard, color: Colors.orange[700], size: 20),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -2261,19 +2266,62 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
                             Text(
                               'Month: $month',
                               style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
                                 color: Colors.black87,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            if (calculatedAt != null)
-                              Text(
-                                'Calculated: ${DateFormat('dd MMM yyyy, hh:mm a').format(calculatedAt)}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
-                                ),
+                            if (distributionDate != null) ...[
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(Icons.access_time, size: 12, color: Colors.grey[600]),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      DateFormat('dd MMM yyyy').format(distributionDate),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
                               ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.orange[50],
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange[200]!),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '$totalAmount',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange[700],
+                              ),
+                            ),
+                            Text(
+                              'total',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.orange[600],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -2283,33 +2331,17 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
                   Row(
                     children: [
                       Expanded(
-                        child: _buildStatItem(
+                        child: _buildDistributionStat(
                           icon: Icons.people,
-                          label: 'Eligible',
-                          value: eligibleUsers.toString(),
+                          label: 'Users',
+                          value: successCount.toString(),
                           color: Colors.blue,
                         ),
                       ),
                       Expanded(
-                        child: _buildStatItem(
-                          icon: Icons.check_circle,
-                          label: 'Success',
-                          value: successCount.toString(),
-                          color: Colors.green,
-                        ),
-                      ),
-                      Expanded(
-                        child: _buildStatItem(
-                          icon: Icons.error,
-                          label: 'Failed',
-                          value: failCount.toString(),
-                          color: Colors.red,
-                        ),
-                      ),
-                      Expanded(
-                        child: _buildStatItem(
+                        child: _buildDistributionStat(
                           icon: Icons.account_balance_wallet,
-                          label: 'Amount',
+                          label: 'Per User',
                           value: '$rewardAmount',
                           color: Colors.purple,
                         ),
@@ -2325,78 +2357,18 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
     );
   }
 
-  Widget _buildStatItem({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 20),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: Colors.grey[600],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<Map<String, dynamic>> _runCalculationInChunks(
-    double minRating,
-    int minTasks,
-    int rewardAmount,
-  ) async {
-    debugPrint('🔵 [CHUNKS] _runCalculationInChunks: START');
-    debugPrint('🔵 [CHUNKS] Parameters: rating=$minRating, tasks=$minTasks, amount=$rewardAmount');
-    
-    // Ensure UI has fully rendered the loading dialog before starting
-    debugPrint('🔵 [CHUNKS] Waiting 100ms for UI');
-    await Future.delayed(const Duration(milliseconds: 100));
-    debugPrint('🔵 [CHUNKS] Waiting for endOfFrame');
-    await WidgetsBinding.instance.endOfFrame;
-    debugPrint('🔵 [CHUNKS] Waiting 50ms more');
-    await Future.delayed(const Duration(milliseconds: 50));
-    debugPrint('🔵 [CHUNKS] UI should be ready, calling previewEligibleUsers');
-    
-    // Start the calculation
-    final result = await widget.rewardService.previewEligibleUsers(
-      minRating: minRating,
-      minCompletedTasks: minTasks,
-      rewardAmount: rewardAmount,
-    );
-    debugPrint('✅ [CHUNKS] previewEligibleUsers completed');
-    debugPrint('🔵 [CHUNKS] _runCalculationInChunks: END');
-    return result;
-  }
 
   Future<void> _calculateRewards() async {
-    debugPrint('🔵 [REWARD] _calculateRewards: START');
-    
     // Reset errors
     setState(() {
       _ratingError = null;
       _tasksError = null;
       _amountError = null;
     });
-    debugPrint('🔵 [REWARD] Errors reset');
 
     final minRating = double.tryParse(_minRatingController.text);
     final minTasks = int.tryParse(_minTasksController.text);
     final rewardAmount = int.tryParse(_rewardAmountController.text);
-    debugPrint('🔵 [REWARD] Parsed values: rating=$minRating, tasks=$minTasks, amount=$rewardAmount');
 
     bool hasError = false;
 
@@ -2405,7 +2377,6 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
         _ratingError = 'Please enter a valid rating';
       });
       hasError = true;
-      debugPrint('🔴 [REWARD] Rating validation failed');
     }
 
     if (minTasks == null || minTasks <= 0) {
@@ -2413,7 +2384,6 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
         _tasksError = 'Please enter a valid number of posts';
       });
       hasError = true;
-      debugPrint('🔴 [REWARD] Tasks validation failed');
     }
 
     if (rewardAmount == null || rewardAmount <= 0) {
@@ -2421,11 +2391,9 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
         _amountError = 'Please enter a valid reward amount';
       });
       hasError = true;
-      debugPrint('🔴 [REWARD] Amount validation failed');
     }
 
     if (hasError) {
-      debugPrint('🔴 [REWARD] Validation errors found, returning');
       return;
     }
 
@@ -2433,19 +2401,14 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
     final validMinRating = minRating!;
     final validMinTasks = minTasks!;
     final validRewardAmount = rewardAmount!;
-    debugPrint('✅ [REWARD] Validation passed: rating=$validMinRating, tasks=$validMinTasks, amount=$validRewardAmount');
 
     // Show loading while calculating preview
-    debugPrint('🔵 [REWARD] Setting _isCalculating = true');
     setState(() => _isCalculating = true);
     
     // Show a non-dismissible loading dialog to prevent user interaction
     if (!mounted) {
-      debugPrint('🔴 [REWARD] Widget not mounted, returning');
       return;
     }
-    
-    debugPrint('🔵 [REWARD] Showing loading dialog');
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -2479,63 +2442,48 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
         ),
       ),
     );
-    debugPrint('🔵 [REWARD] Loading dialog shown');
     
     // Force UI to update
-    debugPrint('🔵 [REWARD] Yielding to UI thread');
     await Future.microtask(() {});
     await Future.delayed(Duration.zero);
     await Future.microtask(() {});
-    debugPrint('🔵 [REWARD] After microtasks');
     
     if (!mounted) {
-      debugPrint('🔴 [REWARD] Widget not mounted after microtasks, closing dialog');
       Navigator.of(context).pop(); // Close loading dialog
       return;
     }
     
     // Wait for next frame
-    debugPrint('🔵 [REWARD] Waiting 200ms for UI to update');
     await Future.delayed(const Duration(milliseconds: 200));
-    debugPrint('🔵 [REWARD] After 200ms delay');
     
     if (!mounted) {
-      debugPrint('🔴 [REWARD] Widget not mounted after delay, closing dialog');
       Navigator.of(context).pop(); // Close loading dialog
       return;
     }
 
     try {
-      debugPrint('🔵 [REWARD] Starting _runCalculationInChunks');
-      // Run calculation in chunks with explicit yields
-      final previewResult = await _runCalculationInChunks(
-        validMinRating,
-        validMinTasks,
-        validRewardAmount,
+      // Call service directly - it already has UI yielding built in
+      final previewResult = await widget.rewardService.previewEligibleUsers(
+        minRating: validMinRating,
+        minCompletedTasks: validMinTasks,
+        rewardAmount: validRewardAmount,
       );
-      debugPrint('✅ [REWARD] _runCalculationInChunks completed');
-      debugPrint('🔵 [REWARD] Preview result: success=${previewResult['success']}, totalEligible=${previewResult['totalEligible']}');
       
       // Close loading dialog
       if (mounted) {
-        debugPrint('🔵 [REWARD] Closing loading dialog');
         Navigator.of(context).pop();
       }
 
       if (!mounted) {
-        debugPrint('🔴 [REWARD] Widget not mounted after preview, closing dialog');
         Navigator.of(context).pop(); // Close loading dialog if still open
         return;
       }
 
       // Wait for loading dialog to fully close before proceeding
-      debugPrint('🔵 [REWARD] Waiting for loading dialog to close');
       await Future.delayed(const Duration(milliseconds: 100));
       await SchedulerBinding.instance.endOfFrame;
       await Future.delayed(const Duration(milliseconds: 50));
-      debugPrint('🔵 [REWARD] Loading dialog should be closed now');
 
-      debugPrint('🔵 [REWARD] Setting _isCalculating = false');
       setState(() => _isCalculating = false);
       
       // Wait for setState to complete
@@ -2543,7 +2491,6 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
       await Future.microtask(() {});
 
       if (previewResult['success'] != true) {
-        debugPrint('🔴 [REWARD] Preview failed: ${previewResult['error']}');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: ${previewResult['error'] ?? 'Failed to calculate preview'}'),
@@ -2557,28 +2504,22 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
       final totalEligible = previewResult['totalEligible'] as int? ?? 0;
       final month = previewResult['month'] as String? ?? 'Unknown';
       final completedPostsCount = previewResult['completedPostsCount'] as int? ?? 0;
-      debugPrint('🔵 [REWARD] Preview data: eligibleUsers=${eligibleUsers.length}, totalEligible=$totalEligible, month=$month, completedPosts=$completedPostsCount');
 
       // Show preview dialog with eligible users count
-      debugPrint('🔵 [REWARD] Showing preview dialog');
-      debugPrint('🔵 [REWARD] About to call showDialog');
-      
       // Yield before showing dialog to ensure UI is ready
       await Future.delayed(Duration.zero);
       await Future.microtask(() {});
       await SchedulerBinding.instance.endOfFrame;
       await Future.delayed(const Duration(milliseconds: 100));
-      debugPrint('🔵 [REWARD] UI should be ready, calling showDialog');
+      
+      // Use a simpler approach - show dialog with Future.microtask to defer building
+      await Future.microtask(() {});
+      await Future.delayed(const Duration(milliseconds: 50));
       
       final confirmed = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
         builder: (context) {
-          debugPrint('🔵 [DIALOG] Dialog builder called');
-          // Yield in builder to prevent blocking
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            debugPrint('🔵 [DIALOG] Dialog frame rendered');
-          });
           return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
@@ -2600,109 +2541,111 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
               ),
             ],
           ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Summary Card
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blue[200]!),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+          content: StatefulBuilder(
+            builder: (context, setDialogState) {
+              // Build content after dialog is shown to prevent blocking
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                // Dialog should be visible now
+              });
+              
+              return SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Summary Card
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.blue[200]!),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Month: $month',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blue[900],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildPreviewStat(
+                                  icon: Icons.work,
+                                  label: 'Completed Posts',
+                                  value: completedPostsCount.toString(),
+                                  color: Colors.blue,
+                                ),
+                              ),
+                              Expanded(
+                                child: _buildPreviewStat(
+                                  icon: Icons.people,
+                                  label: 'Eligible Users',
+                                  value: totalEligible.toString(),
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildPreviewStat(
+                                  icon: Icons.account_balance_wallet,
+                                  label: 'Total Credits',
+                                  value: '${totalEligible * validRewardAmount}',
+                                  color: Colors.purple,
+                                ),
+                              ),
+                              Expanded(
+                                child: _buildPreviewStat(
+                                  icon: Icons.star,
+                                  label: 'Per User',
+                                  value: '$validRewardAmount',
+                                  color: Colors.orange,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Criteria
+                    Text(
+                      'Criteria:',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildCriteriaRow('Minimum Rating', validMinRating.toStringAsFixed(1)),
+                    _buildCriteriaRow('Minimum Posts', validMinTasks.toString()),
+                    _buildCriteriaRow('Reward Amount', '$validRewardAmount credits'),
+                    
+                    if (totalEligible > 0) ...[
+                      const SizedBox(height: 16),
                       Text(
-                        'Month: $month',
+                        'Eligible Users:',
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: Colors.blue[900],
+                          color: Colors.grey[800],
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildPreviewStat(
-                              icon: Icons.work,
-                              label: 'Completed Posts',
-                              value: completedPostsCount.toString(),
-                              color: Colors.blue,
-                            ),
-                          ),
-                          Expanded(
-                            child: _buildPreviewStat(
-                              icon: Icons.people,
-                              label: 'Eligible Users',
-                              value: totalEligible.toString(),
-                              color: Colors.green,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildPreviewStat(
-                              icon: Icons.account_balance_wallet,
-                              label: 'Total Credits',
-                              value: '${totalEligible * validRewardAmount}',
-                              color: Colors.purple,
-                            ),
-                          ),
-                          Expanded(
-                            child: _buildPreviewStat(
-                              icon: Icons.star,
-                              label: 'Per User',
-                              value: '$validRewardAmount',
-                              color: Colors.orange,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                
-                // Criteria
-                Text(
-                  'Criteria:',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey[800],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _buildCriteriaRow('Minimum Rating', validMinRating.toStringAsFixed(1)),
-                _buildCriteriaRow('Minimum Posts', validMinTasks.toString()),
-                _buildCriteriaRow('Reward Amount', '$validRewardAmount credits'),
-                
-                if (totalEligible > 0) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    'Eligible Users:',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    constraints: const BoxConstraints(maxHeight: 200),
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: eligibleUsers.length > 10 ? 10 : eligibleUsers.length,
-                      itemBuilder: (context, index) {
-                        final user = eligibleUsers[index];
+                      // Simplify list - build directly without ListView.builder to prevent blocking
+                      ...eligibleUsers.take(10).map((user) {
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 4),
                           child: Row(
@@ -2711,7 +2654,9 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
                                 radius: 16,
                                 backgroundColor: Colors.green[100],
                                 child: Text(
-                                  (user['userName'] as String? ?? '?')[0].toUpperCase(),
+                                  ((user['userName'] as String? ?? '?').isNotEmpty 
+                                      ? (user['userName'] as String)[0].toUpperCase() 
+                                      : '?'),
                                   style: TextStyle(
                                     color: Colors.green[700],
                                     fontWeight: FontWeight.bold,
@@ -2744,22 +2689,20 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
                             ],
                           ),
                         );
-                      },
-                    ),
-                  ),
-                  if (eligibleUsers.length > 10)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        '... and ${eligibleUsers.length - 10} more users',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontStyle: FontStyle.italic,
-                          color: Colors.grey[600],
+                      }).toList(),
+                      if (eligibleUsers.length > 10)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            '... and ${eligibleUsers.length - 10} more users',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontStyle: FontStyle.italic,
+                              color: Colors.grey[600],
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                ] else ...[
+                    ] else ...[
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(16),
@@ -2801,14 +2744,15 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
                       ],
                     ),
                   ),
-                ],
-              ],
-            ),
+                    ],
+                  ],
+                ),
+              );
+            },
           ),
           actions: [
             TextButton(
               onPressed: () {
-                debugPrint('🔵 [DIALOG] Cancel button pressed');
                 Navigator.pop(context, false);
               },
               child: const Text('Cancel'),
@@ -2816,7 +2760,6 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
             ElevatedButton(
               onPressed: totalEligible > 0
                   ? () {
-                      debugPrint('🔵 [DIALOG] Distribute button pressed');
                       Navigator.pop(context, true);
                     }
                   : null,
@@ -2831,49 +2774,103 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
         },
       );
       
-      debugPrint('🔵 [REWARD] showDialog returned, confirmed=$confirmed');
-      debugPrint('🔵 [REWARD] Preview dialog closed, confirmed=$confirmed');
       if (confirmed != true) {
-        debugPrint('🔴 [REWARD] User cancelled, returning');
         return;
       }
 
       // Proceed with distribution
-      debugPrint('🔵 [REWARD] User confirmed, starting distribution');
-      debugPrint('🔵 [REWARD] Setting _isCalculating = true for distribution');
       setState(() => _isCalculating = true);
 
-      debugPrint('🔵 [REWARD] Calling calculateMonthlyRewards service');
+      // Show loading dialog immediately to prevent navigation
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => WillPopScope(
+          onWillPop: () async => false,
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Distributing rewards...',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Please wait, this may take a moment',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Wait a moment for loading dialog to show
+      await Future.delayed(const Duration(milliseconds: 100));
+      await Future.microtask(() {});
+      await SchedulerBinding.instance.endOfFrame;
+
       final result = await widget.rewardService.calculateMonthlyRewards(
         minRating: validMinRating,
         minCompletedTasks: validMinTasks,
         rewardAmount: validRewardAmount,
       );
-      debugPrint('✅ [REWARD] calculateMonthlyRewards completed');
-      debugPrint('🔵 [REWARD] Distribution result: success=${result['success']}, successCount=${result['successCount']}, failCount=${result['failCount']}');
 
-      if (mounted) {
-        debugPrint('🔵 [REWARD] Closing main dialog and showing snackbar');
-        Navigator.pop(context); // Close main dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              result['success'] == true
-                  ? 'Successfully distributed rewards to ${result['successCount']} users!'
-                  : 'Error: ${result['error']}',
-            ),
-            backgroundColor: result['success'] == true ? Colors.green : Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-        debugPrint('✅ [REWARD] _calculateRewards: COMPLETED SUCCESSFULLY');
-      }
-    } catch (e, stackTrace) {
-      debugPrint('🔴 [REWARD] ERROR in _calculateRewards: $e');
-      debugPrint('🔴 [REWARD] Stack trace: $stackTrace');
-      // Close loading dialog if still open
+      // Close loading dialog first
       if (mounted) {
         Navigator.of(context).pop();
+      }
+
+      // Wait a moment for loading dialog to fully close
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      if (mounted) {
+        // Close the main reward system dialog - this will return us to wallet_management_page
+        Navigator.of(context).pop();
+        
+        // Wait a frame to ensure dialog is fully closed
+        await Future.delayed(const Duration(milliseconds: 100));
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                result['success'] == true
+                    ? 'Successfully distributed rewards to ${result['successCount']} users!'
+                    : 'Error: ${result['error']}',
+              ),
+              backgroundColor: result['success'] == true ? Colors.green : Colors.red,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      // Close loading dialog if still open
+      if (mounted) {
+        try {
+          Navigator.of(context).pop(); // Close loading dialog
+        } catch (_) {
+          // Loading dialog might already be closed
+        }
         setState(() => _isCalculating = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2884,17 +2881,15 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
         );
       }
     } finally {
-      debugPrint('🔵 [REWARD] Finally block: cleaning up');
       // Ensure loading dialog is closed
       if (mounted) {
         try {
-          Navigator.of(context).pop();
+          Navigator.of(context).pop(); // Try to close loading dialog
         } catch (_) {
           // Dialog might already be closed
         }
         setState(() => _isCalculating = false);
       }
-      debugPrint('🔵 [REWARD] _calculateRewards: END');
     }
   }
 
@@ -2951,6 +2946,35 @@ class _RewardSystemDialogState extends State<_RewardSystemDialog> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDistributionStat({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.grey[600],
+          ),
+        ),
+      ],
     );
   }
 }
