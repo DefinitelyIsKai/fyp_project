@@ -508,6 +508,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
         return Icons.account_balance_wallet_outlined;
       case NotificationCategory.post:
         return Icons.campaign_outlined;
+      case NotificationCategory.post_approval:
+        return Icons.campaign_outlined;
       case NotificationCategory.application:
         return Icons.work_outline_rounded;
       case NotificationCategory.booking:
@@ -533,6 +535,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
         return Colors.orange.withOpacity(0.1);
       case NotificationCategory.post:
         return Colors.green.withOpacity(0.1);
+      case NotificationCategory.post_approval:
+        return Colors.green.withOpacity(0.1);
       case NotificationCategory.application:
         return Colors.purple.withOpacity(0.1);
       case NotificationCategory.booking:
@@ -557,6 +561,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
       case NotificationCategory.wallet:
         return Colors.orange;
       case NotificationCategory.post:
+        return Colors.green;
+      case NotificationCategory.post_approval:
         return Colors.green;
       case NotificationCategory.application:
         return Colors.purple;

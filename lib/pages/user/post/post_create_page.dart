@@ -29,6 +29,8 @@ class PostCreatePage extends StatefulWidget {
 
 class _PostCreatePageState extends State<PostCreatePage> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _titleFieldKey = GlobalKey();
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _budgetMinController = TextEditingController();
@@ -280,6 +282,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
     _quotaController.dispose();
     _jobTypeFocusNode.dispose();
     _eventFocusNode.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -467,10 +470,37 @@ class _PostCreatePageState extends State<PostCreatePage> {
         return;
       }
     } else {
-      // For drafts, only validate form fields
+      // For drafts, check if post is already published
+      // If post is already published (not draft and status is active/pending), cannot save as draft
+      if (widget.existing != null && 
+          !widget.existing!.isDraft && 
+          (widget.existing!.status == PostStatus.active || 
+           widget.existing!.status == PostStatus.pending)) {
+        if (mounted) {
+          setState(() => _saving = false);
+          DialogUtils.showWarningMessage(
+            context: context,
+            message: 'Cannot save as draft. This post has already been published.',
+          );
+        }
+        return;
+      }
+      
+      // For drafts, only validate title field (required for draft)
+      // Description and other fields are optional for drafts
       final formState = _formKey.currentState;
-      if (formState == null || !formState.validate()) {
+      if (formState == null) {
         if (mounted) setState(() => _saving = false);
+        return;
+      }
+      
+      // Only validate title field for drafts
+      if (_titleController.text.trim().isEmpty) {
+        if (mounted) {
+          setState(() => _saving = false);
+          // Scroll to first field (Job Title) if validation fails
+          _scrollToFirstField();
+        }
         return;
       }
     }
@@ -552,7 +582,47 @@ class _PostCreatePageState extends State<PostCreatePage> {
     return int.tryParse(t);
   }
 
-  
+  /// Checks if the post is already published
+  bool _isPostPublished() {
+    if (widget.existing == null) return false;
+    // Post is considered published if it's not a draft and status is active or pending
+    return !widget.existing!.isDraft && 
+           (widget.existing!.status == PostStatus.active || 
+            widget.existing!.status == PostStatus.pending);
+  }
+
+  /// Scrolls to the first field (Job Title) when validation fails for draft
+  void _scrollToFirstField() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_titleFieldKey.currentContext != null && _scrollController.hasClients) {
+        try {
+          Scrollable.ensureVisible(
+            _titleFieldKey.currentContext!,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            alignment: 0.1,
+          );
+        } catch (e) {
+          debugPrint('Error scrolling to first field: $e');
+          // Fallback: scroll to top
+          if (_scrollController.hasClients) {
+            _scrollController.animateTo(
+              0,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+            );
+          }
+        }
+      } else if (_scrollController.hasClients) {
+        // Fallback: scroll to top if field key not found
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+  }
 
   void _onTagCategoryChanged(String categoryId, List<String> values) {
     setState(() {
@@ -583,6 +653,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
         iconTheme: const IconThemeData(color: Colors.black),
       ),
       body: SingleChildScrollView(
+        controller: _scrollController,
         padding: const EdgeInsets.all(20),
         child: Form(
           key: _formKey,
@@ -663,6 +734,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                     ),
                     const SizedBox(height: 16),
                     _buildTextField(_titleController, 'Job Title*', 
+                      key: _titleFieldKey,
                       validator: (v) => InputValidators.required(v, errorMessage: 'Required')),
                     const SizedBox(height: 16),
                     _buildTextField(_descriptionController, 'Description*', 
@@ -1035,7 +1107,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: _saving ? null : () => _save(publish: false),
+                        onPressed: (_saving || _isPostPublished()) ? null : () => _save(publish: false),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.black,
                           side: const BorderSide(color: Colors.black),
@@ -1369,6 +1441,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
   Widget _buildTextField(
     TextEditingController controller, 
     String label, {
+    Key? key,
     int maxLines = 1,
     String? Function(String?)? validator,
     String? hintText,
@@ -1410,6 +1483,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
               ),
               const SizedBox(height: 8),
               TextFormField(
+                key: key,
                 controller: controller,
                 maxLines: maxLines,
                 keyboardType: keyboardType,
@@ -1498,6 +1572,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
         ),
         const SizedBox(height: 8),
         TextFormField(
+          key: key,
           controller: controller,
           maxLines: maxLines,
           keyboardType: keyboardType,

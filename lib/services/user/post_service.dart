@@ -220,6 +220,12 @@ class PostService {
   }
 
   Future<Post> create(Post post) async {
+    // Check if user is authenticated
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) {
+      throw Exception('User must be logged in to create a post. Please sign in and try again.');
+    }
+    
     // Use provided post ID if available (for new posts with images), otherwise generate new one
     final postId = post.id.isNotEmpty ? post.id : _col.doc().id;
     final doc = _col.doc(postId);
@@ -232,7 +238,7 @@ class PostService {
     
     final Post toSave = Post(
       id: doc.id,
-      ownerId: _auth.currentUser?.uid ?? '',
+      ownerId: currentUser.uid,
       title: post.title,
       description: post.description,
       budgetMin: post.budgetMin,

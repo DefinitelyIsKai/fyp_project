@@ -11,6 +11,7 @@ import '../../../services/user/tag_service.dart';
 import '../../../utils/user/tag_definitions.dart';
 import '../../../utils/user/dialog_utils.dart';
 import '../../../utils/user/input_validators.dart';
+import '../../../utils/user/form_scroll_helper.dart';
 import '../../../widgets/user/resume_preview_card.dart';
 import '../../../widgets/user/tag_selection_section.dart';
 import '../../../widgets/user/location_autocomplete_field.dart';
@@ -24,6 +25,7 @@ class EditProfilePage extends StatefulWidget {
 
 class _EditProfilePageState extends State<EditProfilePage> {
   final _formKey = GlobalKey<FormState>();
+  final _scrollController = ScrollController();
   final _authService = AuthService();
   final _tagService = TagService();
 
@@ -120,11 +122,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _profProfileCtrl.dispose();
     _summaryCtrl.dispose();
     _experienceCtrl.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!FormValidationHelper.validateAndScroll(_formKey, context, scrollController: _scrollController)) return;
     setState(() => _saving = true);
     try {
       final tagsToSave = sanitizeTagSelection(_selectedTags);
@@ -216,25 +219,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         backgroundColor: Colors.white,
         elevation: 1,
         iconTheme: const IconThemeData(color: Colors.black),
-        actions: [
-          IconButton(
-            onPressed: _saving ? null : _save,
-            icon: _saving
-                ? SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: const Color(0xFF00C8A0),
-                    ),
-                  )
-                : Icon(
-                    Icons.save,
-                    color: const Color(0xFF00C8A0),
-                  ),
-            tooltip: 'Save',
-          ),
-        ],
+       
       ),
       body: _loading
           ? Center(
@@ -245,6 +230,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
           : AbsorbPointer(
               absorbing: _saving,
               child: SingleChildScrollView(
+                controller: _scrollController,
                 padding: const EdgeInsets.all(20),
                 child: Form(
                   key: _formKey,

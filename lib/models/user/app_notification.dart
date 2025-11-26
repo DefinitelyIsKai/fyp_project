@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum NotificationCategory { message, wallet, post, application, booking, system, account_warning, account_suspension, account_unsuspension, post_rejection }
+enum NotificationCategory { message, wallet, post, application, booking, system, account_warning, account_suspension, account_unsuspension, post_rejection, post_approval }
 
 class AppNotification {
   AppNotification({

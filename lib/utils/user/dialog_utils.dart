@@ -138,10 +138,23 @@ class DialogUtils {
 
     if (confirmed == true && context.mounted) {
       final service = authService ?? AuthService();
-      await service.signOut();
+      
+      // Navigate away first to stop all streams and listeners
+      // This prevents Firestore permission errors during logout
       if (context.mounted) {
         Navigator.of(context).pushReplacementNamed(AppRoutes.userLogin);
       }
+      
+      // Then sign out after navigation (in background)
+      // This prevents any active streams from trying to access Firestore after logout
+      Future.microtask(() async {
+        try {
+          await service.signOut();
+        } catch (e) {
+          // Ignore errors during logout - user is already navigated away
+          debugPrint('Error during signOut (non-critical): $e');
+        }
+      });
     }
   }
 }
