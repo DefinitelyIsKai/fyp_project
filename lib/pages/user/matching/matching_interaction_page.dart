@@ -2,7 +2,14 @@ import 'package:flutter/material.dart';
 import '../../../services/user/auth_service.dart';
 import '../../../services/user/matching_service.dart';
 import '../../../services/user/hybrid_matching_engine.dart';
-import '../../../models/user/job_match.dart';
+import '../../../models/user/computed_match.dart';
+import '../../../models/user/recruiter_match.dart';
+import '../../../models/user/post.dart';
+import '../../../models/user/application.dart';
+import '../../../services/user/post_service.dart';
+import '../../../services/user/application_service.dart';
+import '../post/post_details_page.dart';
+import '../profile/public_profile_page.dart';
 import '../booking/jobseeker_booking_page.dart';
 import '../booking/recruiter_booking_page.dart';
 import '../message/messaging_page.dart';
@@ -128,17 +135,29 @@ class _MatchesTabState extends State<_MatchesTab> {
     if (_recomputing) return;
     setState(() => _recomputing = true);
     try {
-      await _matchingService.recomputeMatches(
-        role: widget.isRecruiter ? 'recruiter' : 'jobseeker',
-        strategy: widget.isRecruiter ? _selectedStrategy : MatchingStrategy.embeddingsAnn,
-      );
-      if (!mounted) return;
-      DialogUtils.showSuccessMessage(
-        context: context,
-        message: _selectedStrategy == MatchingStrategy.stableOptimal
-            ? 'Precise matching completed'
-            : 'Matching engine refreshed',
-      );
+      if (widget.isRecruiter) {
+        // For recruiters, run the matching algorithm
+        await _matchingService.recomputeMatches(
+          role: 'recruiter',
+          strategy: _selectedStrategy,
+        );
+        if (!mounted) return;
+        DialogUtils.showSuccessMessage(
+          context: context,
+          message: _selectedStrategy == MatchingStrategy.stableOptimal
+              ? 'Precise matching completed'
+              : 'Matching engine refreshed',
+        );
+      } else {
+        // For jobseekers, the stream will automatically refresh
+        // Just trigger a small delay to show the refresh state
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (!mounted) return;
+        DialogUtils.showSuccessMessage(
+          context: context,
+          message: 'Matches refreshed',
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       DialogUtils.showWarningMessage(
@@ -152,26 +171,8 @@ class _MatchesTabState extends State<_MatchesTab> {
     }
   }
 
-  /// Convert MatchingStrategy enum to Firestore string value
-  String _strategyToFirestoreString(MatchingStrategy strategy) {
-    switch (strategy) {
-      case MatchingStrategy.embeddingsAnn:
-        return 'embedding_ann';
-      case MatchingStrategy.stableOptimal:
-        return 'stable_optimal';
-    }
-  }
 
   /// Filter matches by selected strategy
-  List<JobMatch> _filterMatchesByStrategy(List<JobMatch> matches, MatchingStrategy strategy) {
-    final strategyString = _strategyToFirestoreString(strategy);
-    return matches.where((match) {
-      // If match has no strategy field, include it (backward compatibility)
-      if (match.matchingStrategy == null) return true;
-      // Filter by matching strategy
-      return match.matchingStrategy == strategyString;
-    }).toList();
-  }
 
   void _showStrategySelector() {
     MatchingStrategy tempStrategy = _selectedStrategy;
@@ -287,6 +288,251 @@ class _MatchesTabState extends State<_MatchesTab> {
         ),
       ),
     );
+  }
+
+  /// Build matches for jobseekers using real-time computation
+  Widget _buildJobseekerMatches() {
+    return StreamBuilder<List<ComputedMatch>>(
+      stream: _matchingService.streamComputedMatches(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(
+            child: CircularProgressIndicator(
+              color: const Color(0xFF00C8A0),
+            ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: Colors.grey[400],
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Unable to load matches',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Please try again later',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final matches = snapshot.data ?? [];
+
+        return Column(
+          children: [
+            // Refresh button for jobseekers
+            if (!widget.isRecruiter)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _recomputing ? null : _handleRecompute,
+                    style: ButtonStyles.primaryFilled(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    icon: _recomputing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(Icons.refresh, size: 20),
+                    label: Text(
+                      _recomputing
+                          ? 'Refreshing matches...'
+                          : 'Refresh Matches',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            // Matches list or empty state
+            Expanded(
+              child: matches.isEmpty
+                  ? EmptyState.noMatches(
+                      isRecruiter: false,
+                      action: FilledButton(
+                        onPressed: _recomputing ? null : _handleRecompute,
+                        style: ButtonStyles.primaryFilled(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 28,
+                            vertical: 14,
+                          ),
+                        ),
+                        child: Text(
+                          _recomputing
+                              ? 'Recomputing…'
+                              : 'Generate smart matches',
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: matches.length,
+                      itemBuilder: (context, index) {
+                        final match = matches[index];
+                        return _ComputedMatchCard(
+                          match: match,
+                          formatTimeAgo: DateUtilsHelper.DateUtils.formatTimeAgoShort,
+                        );
+                      },
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Build matches for recruiters - shows job post list first
+  Widget _buildRecruiterMatches() {
+    final postService = PostService();
+    return StreamBuilder<List<Post>>(
+      stream: postService.streamMyPosts(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(
+            child: CircularProgressIndicator(
+              color: const Color(0xFF00C8A0),
+            ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: Colors.grey[400],
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Unable to load job posts',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Please try again later',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final posts = snapshot.data ?? [];
+        // Filter to only show active posts
+        final activePosts = posts.where((post) => post.status == PostStatus.active).toList();
+
+        if (activePosts.isEmpty) {
+          return EmptyState.noMatches(
+            isRecruiter: true,
+            action: FilledButton(
+              onPressed: _recomputing ? null : _handleRecompute,
+              style: ButtonStyles.primaryFilled(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 28,
+                  vertical: 14,
+                ),
+              ),
+              child: Text(
+                _recomputing
+                    ? 'Recomputing…'
+                    : 'Generate smart matches',
+              ),
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: activePosts.length,
+          itemBuilder: (context, index) {
+            final post = activePosts[index];
+            return _RecruiterPostCard(
+              post: post,
+              onTap: () => _showApplicantMatches(context, post),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Show applicant matches for a specific post
+  Future<void> _showApplicantMatches(BuildContext context, Post post) async {
+    final recruiterId = AuthService().currentUserId;
+    if (recruiterId.isEmpty) return;
+
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(
+          color: Color(0xFF00C8A0),
+        ),
+      ),
+    );
+
+    try {
+      final matches = await _matchingService.computeMatchesForRecruiterPost(
+        postId: post.id,
+        recruiterId: recruiterId,
+        strategy: _selectedStrategy,
+      );
+
+      if (!context.mounted) return;
+      Navigator.pop(context); // Close loading dialog
+
+      // Show matches in a bottom sheet or dialog
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => _ApplicantMatchesSheet(
+          post: post,
+          matches: matches,
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      Navigator.pop(context); // Close loading dialog
+      DialogUtils.showWarningMessage(
+        context: context,
+        message: 'Unable to load applicant matches: ${e.toString()}',
+      );
+    }
   }
 
   @override
@@ -429,103 +675,24 @@ class _MatchesTabState extends State<_MatchesTab> {
           ),
         ),
         Expanded(
-          child: StreamBuilder<List<JobMatch>>(
-            stream: _matchingService.streamJobMatches(
-              role: widget.isRecruiter ? 'recruiter' : 'jobseeker',
-            ),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return Center(
-                  child: CircularProgressIndicator(
-                    color: const Color(0xFF00C8A0),
-                  ),
-                );
-              }
-
-              if (snapshot.hasError) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 64,
-                        color: Colors.grey[400],
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Unable to load matches',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Please try again later',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              final allMatches = snapshot.data ?? [];
-              
-              // Filter matches by selected strategy (for recruiters only)
-              final matches = widget.isRecruiter
-                  ? _filterMatchesByStrategy(allMatches, _selectedStrategy)
-                  : allMatches;
-
-              if (matches.isEmpty) {
-                return EmptyState.noMatches(
-                  isRecruiter: widget.isRecruiter,
-                  action: FilledButton(
-                    onPressed: _recomputing ? null : _handleRecompute,
-                    style: ButtonStyles.primaryFilled(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 28,
-                        vertical: 14,
-                      ),
-                    ),
-                    child: Text(
-                      _recomputing
-                          ? 'Recomputing…'
-                          : 'Generate smart matches',
-                    ),
-                  ),
-                );
-              }
-
-              return ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: matches.length,
-                itemBuilder: (context, index) {
-                  final match = matches[index];
-                  return _JobMatchCard(
-                    match: match,
-                    isRecruiter: widget.isRecruiter,
-                    formatTimeAgo: DateUtilsHelper.DateUtils.formatTimeAgoShort,
-                  );
-                },
-              );
-            },
-          ),
+          child: widget.isRecruiter
+              ? _buildRecruiterMatches()
+              : _buildJobseekerMatches(),
         ),
       ],
     );
   }
 }
 
-class _JobMatchCard extends StatelessWidget {
-  final JobMatch match;
-  final bool isRecruiter;
+// Removed _JobMatchCard - no longer used (replaced by _ComputedMatchCard and _ApplicantMatchCard)
+
+/// Card widget for displaying computed matches (real-time, not stored)
+class _ComputedMatchCard extends StatelessWidget {
+  final ComputedMatch match;
   final String Function(DateTime) formatTimeAgo;
 
-  const _JobMatchCard({
+  const _ComputedMatchCard({
     required this.match,
-    required this.isRecruiter,
     required this.formatTimeAgo,
   });
 
@@ -547,9 +714,7 @@ class _JobMatchCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isRecruiter
-                            ? 'Application for ${match.jobTitle}'
-                            : match.jobTitle,
+                        match.post.title,
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
@@ -558,87 +723,71 @@ class _JobMatchCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        match.companyName,
+                        match.recruiterFullName,
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.grey[600],
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                      if (isRecruiter &&
-                          (match.candidateName != null &&
-                              match.candidateName!.isNotEmpty))
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            'Candidate: ${match.candidateName}',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey[700],
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
                     ],
                   ),
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    if (!isRecruiter && match.matchPercentage != null)
-                      Container(
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00C8A0).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: const Color(0xFF00C8A0).withOpacity(0.3),
+                        ),
+                      ),
+                      child: Text(
+                        '${match.matchPercentage}%',
+                        style: const TextStyle(
+                          color: Color(0xFF00C8A0),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
+                          horizontal: 12,
+                          vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF00C8A0).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: const Color(0xFF00C8A0).withOpacity(0.3),
-                          ),
+                          color: Colors.blueGrey[50],
+                          borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          '${match.matchPercentage}%',
+                          _formatStrategy(match.matchingStrategy),
                           style: const TextStyle(
-                            color: Color(0xFF00C8A0),
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF3E4A59),
                           ),
                         ),
                       ),
-                    if (match.matchingStrategy != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.blueGrey[50],
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            _formatStrategy(match.matchingStrategy!),
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF3E4A59),
-                            ),
-                          ),
-                        ),
-                      ),
+                    ),
                   ],
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            if (match.matchedSkills != null && match.matchedSkills!.isNotEmpty)
+            if (match.matchedSkills.isNotEmpty)
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: match.matchedSkills!.take(3).map((skill) {
+                children: match.matchedSkills.take(3).map((skill) {
                   return Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
@@ -668,105 +817,71 @@ class _JobMatchCard extends StatelessWidget {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: _getStatusColor(match.status).withOpacity(0.1),
+                    color: Colors.orange.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: _getStatusColor(match.status).withOpacity(0.3),
+                      color: Colors.orange.withOpacity(0.3),
                     ),
                   ),
-                  child: Text(
-                    _getStatusText(match.status),
+                  child: const Text(
+                    'Pending Review',
                     style: TextStyle(
-                      color: _getStatusColor(match.status),
+                      color: Colors.orange,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
                 const Spacer(),
-                if (match.createdAt != null)
-                  Row(
-                    children: [
-                      Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
-                      const SizedBox(width: 4),
-                      Text(
-                        formatTimeAgo(match.createdAt!),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                          fontWeight: FontWeight.w500,
-                        ),
+                Row(
+                  children: [
+                    Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
+                    const SizedBox(width: 4),
+                    Text(
+                      formatTimeAgo(match.computedAt),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w500,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 16),
-            if (!isRecruiter && match.status == 'pending')
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    MatchingService().applyToJobMatch(match.id);
-                    DialogUtils.showSuccessMessage(
-                      context: context,
-                      message: 'Application submitted successfully!',
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00C8A0),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  // Navigate to post details page
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => PostDetailsPage(post: match.post),
                     ),
-                    elevation: 2,
-                    shadowColor: const Color(0xFF00C8A0).withOpacity(0.3),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00C8A0),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Text(
-                    'Apply Now',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
+                  elevation: 2,
+                  shadowColor: const Color(0xFF00C8A0).withOpacity(0.3),
+                ),
+                child: const Text(
+                  'View Details & Apply',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
               ),
+            ),
           ],
         ),
       ),
     );
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'pending':
-        return Colors.orange;
-      case 'applied':
-        return const Color(0xFF00C8A0);
-      case 'interview_scheduled':
-        return Colors.purple;
-      case 'accepted':
-        return Colors.green;
-      case 'rejected':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  String _getStatusText(String status) {
-    switch (status) {
-      case 'pending':
-        return 'Pending Review';
-      case 'applied':
-        return 'Applied';
-      case 'interview_scheduled':
-        return 'Interview Scheduled';
-      case 'accepted':
-        return 'Accepted';
-      case 'rejected':
-        return 'Not Selected';
-      default:
-        return status;
-    }
   }
 
   String _formatStrategy(String raw) {
@@ -865,5 +980,574 @@ class _StrategyOption extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Card widget for displaying recruiter's job posts
+class _RecruiterPostCard extends StatelessWidget {
+  final Post post;
+  final VoidCallback onTap;
+
+  const _RecruiterPostCard({
+    required this.post,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: CardDecorations.standard(),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          post.title,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          post.location.isNotEmpty ? post.location : 'Location not specified',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00C8A0).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF00C8A0).withOpacity(0.3),
+                      ),
+                    ),
+                    child: Text(
+                      '${post.applicants} ${post.applicants == 1 ? 'applicant' : 'applicants'}',
+                      style: const TextStyle(
+                        color: Color(0xFF00C8A0),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey[400]),
+                  const SizedBox(width: 4),
+                  Text(
+                    'View matched applicants',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet showing applicant matches for a post
+class _ApplicantMatchesSheet extends StatelessWidget {
+  final Post post;
+  final List<RecruiterMatch> matches;
+
+  const _ApplicantMatchesSheet({
+    required this.post,
+    required this.matches,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.85,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        post.title,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${matches.length} ${matches.length == 1 ? 'matched applicant' : 'matched applicants'}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          // Matches list
+          Expanded(
+            child: matches.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.people_outline,
+                          size: 64,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No applicants yet',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: matches.length,
+                    itemBuilder: (context, index) {
+                      final match = matches[index];
+                      return _ApplicantMatchCard(
+                        match: match,
+                        onStatusChanged: () {
+                          // Status changed - could refresh if needed
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Card widget for displaying a matched applicant
+class _ApplicantMatchCard extends StatefulWidget {
+  final RecruiterMatch match;
+  final VoidCallback? onStatusChanged;
+
+  const _ApplicantMatchCard({
+    required this.match,
+    this.onStatusChanged,
+  });
+
+  @override
+  State<_ApplicantMatchCard> createState() => _ApplicantMatchCardState();
+}
+
+class _ApplicantMatchCardState extends State<_ApplicantMatchCard> {
+  late ApplicationStatus _currentStatus;
+  bool _isProcessing = false;
+  final _applicationService = ApplicationService();
+
+  @override
+  void initState() {
+    super.initState();
+    _currentStatus = widget.match.application.status;
+  }
+
+  Future<void> _handleApprove() async {
+    if (_isProcessing || _currentStatus == ApplicationStatus.approved) return;
+
+    final confirmed = await DialogUtils.showConfirmationDialog(
+      context: context,
+      title: 'Approve Application',
+      message: 'Are you sure you want to approve ${widget.match.jobseekerName}\'s application?',
+      icon: Icons.check_circle,
+      iconColor: Colors.white,
+      iconBackgroundColor: const Color(0xFF00C8A0),
+      confirmText: 'Approve',
+      cancelText: 'Cancel',
+      confirmButtonColor: const Color(0xFF00C8A0),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isProcessing = true);
+
+    try {
+      await _applicationService.approveApplication(widget.match.application.id);
+      
+      if (!mounted) return;
+      
+      setState(() {
+        _currentStatus = ApplicationStatus.approved;
+        _isProcessing = false;
+      });
+
+      DialogUtils.showSuccessMessage(
+        context: context,
+        message: 'Application approved successfully!',
+      );
+
+      // Notify parent to refresh if needed
+      widget.onStatusChanged?.call();
+    } catch (e) {
+      if (!mounted) return;
+      
+      setState(() => _isProcessing = false);
+      
+      DialogUtils.showWarningMessage(
+        context: context,
+        message: 'Failed to approve application: ${e.toString()}',
+      );
+    }
+  }
+
+  Future<void> _handleReject() async {
+    if (_isProcessing || _currentStatus == ApplicationStatus.rejected) return;
+
+    final confirmed = await DialogUtils.showDestructiveConfirmation(
+      context: context,
+      title: 'Reject Application',
+      message: 'Are you sure you want to reject ${widget.match.jobseekerName}\'s application?',
+      icon: Icons.cancel,
+      confirmText: 'Reject',
+      cancelText: 'Cancel',
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isProcessing = true);
+
+    try {
+      await _applicationService.rejectApplication(widget.match.application.id);
+      
+      if (!mounted) return;
+      
+      setState(() {
+        _currentStatus = ApplicationStatus.rejected;
+        _isProcessing = false;
+      });
+
+      DialogUtils.showSuccessMessage(
+        context: context,
+        message: 'Application rejected successfully!',
+      );
+
+      // Notify parent to refresh if needed
+      widget.onStatusChanged?.call();
+    } catch (e) {
+      if (!mounted) return;
+      
+      setState(() => _isProcessing = false);
+      
+      DialogUtils.showWarningMessage(
+        context: context,
+        message: 'Failed to reject application: ${e.toString()}',
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: CardDecorations.standard(),
+      child: InkWell(
+        onTap: () {
+          // Navigate to applicant's public profile when card is tapped
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PublicProfilePage(userId: widget.match.jobseekerId),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.match.jobseekerName,
+                          style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Application ID: ${widget.match.application.id.length > 8 ? widget.match.application.id.substring(0, 8) : widget.match.application.id}...',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF00C8A0).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: const Color(0xFF00C8A0).withOpacity(0.3),
+                    ),
+                  ),
+                  child: Text(
+                    '${widget.match.matchPercentage}%',
+                    style: const TextStyle(
+                      color: Color(0xFF00C8A0),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (widget.match.matchedSkills.isNotEmpty) ...[
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: widget.match.matchedSkills.take(5).map((skill) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00C8A0).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      skill,
+                      style: const TextStyle(
+                        color: Color(0xFF00C8A0),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+            ],
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _getStatusColor(_currentStatus).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _getStatusColor(_currentStatus).withOpacity(0.3),
+                    ),
+                  ),
+                  child: Text(
+                    _getStatusText(_currentStatus),
+                    style: TextStyle(
+                      color: _getStatusColor(_currentStatus),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  'Applied ${DateUtilsHelper.DateUtils.formatTimeAgoShort(widget.match.application.createdAt)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Action buttons
+            Row(
+              children: [
+                // View Profile button
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => PublicProfilePage(userId: widget.match.jobseekerId),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.person, size: 18),
+                    label: const Text('View Profile'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF00C8A0),
+                      side: const BorderSide(color: Color(0xFF00C8A0)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            // Approve/Reject buttons (only show if pending)
+            if (_currentStatus == ApplicationStatus.pending) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  // Approve button
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _isProcessing ? null : _handleApprove,
+                      icon: _isProcessing
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Icon(Icons.check_circle, size: 18),
+                      label: Text(_isProcessing ? 'Processing...' : 'Approve'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00C8A0),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        disabledBackgroundColor: Colors.grey[300],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Reject button
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _isProcessing ? null : _handleReject,
+                      icon: _isProcessing
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Icon(Icons.cancel, size: 18),
+                      label: Text(_isProcessing ? 'Processing...' : 'Reject'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        disabledBackgroundColor: Colors.grey[300],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+      ),
+    );
+  }
+
+  Color _getStatusColor(ApplicationStatus status) {
+    switch (status) {
+      case ApplicationStatus.approved:
+        return Colors.green;
+      case ApplicationStatus.rejected:
+        return Colors.red;
+      case ApplicationStatus.deleted:
+        return Colors.grey;
+      default:
+        return Colors.orange;
+    }
+  }
+
+  String _getStatusText(ApplicationStatus status) {
+    switch (status) {
+      case ApplicationStatus.approved:
+        return 'Approved';
+      case ApplicationStatus.rejected:
+        return 'Rejected';
+      case ApplicationStatus.deleted:
+        return 'Deleted';
+      default:
+        return 'Pending';
+    }
   }
 }

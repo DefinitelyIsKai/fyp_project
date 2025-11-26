@@ -42,16 +42,8 @@ class BookingRequestsDialog extends StatelessWidget {
     try {
       await availabilityService.approveBookingRequest(requestId);
 
-      // Try to schedule interview if job_match exists
-      try {
-        await matchingService.scheduleInterview(
-          matchId: matchId,
-          slotId: slotId,
-          interviewDate: DateTime.now(), // This will be updated from the slot
-        );
-      } catch (e) {
-        debugPrint('Could not update job_match (may not exist): $e');
-      }
+      // Note: scheduleInterview removed - job_matches collection no longer used
+      // Booking system now uses Application directly
 
       if (!context.mounted) return;
       DialogUtils.showSuccessMessage(

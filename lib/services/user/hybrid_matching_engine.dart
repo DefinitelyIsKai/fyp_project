@@ -2,11 +2,16 @@ import 'dart:collection';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter/foundation.dart';
 import '../../models/user/post.dart';
 import '../../models/user/tag.dart';
 import '../../models/user/tag_category.dart';
+import '../../models/user/computed_match.dart';
+import '../../models/user/recruiter_match.dart';
+import '../../models/user/application.dart';
 import 'auth_service.dart';
 import 'tag_service.dart';
+import 'application_service.dart';
 import '../../utils/user/tag_definitions.dart';
 
 /// Matching strategy enum
@@ -69,7 +74,6 @@ class HybridMatchingEngine {
   static const _cacheExpiryDuration = Duration(minutes: 30);
   static const int _maxJobsPerRecruiter = 25;
   static const int _maxCandidatesPerRecruiter = 60;
-  static const int _defaultJobseekerResults = 10;
 
   // Cache for matching rule weights
   _MatchingWeights? _cachedWeights;
@@ -313,9 +317,430 @@ class HybridMatchingEngine {
       );
     }
 
-    pendingMatches.sort((a, b) => b.score.compareTo(a.score));
-    final finalMatches = pendingMatches.take(_defaultJobseekerResults).toList();
-    await _persistMatches(finalMatches);
+    // No longer persisting to job_matches - using real-time computation instead
+    // The matches are computed on-demand via computeMatchesForJobseeker()
+  }
+
+  /// Compute matches in real-time without persisting to Firestore.
+  /// Returns list of ComputedMatch objects for display.
+  Future<List<ComputedMatch>> computeMatchesForJobseeker({
+    required String userId,
+    Map<String, dynamic>? userData,
+  }) async {
+    // Fetch user data if not provided
+    Map<String, dynamic> data;
+    if (userData != null) {
+      data = userData;
+    } else {
+      final userDoc = await _authService.getUserDoc();
+      data = userDoc.data() ?? <String, dynamic>{};
+    }
+
+    // Fetch matching weights from Firestore
+    final weights = await _getMatchingWeights();
+    
+    // Fetch tag data for matching
+    final tagData = await _getTagData();
+    final skillCategoryIds = await _getSkillCategoryIds();
+    final jobPreferenceCategoryIds = await _getJobPreferenceCategoryIds();
+    final locationCategoryIds = await _getLocationCategoryIds();
+
+    final candidate = await _CandidateProfile.fromUserDataWithTagData(
+      userId,
+      data,
+      tagData,
+      skillCategoryIds,
+      jobPreferenceCategoryIds,
+      locationCategoryIds,
+    );
+    if (!candidate.isMatchable) return [];
+
+    final jobs = await _loadActiveJobs();
+    if (jobs.isEmpty) return [];
+
+    // Filter out jobs created by the jobseeker themselves
+    final filteredJobs = jobs.where((job) => job.ownerId != userId).toList();
+    if (filteredJobs.isEmpty) return [];
+
+    // Get all pending applications for this jobseeker
+    final allApplications = await FirebaseFirestore.instance
+        .collection('applications')
+        .where('jobseekerId', isEqualTo: userId)
+        .where('status', isEqualTo: 'pending')
+        .get();
+    
+    final appliedPostIds = allApplications.docs
+        .map((doc) => doc.data()['postId'] as String? ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
+
+    // Filter out jobs that the jobseeker has already applied to (pending status)
+    final availableJobs = filteredJobs.where((job) => !appliedPostIds.contains(job.id)).toList();
+    if (availableJobs.isEmpty) return [];
+
+    // Filter out quota-full posts (batch fetch quota data)
+    final postIdsWithQuota = availableJobs
+        .where((job) => job.applicantQuota != null)
+        .map((job) => job.id)
+        .toList();
+    
+    final quotaData = <String, int>{};
+    if (postIdsWithQuota.isNotEmpty) {
+      final postDocs = await Future.wait(
+        postIdsWithQuota.map((id) => 
+          FirebaseFirestore.instance.collection('posts').doc(id).get()
+        ),
+      );
+      
+      for (final doc in postDocs) {
+        if (doc.exists) {
+          final data = doc.data() ?? {};
+          final approvedApplicants = data['approvedApplicants'] as int? ?? 0;
+          quotaData[doc.id] = approvedApplicants;
+        }
+      }
+    }
+
+    // Filter out quota-full posts
+    final validJobs = availableJobs.where((job) {
+      // Double-check status (should already be filtered by _loadActiveJobs)
+      if (job.status != PostStatus.active) return false;
+      
+      // Check quota if applicable
+      if (job.applicantQuota != null) {
+        final approvedCount = quotaData[job.id] ?? 0;
+        if (approvedCount >= job.applicantQuota!) {
+          return false; // Quota is full
+        }
+      }
+      
+      return true;
+    }).toList();
+    
+    if (validJobs.isEmpty) return [];
+
+    // Step 1: Filter jobs by age requirement (hard filter - must pass)
+    final ageFilteredJobs = validJobs.where((job) {
+      if (candidate.age == null) {
+        return job.minAgeRequirement == null && job.maxAgeRequirement == null;
+      }
+      final candidateAge = candidate.age!;
+      if (job.minAgeRequirement != null && candidateAge < job.minAgeRequirement!) {
+        return false;
+      }
+      if (job.maxAgeRequirement != null && candidateAge > job.maxAgeRequirement!) {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    if (ageFilteredJobs.isEmpty) return [];
+
+    final recruiterLabels = await _fetchUserLabels(
+      ageFilteredJobs.map((job) => job.ownerId).toSet(),
+    );
+
+    final jobVectors = ageFilteredJobs
+        .map(
+          (job) => _JobVector.fromPost(
+            job,
+            recruiterLabels[job.ownerId] ?? 'Hiring Company',
+          ),
+        )
+        .toList();
+
+    // Step 2: Use Embeddings + ANN for initial filtering
+    final annMatcher = _EmbeddingAnnMatcher<_JobVector>();
+    final annNeighbors = annMatcher.findNearest(
+      query: candidate.featureVector,
+      items: jobVectors,
+      topK: 32,
+    );
+
+    final computedMatches = <ComputedMatch>[];
+    for (final neighbor in annNeighbors) {
+      final similarity = neighbor.similarity;
+      final jobVector = neighbor.payload;
+      final score = await _scoreJobseekerMatch(candidate, jobVector, similarity, weights);
+      if (score <= 0.05) continue;
+
+      final matchedSkills = _matchedSkills(
+        candidate.skillSet,
+        jobVector.requiredSkills,
+      );
+
+      computedMatches.add(
+        ComputedMatch(
+          post: jobVector.post,
+          recruiterFullName: jobVector.recruiterLabel,
+          recruiterId: jobVector.post.ownerId,
+          matchPercentage: (score * 100).clamp(1, 100).round(),
+          matchedSkills: matchedSkills,
+          matchingStrategy: 'embedding_ann',
+        ),
+      );
+    }
+
+    // Sort by match percentage (descending)
+    computedMatches.sort((a, b) => b.matchPercentage.compareTo(a.matchPercentage));
+    return computedMatches;
+  }
+
+  /// Compute matches for a specific job post and its applicants.
+  /// Returns list of RecruiterMatch objects showing which applicants match the post.
+  Future<List<RecruiterMatch>> computeMatchesForRecruiterPost({
+    required String postId,
+    required String recruiterId,
+    MatchingStrategy strategy = MatchingStrategy.embeddingsAnn,
+  }) async {
+    // Load the post
+    final postDoc = await FirebaseFirestore.instance.collection('posts').doc(postId).get();
+    if (!postDoc.exists) return [];
+    
+    final postData = postDoc.data() ?? {};
+    final post = Post(
+      id: postId,
+      ownerId: recruiterId,
+      title: postData['title'] as String? ?? '',
+      description: postData['description'] as String? ?? '',
+      budgetMin: (postData['budgetMin'] as num?)?.toDouble(),
+      budgetMax: (postData['budgetMax'] as num?)?.toDouble(),
+      location: postData['location'] as String? ?? '',
+      latitude: (postData['latitude'] as num?)?.toDouble(),
+      longitude: (postData['longitude'] as num?)?.toDouble(),
+      event: postData['event'] as String? ?? '',
+      jobType: _parseJobType(postData['jobType'] as String?),
+      tags: (postData['tags'] as List?)?.cast<String>() ?? [],
+      requiredSkills: (postData['requiredSkills'] as List?)?.cast<String>() ?? [],
+      minAgeRequirement: postData['minAgeRequirement'] as int?,
+      maxAgeRequirement: postData['maxAgeRequirement'] as int?,
+      applicantQuota: postData['applicantQuota'] as int?,
+      attachments: (postData['attachments'] as List?)?.cast<String>() ?? [],
+      isDraft: postData['isDraft'] as bool? ?? false,
+      status: _parsePostStatus(postData['status'] as String?),
+      createdAt: (postData['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      eventStartDate: (postData['eventStartDate'] as Timestamp?)?.toDate(),
+      eventEndDate: (postData['eventEndDate'] as Timestamp?)?.toDate(),
+      views: postData['views'] as int? ?? 0,
+      applicants: postData['applicants'] as int? ?? 0,
+    );
+
+    // Get all applications for this post
+    final applicationService = ApplicationService();
+    final allApplications = await applicationService.getApplicationsByPostId(
+      postId: postId,
+      recruiterId: recruiterId,
+    );
+    
+    debugPrint('Total applications found: ${allApplications.length}');
+    debugPrint('Application statuses: ${allApplications.map((a) => a.status.toString()).join(", ")}');
+    
+    // Filter to show pending and approved applications (exclude rejected and deleted)
+    final applications = allApplications.where((app) => 
+      app.status == ApplicationStatus.pending || 
+      app.status == ApplicationStatus.approved
+    ).toList();
+    
+    debugPrint('Filtered applications (pending/approved): ${applications.length}');
+
+    if (applications.isEmpty) {
+      debugPrint('No applications found for post $postId');
+      return [];
+    }
+
+    // Fetch matching weights
+    final weights = await _getMatchingWeights();
+    
+    // Fetch tag data for matching
+    final tagData = await _getTagData();
+    final skillCategoryIds = await _getSkillCategoryIds();
+    final jobPreferenceCategoryIds = await _getJobPreferenceCategoryIds();
+    final locationCategoryIds = await _getLocationCategoryIds();
+
+    // Load recruiter label
+    final recruiterLabels = await _fetchUserLabels({recruiterId});
+    final recruiterLabel = recruiterLabels[recruiterId] ?? 'Hiring Company';
+
+    // Create job vector
+    final jobVector = _JobVector.fromPost(post, recruiterLabel);
+
+    // Load candidate profiles for all applicants
+    final candidateProfiles = <_CandidateProfile>[];
+    final jobseekerDataMap = <String, Map<String, dynamic>>{};
+    
+    for (final application in applications) {
+      try {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(application.jobseekerId)
+            .get();
+        final userData = userDoc.data() ?? {};
+        jobseekerDataMap[application.jobseekerId] = userData;
+        
+        final candidate = await _CandidateProfile.fromUserDataWithTagData(
+          application.jobseekerId,
+          userData,
+          tagData,
+          skillCategoryIds,
+          jobPreferenceCategoryIds,
+          locationCategoryIds,
+        );
+        if (candidate.isMatchable) {
+          candidateProfiles.add(candidate);
+        } else {
+          debugPrint('Candidate ${application.jobseekerId} is not matchable');
+        }
+      } catch (e) {
+        debugPrint('Error loading candidate profile for ${application.jobseekerId}: $e');
+      }
+    }
+
+    debugPrint('Matchable candidates: ${candidateProfiles.length}');
+    if (candidateProfiles.isEmpty) {
+      debugPrint('No matchable candidates found');
+      return [];
+    }
+
+    // Filter candidates by age requirement
+    final ageFilteredCandidates = candidateProfiles.where((candidate) {
+      if (candidate.age == null) {
+        return post.minAgeRequirement == null && post.maxAgeRequirement == null;
+      }
+      final candidateAge = candidate.age!;
+      if (post.minAgeRequirement != null && candidateAge < post.minAgeRequirement!) {
+        return false;
+      }
+      if (post.maxAgeRequirement != null && candidateAge > post.maxAgeRequirement!) {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    debugPrint('Age-filtered candidates: ${ageFilteredCandidates.length}');
+    if (ageFilteredCandidates.isEmpty) {
+      debugPrint('No candidates passed age filter');
+      return [];
+    }
+
+    // Use Embeddings + ANN for matching
+    debugPrint('Job vector tokens: ${jobVector.featureVector.tokens.length}');
+    debugPrint('Job vector tokens sample: ${jobVector.featureVector.tokens.take(5).join(", ")}');
+    if (ageFilteredCandidates.isNotEmpty) {
+      debugPrint('Candidate vector tokens: ${ageFilteredCandidates.first.featureVector.tokens.length}');
+      debugPrint('Candidate vector tokens sample: ${ageFilteredCandidates.first.featureVector.tokens.take(5).join(", ")}');
+    }
+    
+    final annMatcher = _EmbeddingAnnMatcher<_CandidateProfile>();
+    final annNeighbors = annMatcher.findNearest(
+      query: jobVector.featureVector,
+      items: ageFilteredCandidates,
+      topK: ageFilteredCandidates.length, // Match all candidates
+    );
+
+    debugPrint('ANN neighbors found: ${annNeighbors.length}');
+    
+    // If ANN returns no results, fallback to direct matching
+    if (annNeighbors.isEmpty && ageFilteredCandidates.isNotEmpty) {
+      debugPrint('ANN returned no results, using fallback direct matching');
+      // Direct cosine similarity calculation as fallback
+      for (final candidate in ageFilteredCandidates) {
+        final similarity = jobVector.featureVector.cosine(candidate.featureVector);
+        debugPrint('Direct similarity for candidate ${candidate.id}: $similarity');
+        if (!similarity.isNaN && similarity > 0) {
+          annNeighbors.add(_AnnNeighbor(payload: candidate, similarity: similarity));
+        }
+      }
+      debugPrint('Fallback neighbors found: ${annNeighbors.length}');
+    }
+    // Calculate scores for all candidates
+    final candidateScores = <_CandidateProfile, double>{};
+    for (final neighbor in annNeighbors) {
+      final candidate = neighbor.payload;
+      final similarity = neighbor.similarity;
+      final score = await _scoreRecruiterMatch(jobVector, candidate, similarity, weights);
+      debugPrint('Candidate ${candidate.id} - Score: $score, Similarity: $similarity');
+      if (score > 0.05) {
+        candidateScores[candidate] = score;
+      } else {
+        debugPrint('Candidate ${candidate.id} score too low, skipping');
+      }
+    }
+
+    // Apply strategy-based filtering
+    List<_CandidateProfile> selectedCandidates;
+    if (strategy == MatchingStrategy.stableOptimal) {
+      // One candidate per job: select the highest scoring candidate
+      if (candidateScores.isEmpty) {
+        debugPrint('No candidates with valid scores for stable optimal matching');
+        return [];
+      }
+      final sortedCandidates = candidateScores.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      selectedCandidates = [sortedCandidates.first.key];
+      debugPrint('Stable optimal: Selected 1 candidate (score: ${sortedCandidates.first.value})');
+    } else {
+      // Multiple candidates per job: include all candidates with valid scores
+      selectedCandidates = candidateScores.keys.toList();
+      debugPrint('Embeddings ANN: Selected ${selectedCandidates.length} candidates');
+    }
+
+    // Build RecruiterMatch list
+    final recruiterMatches = <RecruiterMatch>[];
+    for (final candidate in selectedCandidates) {
+      final score = candidateScores[candidate]!;
+
+      // Find the application for this candidate
+      final application = applications.firstWhere(
+        (app) => app.jobseekerId == candidate.id,
+        orElse: () => applications.first, // Fallback (shouldn't happen)
+      );
+
+      final matchedSkills = _matchedSkills(
+        candidate.skillSet,
+        jobVector.requiredSkills,
+      );
+
+      // Get jobseeker name
+      final jobseekerData = jobseekerDataMap[candidate.id] ?? {};
+      final jobseekerName = (jobseekerData['fullName'] as String?) ??
+          (jobseekerData['professionalProfile'] as String?) ??
+          'Jobseeker';
+
+      recruiterMatches.add(
+        RecruiterMatch(
+          application: application,
+          jobseekerName: jobseekerName,
+          jobseekerId: candidate.id,
+          matchPercentage: (score * 100).clamp(1, 100).round(),
+          matchedSkills: matchedSkills,
+          matchingStrategy: strategy == MatchingStrategy.stableOptimal
+              ? 'stable_optimal'
+              : 'embedding_ann',
+        ),
+      );
+    }
+
+    // Sort by match percentage (descending)
+    recruiterMatches.sort((a, b) => b.matchPercentage.compareTo(a.matchPercentage));
+    return recruiterMatches;
+  }
+
+  JobType _parseJobType(String? type) {
+    if (type == null) return JobType.weekdays;
+    try {
+      return JobType.values.firstWhere((e) => e.name == type);
+    } catch (e) {
+      return JobType.weekdays;
+    }
+  }
+
+  PostStatus _parsePostStatus(String? status) {
+    if (status == null) return PostStatus.active;
+    try {
+      return PostStatus.values.firstWhere((e) => e.name == status);
+    } catch (e) {
+      return PostStatus.active;
+    }
   }
 
   Future<void> _runRecruiterPipeline(
@@ -438,7 +863,8 @@ class HybridMatchingEngine {
       );
     });
 
-    await _persistMatches(pendingMatches);
+    // No longer persisting to job_matches - using real-time computation instead
+    // await _persistMatches(pendingMatches);
   }
 
   /// Run stable optimal matching using Gale-Shapley + Hungarian algorithms
@@ -611,9 +1037,8 @@ class HybridMatchingEngine {
       for (final doc in snapshot.docs) {
         final data = doc.data();
         final label =
-            (data['companyName'] as String?) ??
-            (data['professionalProfile'] as String?) ??
             (data['fullName'] as String?) ??
+            (data['professionalProfile'] as String?) ??
             'Hiring Company';
         result[doc.id] = label;
       }
@@ -621,63 +1046,8 @@ class HybridMatchingEngine {
     return result;
   }
 
-  Future<void> _persistMatches(List<_PendingMatch> matches) async {
-    if (matches.isEmpty) return;
-    final jobseekerGroups = <String, List<_PendingMatch>>{};
-    for (final match in matches) {
-      jobseekerGroups
-          .putIfAbsent(match.candidateId, () => <_PendingMatch>[])
-          .add(match);
-    }
-    for (final entry in jobseekerGroups.entries) {
-      await _persistMatchesForJobseeker(entry.key, entry.value);
-    }
-  }
-
-  Future<void> _persistMatchesForJobseeker(
-    String jobseekerId,
-    List<_PendingMatch> matches,
-  ) async {
-    if (matches.isEmpty) return;
-
-    final existingSnapshot = await _firestore
-        .collection('job_matches')
-        .where('jobseekerId', isEqualTo: jobseekerId)
-        .get();
-
-    final existingByJob =
-        <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
-    for (final doc in existingSnapshot.docs) {
-      final data = doc.data();
-      final jobId = data['jobId'] as String?;
-      if (jobId != null && jobId.isNotEmpty) {
-        existingByJob[jobId] = doc;
-      }
-    }
-
-    final batch = _firestore.batch();
-    for (final match in matches) {
-      final payload = match.toFirestorePayload();
-      final existingDoc = existingByJob[match.job.id];
-
-      if (existingDoc != null) {
-        final existingStatus =
-            existingDoc.data()['status'] as String? ?? 'pending';
-        batch.set(existingDoc.reference, {
-          ...payload,
-          'status': existingStatus,
-        }, SetOptions(merge: true));
-      } else {
-        final docRef = _firestore.collection('job_matches').doc();
-        batch.set(docRef, {
-          ...payload,
-          'status': 'pending',
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      }
-    }
-    await batch.commit();
-  }
+  // Removed _persistMatches and _persistMatchesForJobseeker methods
+  // No longer writing to job_matches collection - using real-time computation instead
 }
 
 class _PendingMatch {
@@ -703,7 +1073,7 @@ class _PendingMatch {
     return {
       'jobId': job.id,
       'jobTitle': job.title,
-      'companyName': recruiterLabel,
+      'fullName': recruiterLabel,
       'recruiterId': job.ownerId,
       'jobseekerId': candidateId,
       'candidateName': candidateName,
@@ -920,7 +1290,8 @@ class _EmbeddingAnnMatcher<T extends _VectorCarrier<T>> {
     final neighbors = <_AnnNeighbor<T>>[];
     for (final item in candidates) {
       final similarity = query.cosine(item.vector);
-      if (similarity.isNaN || similarity <= 0) continue;
+      // Allow similarity > 0 (even if very small) to ensure we get results
+      if (similarity.isNaN || similarity < 0) continue;
       neighbors.add(_AnnNeighbor(payload: item, similarity: similarity));
     }
 

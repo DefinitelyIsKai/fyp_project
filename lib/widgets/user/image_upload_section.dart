@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../services/user/storage_service.dart';
+import '../../utils/user/dialog_utils.dart';
 
 /// A reusable image upload section widget
 /// 
@@ -147,12 +148,10 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
     // Check if we've reached the maximum number of images
     if (widget.maxImages != null && widget.images.length >= widget.maxImages!) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('You can only upload a maximum of ${widget.maxImages} images.'),
-            backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 2),
-          ),
+        DialogUtils.showWarningMessage(
+          context: context,
+          message: 'You can only upload a maximum of ${widget.maxImages} images.',
+          duration: const Duration(seconds: 2),
         );
       }
       return;
@@ -184,22 +183,18 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
             
             // If user selected more images than allowed, show a message
             if (urls.length > remainingSlots && mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Only ${remainingSlots} image(s) were added. Maximum of ${widget.maxImages} images allowed.'),
-                  backgroundColor: Colors.orange,
-                  duration: const Duration(seconds: 3),
-                ),
+              DialogUtils.showWarningMessage(
+                context: context,
+                message: 'Only ${remainingSlots} image(s) were added. Maximum of ${widget.maxImages} images allowed.',
+                duration: const Duration(seconds: 3),
               );
             }
           } else {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('You have reached the maximum of ${widget.maxImages} images. Please remove some before adding new ones.'),
-                  backgroundColor: Colors.orange,
-                  duration: const Duration(seconds: 2),
-                ),
+              DialogUtils.showWarningMessage(
+                context: context,
+                message: 'You have reached the maximum of ${widget.maxImages} images. Please remove some before adding new ones.',
+                duration: const Duration(seconds: 2),
               );
             }
           }
@@ -209,24 +204,20 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
       } else if (urls.isEmpty && mounted) {
         // Show error if no images were uploaded
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to upload images. Please try again.'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
-            ),
+          DialogUtils.showWarningMessage(
+            context: context,
+            message: 'Failed to upload images. Please try again.',
+            duration: const Duration(seconds: 3),
           );
         }
       }
     } catch (e) {
       // Show error message to user
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error uploading images: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
+        DialogUtils.showWarningMessage(
+          context: context,
+          message: 'Error uploading images: ${e.toString()}',
+          duration: const Duration(seconds: 4),
         );
       }
     } finally {

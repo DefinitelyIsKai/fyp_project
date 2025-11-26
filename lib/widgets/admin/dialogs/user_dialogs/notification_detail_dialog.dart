@@ -30,6 +30,8 @@ class NotificationDetailDialog extends StatelessWidget {
         return Icons.block_rounded;
       case NotificationCategory.account_unsuspension:
         return Icons.check_circle_outline_rounded;
+      case NotificationCategory.post_rejection:
+       return Icons.warning_amber_rounded;
     }
   }
 
@@ -50,6 +52,8 @@ class NotificationDetailDialog extends StatelessWidget {
       case NotificationCategory.account_warning:
         return Colors.red.withOpacity(0.1);
       case NotificationCategory.account_suspension:
+        return Colors.red.withOpacity(0.15);
+      case NotificationCategory.post_rejection:
         return Colors.red.withOpacity(0.15);
       case NotificationCategory.account_unsuspension:
         return Colors.green.withOpacity(0.1);
@@ -73,6 +77,8 @@ class NotificationDetailDialog extends StatelessWidget {
       case NotificationCategory.account_warning:
         return Colors.red;
       case NotificationCategory.account_suspension:
+        return Colors.red[800]!;
+      case NotificationCategory.post_rejection:
         return Colors.red[800]!;
       case NotificationCategory.account_unsuspension:
         return Colors.green;

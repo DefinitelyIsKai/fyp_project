@@ -502,12 +502,14 @@ class AvailabilityService {
     yield* _firestore
         .collection('booking_requests')
         .where('recruiterId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
+      final requests = snapshot.docs
           .map((doc) => BookingRequest.fromFirestore(doc))
           .toList();
+      // Sort by createdAt descending (client-side to avoid Firestore composite index requirement)
+      requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return requests;
     });
   }
 
@@ -516,12 +518,14 @@ class AvailabilityService {
     yield* _firestore
         .collection('booking_requests')
         .where('jobseekerId', isEqualTo: jobseekerId)
-        .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
+      final requests = snapshot.docs
           .map((doc) => BookingRequest.fromFirestore(doc))
           .toList();
+      // Sort by createdAt descending (client-side to avoid Firestore composite index requirement)
+      requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return requests;
     });
   }
 
