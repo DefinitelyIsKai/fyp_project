@@ -5,7 +5,6 @@ import '../../../../models/user/application.dart';
 import '../../../../models/user/message.dart';
 import '../../../../services/user/application_service.dart';
 import '../../../../services/user/post_service.dart';
-import '../../../../services/user/review_service.dart';
 import '../../../../services/user/report_service.dart';
 import '../../../../services/user/messaging_service.dart';
 import '../../../../utils/user/dialog_utils.dart';
@@ -14,7 +13,6 @@ import '../../../../widgets/user/loading_indicator.dart';
 import '../../../../widgets/user/empty_state.dart';
 import '../../../../pages/user/profile/public_profile_page.dart';
 import '../../../../pages/user/message/messaging_page.dart';
-import '../../../../widgets/admin/dialogs/user_dialogs/rating_dialog.dart';
 import '../../../../widgets/admin/dialogs/user_dialogs/report_jobseeker_dialog.dart';
 
 /// Dialog for viewing and managing applicants for a post
@@ -36,7 +34,6 @@ class _ApplicantsDialogState extends State<ApplicantsDialog> {
   final Map<String, String> _jobseekerNames = {};
   late final Stream<List<Application>> _appsStream;
   final PostService _postService = PostService();
-  final ReviewService _reviewService = ReviewService();
   final ReportService _reportService = ReportService();
 
   @override
@@ -490,16 +487,7 @@ class _ApplicantsDialogState extends State<ApplicantsDialog> {
                                         case 'reject':
                                           _handleReject(app.id);
                                           break;
-                                        case 'rate':
-                                          showDialog(
-                                            context: context,
-                                            builder: (context) => RatingDialog(
-                                              postId: widget.post.id,
-                                              jobseekerId: app.jobseekerId,
-                                              reviewService: _reviewService,
-                                            ),
-                                          );
-                                          break;
+                                        
                                         case 'report':
                                           _showReportJobseekerDialog(
                                             app.jobseekerId,
@@ -545,43 +533,39 @@ class _ApplicantsDialogState extends State<ApplicantsDialog> {
                                             ),
                                           ),
                                         );
-                                      } else if (app.status ==
-                                              ApplicationStatus.approved &&
-                                          widget.post.status ==
-                                              PostStatus.completed) {
-                                        items.add(
-                                          const PopupMenuItem<String>(
-                                            value: 'rate',
-                                            child: Row(
-                                              children: [
-                                                Icon(
-                                                  Icons.star_rate,
-                                                  size: 20,
-                                                  color: Colors.amber,
-                                                ),
-                                                SizedBox(width: 12),
-                                                Text('Rate'),
-                                              ],
-                                            ),
-                                          ),
-                                        );
                                       }
 
-                                      // Always show report option - allow multiple reports for different incidents
+                                      // Add divider before report option
+                                      if (items.isNotEmpty) {
+                                        items.add(const PopupMenuDivider());
+                                      }
+
+                                      // Always show report option
+                                      final hasReported = reportSnapshot.data ?? false;
                                       items.add(
                                         PopupMenuItem<String>(
                                           value: 'report',
                                           child: Row(
                                             children: [
                                               Icon(
-                                                Icons.flag_outlined,
+                                                hasReported 
+                                                    ? Icons.flag 
+                                                    : Icons.flag_outlined,
                                                 size: 20,
                                                 color: Colors.red,
                                               ),
                                               const SizedBox(width: 12),
-                                              Text(reportSnapshot.data == true 
-                                                ? 'Report Again' 
-                                                : 'Report'),
+                                              Text(
+                                                hasReported 
+                                                    ? 'Report Again' 
+                                                    : 'Report',
+                                                style: TextStyle(
+                                                  color: Colors.red,
+                                                  fontWeight: hasReported 
+                                                      ? FontWeight.w600 
+                                                      : FontWeight.normal,
+                                                ),
+                                              ),
                                             ],
                                           ),
                                         ),

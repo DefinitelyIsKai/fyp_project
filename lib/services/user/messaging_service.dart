@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import '../../models/user/message.dart';
 import 'auth_service.dart';
 import 'application_service.dart';
@@ -147,6 +148,7 @@ class MessagingService {
       }
     } catch (e) {
       // Handle permission errors gracefully (e.g., user logged out)
+      debugPrint('Error in streamConversations (likely during logout): $e');
       yield <Conversation>[];
     }
   }
@@ -182,32 +184,40 @@ class MessagingService {
       }
 
       // Use real-time listener instead of polling for instant updates
-      await for (final snapshot in _firestore
-          .collection('conversations')
-          .doc(conversationId)
-          .collection('messages')
-          .orderBy('timestamp', descending: false)
-          .snapshots()) {
-        // Check if user is still authenticated
-        if (_auth.currentUser == null) {
-          yield <Message>[];
-          return;
-        }
-        
-        try {
-          final messages = snapshot.docs
-              .map((doc) => Message.fromFirestore(doc))
-              .toList();
-          // Already sorted by timestamp from query, but ensure consistency
-          messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-          yield messages;
-        } catch (e) {
-          if (e.toString().contains('PERMISSION_DENIED')) {
+      try {
+        await for (final snapshot in _firestore
+            .collection('conversations')
+            .doc(conversationId)
+            .collection('messages')
+            .orderBy('timestamp', descending: false)
+            .snapshots()) {
+          // Check if user is still authenticated
+          if (_auth.currentUser == null) {
             yield <Message>[];
             return;
           }
-          // Continue on other errors
+          
+          try {
+            final messages = snapshot.docs
+                .map((doc) => Message.fromFirestore(doc))
+                .toList();
+            // Already sorted by timestamp from query, but ensure consistency
+            messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+            yield messages;
+          } catch (e) {
+            if (e.toString().contains('PERMISSION_DENIED')) {
+              debugPrint('Error processing messages (likely during logout): $e');
+              yield <Message>[];
+              return;
+            }
+            // Continue on other errors
+          }
         }
+      } catch (e) {
+        // Handle stream errors (e.g., permission denied during logout)
+        debugPrint('Error in streamMessages (likely during logout): $e');
+        yield <Message>[];
+        return;
       }
     } catch (e) {
       // Handle any errors gracefully

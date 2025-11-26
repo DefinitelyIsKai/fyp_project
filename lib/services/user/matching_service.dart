@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import '../../models/user/computed_match.dart';
 import '../../models/user/recruiter_match.dart';
 import 'hybrid_matching_engine.dart';
@@ -75,23 +76,37 @@ class MatchingService {
       StreamSubscription? refreshSubscription;
       
       // Listen to posts stream
-      postsSubscription = postsStream.listen((snapshot) {
-        if (!combinedStream.isClosed) {
-          combinedStream.add(snapshot);
-        }
-      });
+      postsSubscription = postsStream.listen(
+        (snapshot) {
+          if (!combinedStream.isClosed) {
+            combinedStream.add(snapshot);
+          }
+        },
+        onError: (error) {
+          // Ignore permission errors during logout - don't add anything to stream
+          debugPrint('Error listening to posts stream (likely during logout): $error');
+          // Stream will naturally end, which will result in empty matches list
+        },
+        cancelOnError: false, // Don't cancel stream on error
+      );
       
       // Listen to refresh controller
       refreshSubscription = _refreshController.stream.listen((_) async {
         if (!combinedStream.isClosed) {
-          // On manual refresh, fetch latest posts
-          final postsSnapshot = await _firestore
-              .collection('posts')
-              .where('isDraft', isEqualTo: false)
-              .where('status', isEqualTo: 'active')
-              .get();
-          if (!combinedStream.isClosed) {
-            combinedStream.add(postsSnapshot);
+          try {
+            // On manual refresh, fetch latest posts
+            final postsSnapshot = await _firestore
+                .collection('posts')
+                .where('isDraft', isEqualTo: false)
+                .where('status', isEqualTo: 'active')
+                .get();
+            if (!combinedStream.isClosed) {
+              combinedStream.add(postsSnapshot);
+            }
+          } catch (error) {
+            // Ignore permission errors during logout
+            debugPrint('Error refreshing posts (likely during logout): $error');
+            // Don't add anything - stream will handle empty state naturally
           }
         }
       });
@@ -106,6 +121,11 @@ class MatchingService {
             if (!combinedStream.isClosed) {
               combinedStream.add(snapshot);
             }
+          })
+          .catchError((error) {
+            // Ignore permission errors during logout
+            debugPrint('Error getting initial posts (likely during logout): $error');
+            // Don't add anything - stream will handle empty state naturally
           });
       
       // Clean up when stream is cancelled
@@ -116,17 +136,27 @@ class MatchingService {
       };
       
       return combinedStream.stream.asyncMap((postsSnapshot) async {
-        final userData = userDoc.data();
-        if (userData == null) return <ComputedMatch>[];
-        
-        // Only compute for jobseekers
-        final role = userData['role'] as String? ?? 'jobseeker';
-        if (role != 'jobseeker') return <ComputedMatch>[];
+        try {
+          final userData = userDoc.data();
+          if (userData == null) return <ComputedMatch>[];
+          
+          // Only compute for jobseekers
+          final role = userData['role'] as String? ?? 'jobseeker';
+          if (role != 'jobseeker') return <ComputedMatch>[];
 
-        return await _matchingEngine.computeMatchesForJobseeker(
-          userId: userId,
-          userData: userData,
-        );
+          return await _matchingEngine.computeMatchesForJobseeker(
+            userId: userId,
+            userData: userData,
+          );
+        } catch (error) {
+          // Ignore errors during logout
+          debugPrint('Error computing matches (likely during logout): $error');
+          return <ComputedMatch>[];
+        }
+      }).handleError((error) {
+        // Ignore permission errors during logout
+        debugPrint('Error in computed matches stream (likely during logout): $error');
+        return <ComputedMatch>[];
       });
     });
   }

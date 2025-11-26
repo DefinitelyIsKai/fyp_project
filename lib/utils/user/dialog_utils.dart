@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../../widgets/user/confirmation_dialog.dart';
 import '../../widgets/user/message_box.dart';
 import '../../services/user/auth_service.dart';
@@ -145,9 +146,9 @@ class DialogUtils {
         Navigator.of(context).pushReplacementNamed(AppRoutes.userLogin);
       }
       
-      // Then sign out after navigation (in background)
-      // This prevents any active streams from trying to access Firestore after logout
-      Future.microtask(() async {
+      // Wait a bit for streams to be cancelled before signing out
+      // This reduces Firestore permission warnings in logs
+      Future.delayed(const Duration(milliseconds: 100), () async {
         try {
           await service.signOut();
         } catch (e) {

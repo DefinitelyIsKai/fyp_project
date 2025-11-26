@@ -197,7 +197,11 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                       stream: FirebaseFirestore.instance
                           .collection('posts')
                           .doc(widget.post.id)
-                          .snapshots(),
+                          .snapshots()
+                          .handleError((error) {
+                            // Ignore permission errors during logout - stream will naturally end
+                            debugPrint('Error in post stream (likely during logout): $error');
+                          }),
                       builder: (context, postSnapshot) {
                         Post currentPost = widget.post;
                         int approvedCount = 0;

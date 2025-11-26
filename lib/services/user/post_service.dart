@@ -56,8 +56,9 @@ class PostService {
           return posts;
         })
         .handleError((error) {
-          debugPrint('Error loading posts: $error');
-          throw error;
+          // Ignore permission errors during logout - return empty list instead
+          debugPrint('Error in streamMyPosts (likely during logout): $error');
+          return <Post>[];
         });
   }
 
@@ -230,10 +231,11 @@ class PostService {
     final postId = post.id.isNotEmpty ? post.id : _col.doc().id;
     final doc = _col.doc(postId);
     
-    // For new posts, status should be pending (not draft) or active (draft)
+    // For new posts, status should be pending (not draft) or keep original status (draft)
     // When publishing (not draft), status should be pending for admin review
+    // When saving as draft, keep the original status as-is
     final PostStatus initialStatus = post.isDraft 
-        ? (post.status == PostStatus.pending ? PostStatus.active : post.status)
+        ? post.status  // Keep original status for drafts
         : PostStatus.pending;
     
     final Post toSave = Post(
@@ -615,8 +617,9 @@ class PostService {
           return posts;
         })
         .handleError((error) {
-          debugPrint('Error searching posts: $error');
-          throw error;
+          // Ignore permission errors during logout - return empty list instead
+          debugPrint('Error searching posts (likely during logout): $error');
+          return <Post>[];
         });
   }
 
@@ -659,8 +662,9 @@ class PostService {
       }
       return posts;
     }).handleError((error) {
-      debugPrint('Error loading popular posts: $error');
-      throw error;
+      // Ignore permission errors during logout - return empty list instead
+      debugPrint('Error loading popular posts (likely during logout): $error');
+      return <Post>[];
     });
   }
 

@@ -92,6 +92,11 @@ class ApplicationService {
           // Sort by createdAt descending (newest first)
           applications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           return applications;
+        })
+        .handleError((error) {
+          // Ignore permission errors during logout - return empty list instead
+          debugPrint('Error in streamPostApplications (likely during logout): $error');
+          return <Application>[];
         });
   }
 
@@ -145,6 +150,10 @@ class ApplicationService {
       // Sort by createdAt descending (newest first)
       applications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return applications;
+    }).handleError((error) {
+      // Ignore permission errors during logout - return empty list instead
+      debugPrint('Error in streamMyApplications (likely during logout): $error');
+      return <Application>[];
     });
   }
 
@@ -227,6 +236,10 @@ class ApplicationService {
       // Sort by createdAt descending (newest first)
       applications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return applications;
+    }).handleError((error) {
+      // Ignore permission errors during logout - return empty list instead
+      debugPrint('Error in streamRecruiterApplications (likely during logout): $error');
+      return <Application>[];
     });
   }
 
@@ -265,6 +278,11 @@ class ApplicationService {
         .map((snapshot) {
           if (snapshot.docs.isEmpty) return null;
           return Application.fromFirestore(snapshot.docs.first);
+        })
+        .handleError((error) {
+          // Ignore permission errors during logout - return null instead
+          debugPrint('Error in streamApplicationForPost (likely during logout): $error');
+          return null;
         });
   }
 

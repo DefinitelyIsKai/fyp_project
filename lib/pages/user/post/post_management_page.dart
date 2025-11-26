@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../models/user/post.dart';
 import 'post_create_page.dart';
 import 'post_details_page.dart';
+import 'completed_posts_rating_page.dart';
 import '../../../services/user/post_service.dart';
 import '../../../services/user/auth_service.dart';
 import '../../../services/user/application_service.dart';
@@ -489,6 +490,22 @@ class _PostManagementPageState extends State<PostManagementPage> {
             elevation: 1,
             iconTheme: const IconThemeData(color: Colors.black),
             automaticallyImplyLeading: false,
+            actions: isRecruiter
+                ? [
+                    IconButton(
+                      icon: const Icon(Icons.rate_review),
+                      tooltip: 'Rate Applicants',
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const CompletedPostsRatingPage(),
+                          ),
+                        );
+                      },
+                    ),
+                  ]
+                : null,
           ),
           floatingActionButton: isRecruiter
               ? FloatingActionButton(
