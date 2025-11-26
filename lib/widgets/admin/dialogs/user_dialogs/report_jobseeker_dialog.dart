@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../utils/user/button_styles.dart';
 
-/// Dialog for reporting a jobseeker
-/// Returns a Map with 'reason' and 'description' keys, or null if cancelled
+//Report Dialog
 class ReportJobseekerDialog extends StatefulWidget {
   final String jobseekerName;
 

@@ -78,6 +78,7 @@ class _MatchingInteractionPageState extends State<MatchingInteractionPage>
         backgroundColor: Colors.white,
         elevation: 1,
         iconTheme: const IconThemeData(color: Colors.black),
+        automaticallyImplyLeading: false,
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: const Color(0xFF00C8A0),

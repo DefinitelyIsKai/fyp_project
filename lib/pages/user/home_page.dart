@@ -162,7 +162,7 @@ class _HomePageState extends State<HomePage> {
                 height: 40,
                 child: Row(
                   children: [
-                    // You can replace this with your actual logo
+                    
                     Container(
                       width: 32,
                       height: 32,
@@ -310,7 +310,7 @@ class _HomeTabState extends State<_HomeTab> {
     super.initState();
     _popularCategoriesStream = _categoryService.streamPopularCategories(limit: 4);
     _loadProfile();
-    // Always fetch device GPS location
+    //GPS fecthing
     _resolveDeviceLocation();
   }
 
@@ -476,7 +476,7 @@ class _HomeTabState extends State<_HomeTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Hero Section
+            
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(

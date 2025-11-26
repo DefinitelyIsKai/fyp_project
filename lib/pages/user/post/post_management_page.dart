@@ -488,6 +488,7 @@ class _PostManagementPageState extends State<PostManagementPage> {
             backgroundColor: Colors.white,
             elevation: 1,
             iconTheme: const IconThemeData(color: Colors.black),
+            automaticallyImplyLeading: false,
           ),
           floatingActionButton: isRecruiter
               ? FloatingActionButton(
