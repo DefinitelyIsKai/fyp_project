@@ -423,20 +423,148 @@ class _RuleDetailsDialogState extends State<_RuleDetailsDialog> {
     super.dispose();
   }
 
+  Widget _buildDistanceParameterField(
+    String key,
+    String label,
+    String description,
+    String unit,
+    {required double min, required double max}
+  ) {
+    final controller = _parameterControllers[key];
+    final currentValue = _editedRule.parameters[key] ?? 0.0;
+    bool hasError = false;
+    if (controller != null && controller.text.isNotEmpty) {
+      final parsedValue = double.tryParse(controller.text);
+      if (parsedValue == null || parsedValue < min || parsedValue > max) {
+        hasError = true;
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          description,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[600],
+            height: 1.3,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (controller != null)
+          TextField(
+            controller: controller,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: unit.isNotEmpty ? '$label ($unit)' : label,
+            hintText: currentValue.toString(),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: hasError ? Colors.red : Colors.grey[300]!,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: hasError ? Colors.red : Colors.blue,
+                width: 2,
+              ),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Colors.red),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Colors.red, width: 2),
+            ),
+            filled: true,
+            fillColor: hasError ? Colors.red[50] : Colors.grey[50],
+            suffixText: unit.isNotEmpty ? unit : null,
+            helperText: 'Current: $currentValue${unit.isNotEmpty ? ' $unit' : ''} | Range: $min - $max',
+            errorText: hasError
+                ? 'Please enter a number between $min and $max'
+                : null,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          ),
+          onChanged: (value) {
+            setState(() {
+              // Trigger rebuild to update error state
+            });
+          },
+          )
+        else
+          Text(
+            'Error: Controller not initialized',
+            style: TextStyle(color: Colors.red),
+          ),
+      ],
+    );
+  }
+
   void _saveRule() {
+    if (widget.rule.id == 'distance') {
+      final maxDistanceController = _parameterControllers['maxDistanceKm'];
+      final decayFactorController = _parameterControllers['decayFactor'];
+      
+      if (maxDistanceController != null && maxDistanceController.text.isNotEmpty) {
+        final maxDistance = double.tryParse(maxDistanceController.text);
+        if (maxDistance == null || maxDistance < 1.0 || maxDistance > 1000.0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Maximum Distance must be between 1 and 1000 km'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+      }
+      
+      if (decayFactorController != null && decayFactorController.text.isNotEmpty) {
+        final decayFactor = double.tryParse(decayFactorController.text);
+        if (decayFactor == null || decayFactor < 0.1 || decayFactor > 10.0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Decay Factor must be between 0.1 and 10.0'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+      }
+    }
+
     final updatedParameters = <String, dynamic>{};
     _parameterControllers.forEach((key, controller) {
       final value = controller.text;
-      // Try to parse as number, otherwise keep as string
-      final numValue = num.tryParse(value);
-      updatedParameters[key] = numValue ?? value;
+      if (value.isEmpty) {
+        updatedParameters[key] = _editedRule.parameters[key];
+      } else {
+        final numValue = num.tryParse(value);
+        updatedParameters[key] = numValue ?? value;
+      }
     });
     
-    // Ensure weight parameter is synced with the weight field
     updatedParameters['weight'] = _editedRule.weight;
+    if (_editedRule.parameters.containsKey('description')) {
+      updatedParameters['description'] = _editedRule.parameters['description'];
+    }
 
     final updatedRule = _editedRule.copyWith(
-      weight: _editedRule.weight, // Ensure weight is saved
+      weight: _editedRule.weight,
       parameters: updatedParameters,
       updatedAt: DateTime.now(),
     );
@@ -584,22 +712,44 @@ class _RuleDetailsDialogState extends State<_RuleDetailsDialog> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      ..._editedRule.parameters.entries.where((entry) => 
-                        entry.key != 'weight' && entry.key != 'description'
-                      ).map((entry) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: TextField(
-                            controller: _parameterControllers[entry.key],
-                            decoration: InputDecoration(
-                              labelText: entry.key.replaceAll(RegExp(r'([A-Z])'), r' $1').trim(),
-                              hintText: entry.value.toString(),
-                              border: const OutlineInputBorder(),
-                              helperText: 'Current: ${entry.value}',
+                      // Special handling for distance matching parameters
+                      if (widget.rule.id == 'distance') ...[
+                        _buildDistanceParameterField(
+                          'maxDistanceKm',
+                          'Maximum Distance',
+                          'Maximum distance in kilometers for job matching. Jobs beyond this distance will receive a score of 0.',
+                          'km',
+                          min: 1.0,
+                          max: 1000.0,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildDistanceParameterField(
+                          'decayFactor',
+                          'Distance Decay Factor',
+                          'Controls how quickly the match score decreases with distance. Higher values = stricter (score drops faster). Lower values = more forgiving (score drops slower).',
+                          '',
+                          min: 0.1,
+                          max: 10.0,
+                        ),
+                      ] else ...[
+                        // Generic parameter fields for other rules
+                        ..._editedRule.parameters.entries.where((entry) => 
+                          entry.key != 'weight' && entry.key != 'description'
+                        ).map((entry) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: TextField(
+                              controller: _parameterControllers[entry.key],
+                              decoration: InputDecoration(
+                                labelText: entry.key.replaceAll(RegExp(r'([A-Z])'), r' $1').trim(),
+                                hintText: entry.value.toString(),
+                                border: const OutlineInputBorder(),
+                                helperText: 'Current: ${entry.value}',
+                              ),
                             ),
-                          ),
-                        );
-                      }),
+                          );
+                        }),
+                      ],
                     ],
                   ],
                 ),

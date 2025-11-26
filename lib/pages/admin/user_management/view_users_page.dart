@@ -42,6 +42,9 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
+      // Check and auto unsuspend expired suspensions
+      await _userService.checkAndAutoUnsuspendExpiredUsers();
+      
       // Load users first (most important)
       final users = await _userService.getAllUsers();
       
@@ -103,7 +106,8 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
         final matchesRole = _selectedRole == 'all' || user.role == _selectedRole;
 
         return matchesSearch && matchesRole;
-      }).toList();
+      }).toList()
+        ..sort((a, b) => a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
     });
   }
 
@@ -119,14 +123,14 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   }
 
   Color _getStatusColor(UserModel user) {
-    if (user.status == 'Deleted') return Colors.grey;
+    if (user.status == 'Inactive' && !user.isActive) return Colors.grey;
     if (user.isSuspended) return Colors.orange;
     if (!user.isActive) return Colors.red;
     return Colors.green;
   }
 
   String _getStatusText(UserModel user) {
-    if (user.status == 'Deleted') return 'Deleted';
+    if (user.status == 'Inactive' && !user.isActive) return 'Inactive';
     if (user.isSuspended) return 'Suspended';
     if (!user.isActive) return 'Inactive';
     return 'Active';
@@ -147,18 +151,26 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   }
 
   Widget _buildActionButtons(UserModel user) {
+    final isDeleted = user.status == 'Inactive' && !user.isActive;
+    
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
           // View Profile Button
           ElevatedButton.icon(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => UserDetailPage(user: user),
-              ),
-            ),
+            onPressed: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => UserDetailPage(user: user),
+                ),
+              );
+              // Refresh if an action was performed
+              if (result == true) {
+                _loadData();
+              }
+            },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue[50],
               foregroundColor: Colors.blue[700],
@@ -176,40 +188,85 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
           ),
           const SizedBox(width: 6),
 
-          // Warning Button
-          ElevatedButton.icon(
-            onPressed: () {
-              if (user.isSuspended) {
-                _unsuspendUser(user);
-              } else {
-                _showWarningDialog(user);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: user.isSuspended ? Colors.green[50] : Colors.orange[50],
-              foregroundColor: user.isSuspended ? Colors.green[700] : Colors.orange[700],
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+          // If user is deleted, show only Activate button
+          if (isDeleted) ...[
+            ElevatedButton.icon(
+              onPressed: () async {
+                await _reactivateUser(user);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green[50],
+                foregroundColor: Colors.green[700],
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              icon: const Icon(Icons.check_circle, size: 16),
+              label: const Text(
+                'Activate',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+              ),
             ),
-            icon: Icon(
-              user.isSuspended ? Icons.check_circle : Icons.warning_amber,
-              size: 16,
-            ),
-            label: Text(
-              user.isSuspended ? 'Activate' : 'Warning',
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
-            ),
-          ),
-          const SizedBox(width: 6),
-
-          // Direct Suspend Button (only show if not suspended)
-          if (!user.isSuspended) ...[
+          ] else ...[
+            // Warning Button
             ElevatedButton.icon(
               onPressed: () {
-                _showSuspendDialog(user);
+                if (user.isSuspended) {
+                  _unsuspendUser(user);
+                } else {
+                  _showWarningDialog(user);
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: user.isSuspended ? Colors.green[50] : Colors.orange[50],
+                foregroundColor: user.isSuspended ? Colors.green[700] : Colors.orange[700],
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              ),
+              icon: Icon(
+                user.isSuspended ? Icons.check_circle : Icons.warning_amber,
+                size: 16,
+              ),
+              label: Text(
+                user.isSuspended ? 'Activate' : 'Warning',
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+              ),
+            ),
+            const SizedBox(width: 6),
+
+            // Direct Suspend Button (only show if not suspended)
+            if (!user.isSuspended) ...[
+              ElevatedButton.icon(
+                onPressed: () {
+                  _showSuspendDialog(user);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red[50],
+                  foregroundColor: Colors.red[700],
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                ),
+                icon: const Icon(Icons.block, size: 16),
+                label: const Text(
+                  'Suspend',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
+
+            // Delete Button
+            ElevatedButton.icon(
+              onPressed: () {
+                _showDeleteDialog(user);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red[50],
@@ -220,35 +277,13 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               ),
-              icon: const Icon(Icons.block, size: 16),
+              icon: const Icon(Icons.delete, size: 16),
               label: const Text(
-                'Suspend',
+                'Delete',
                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
               ),
             ),
-            const SizedBox(width: 6),
           ],
-
-          // Delete Button
-          ElevatedButton.icon(
-            onPressed: () {
-              _showDeleteDialog(user);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red[50],
-              foregroundColor: Colors.red[700],
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            ),
-            icon: const Icon(Icons.delete, size: 16),
-            label: const Text(
-              'Delete',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
-            ),
-          ),
         ],
       ),
     );
@@ -256,323 +291,216 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
 
   Future<void> _showWarningDialog(UserModel user) async {
     final violationController = TextEditingController();
-    final deductAmountController = TextEditingController();
 
-    // Get current strike count and wallet balance
+    // Get current strike count
     final currentStrikes = await _userService.getStrikeCount(user.id);
     final strikesRemaining = 3 - currentStrikes;
-    final walletBalance = await _userService.getWalletBalance(user.id);
-    
-    bool giveWarning = true;
-    bool deductMarks = false;
+
+    // Use a variable that persists across rebuilds
+    bool isLoading = false;
 
     await showDialog(
       context: context,
       builder: (_) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.warning_amber, color: Colors.orange),
-              SizedBox(width: 8),
-              Text('Handle User Warning'),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Row(
               children: [
-                Text(
-                  'Choose actions to take against ${user.fullName}.',
-                  style: const TextStyle(fontSize: 14),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue[200]!),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.account_balance_wallet, color: Colors.blue[700], size: 16),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Current wallet balance: ${walletBalance.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.blue[700],
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.orange[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange[200]!),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.info_outline, color: Colors.orange[700], size: 16),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Current strikes: $currentStrikes/3\n${strikesRemaining > 0 ? '$strikesRemaining more strike${strikesRemaining == 1 ? '' : 's'} until automatic suspension' : 'Account will be suspended automatically'}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.orange[700],
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                // Action checkboxes
-                CheckboxListTile(
-                  value: giveWarning,
-                  onChanged: (value) {
-                    setDialogState(() => giveWarning = value ?? true);
-                  },
-                  title: const Text(
-                    'Give Warning',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                  ),
-                  subtitle: const Text('Add a strike to the user\'s account', style: TextStyle(fontSize: 12)),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  contentPadding: EdgeInsets.zero,
-                ),
-                CheckboxListTile(
-                  value: deductMarks,
-                  onChanged: (value) {
-                    setDialogState(() {
-                      deductMarks = value ?? false;
-                      if (!deductMarks) {
-                        deductAmountController.clear();
-                      }
-                    });
-                  },
-                  title: const Text(
-                    'Deduct Marks',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                  ),
-                  subtitle: const Text('Deduct marks from user\'s wallet', style: TextStyle(fontSize: 12)),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  contentPadding: EdgeInsets.zero,
-                ),
-                if (deductMarks) ...[
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: deductAmountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(
-                      labelText: 'Amount to Deduct *',
-                      hintText: 'Enter amount (can go negative)',
-                      prefixIcon: const Icon(Icons.attach_money, size: 20),
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.all(12),
-                      isDense: true,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                const Text(
-                  'Violation Reason *',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: violationController,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    hintText: 'Explain the violation (this will be sent to the user)...',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.all(12),
-                  ),
-                  textInputAction: TextInputAction.done,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  giveWarning
-                      ? 'The user will receive a warning notification. After 3 strikes, their account will be automatically suspended.'
-                      : 'No warning will be issued.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
+                Icon(Icons.warning_amber, color: Colors.orange),
+                SizedBox(width: 8),
+                Text('Handle User Warning'),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final violationReason = violationController.text.trim();
-
-                if (violationReason.isEmpty) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please provide a violation reason'),
-                      backgroundColor: Colors.red,
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Issue a warning to ${user.fullName}.',
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange[200]!),
                     ),
-                  );
-                  return;
-                }
-
-                if (deductMarks) {
-                  final amountText = deductAmountController.text.trim();
-                  if (amountText.isEmpty) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Please enter the amount to deduct'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                    return;
-                  }
-                  final deductAmount = double.tryParse(amountText);
-                  if (deductAmount == null || deductAmount <= 0) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Please enter a valid amount'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                    return;
-                  }
-                  // Allow negative balances - no need to check if amount exceeds balance
-                }
-
-                if (!giveWarning && !deductMarks) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please select at least one action'),
-                      backgroundColor: Colors.red,
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.orange[700], size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Current strikes: $currentStrikes/3\n${strikesRemaining > 0 ? '$strikesRemaining more strike${strikesRemaining == 1 ? '' : 's'} until automatic suspension' : 'Account will be suspended automatically'}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.orange[700],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  );
-                  return;
-                }
-
-                Navigator.pop(context);
-                await _issueWarning(user, violationReason, giveWarning, deductMarks ? double.tryParse(deductAmountController.text.trim()) : null);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Violation Reason *',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: violationController,
+                    maxLines: 3,
+                    enabled: !isLoading,
+                    decoration: const InputDecoration(
+                      hintText: 'Explain the violation (this will be sent to the user)...',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.all(12),
+                    ),
+                    textInputAction: TextInputAction.done,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'The user will receive a warning notification. After 3 strikes, their account will be automatically suspended.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                  if (isLoading) ...[
+                    const SizedBox(height: 16),
+                    const Center(
+                      child: Column(
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(height: 12),
+                          Text(
+                            'Issuing warning...',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              child: const Text('Apply Actions'),
             ),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed: isLoading ? null : () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: isLoading
+                    ? null
+                    : () async {
+                        final violationReason = violationController.text.trim();
+
+                        if (violationReason.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Please provide a violation reason'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+
+                        // Set loading state and trigger rebuild
+                        // Update loading state and rebuild
+                        isLoading = true;
+                        setDialogState(() {});
+
+                        try {
+                          // Issue warning
+                          final result = await _userService.issueWarning(
+                            userId: user.id,
+                            violationReason: violationReason,
+                          );
+
+                          if (context.mounted) {
+                            Navigator.pop(context);
+
+                            if (result['success'] == true) {
+                              final strikeCount = result['strikeCount'];
+                              final wasSuspended = result['wasSuspended'];
+                              final userName = result['userName'];
+
+                              if (wasSuspended) {
+                                _showSnackBar('$userName has reached 3 strikes and has been automatically suspended');
+                              } else {
+                                _showSnackBar('Warning issued to $userName (Strike $strikeCount/3)');
+                              }
+                            } else {
+                              _showSnackBar('Failed to issue warning: ${result['error']}', isError: true);
+                            }
+
+                            _loadData();
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            Navigator.pop(context);
+                            _showSnackBar('Failed to process action: $e', isError: true);
+                          }
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                ),
+                child: isLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text('Issue Warning'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Future<void> _issueWarning(UserModel user, String violationReason, bool giveWarning, double? deductAmount) async {
-    try {
-      String message = '';
-      
-      if (giveWarning && deductAmount != null && deductAmount > 0) {
-        // Both warning and deduction
-        final result = await _userService.issueWarning(
-          userId: user.id,
-          violationReason: violationReason,
-          deductMarksAmount: deductAmount,
-        );
-
-        if (!mounted) return;
-
-        if (result['success'] == true) {
-          final strikeCount = result['strikeCount'];
-          final wasSuspended = result['wasSuspended'];
-          final userName = result['userName'];
-          final deductionResult = result['deductionResult'] as Map<String, dynamic>?;
-
-          if (wasSuspended) {
-            message = '$userName has reached 3 strikes and has been automatically suspended. ';
-          } else {
-            message = 'Warning issued to $userName (Strike $strikeCount/3). ';
-          }
-          
-          if (deductionResult != null && deductionResult['success'] == true) {
-            message += 'Marks deducted: ${deductAmount.toStringAsFixed(2)}. New balance: ${deductionResult['newBalance']?.toStringAsFixed(2) ?? '0.00'}.';
-          } else if (deductionResult != null) {
-            message += 'Warning issued but mark deduction failed: ${deductionResult['error']}.';
-          }
-          
-          _showSnackBar(message);
-        } else {
-          _showSnackBar('Failed to issue warning: ${result['error']}', isError: true);
-        }
-      } else if (giveWarning) {
-        // Only warning
-        final result = await _userService.issueWarning(
-          userId: user.id,
-          violationReason: violationReason,
-        );
-
-        if (!mounted) return;
-
-        if (result['success'] == true) {
-          final strikeCount = result['strikeCount'];
-          final wasSuspended = result['wasSuspended'];
-          final userName = result['userName'];
-
-          if (wasSuspended) {
-            _showSnackBar('$userName has reached 3 strikes and has been automatically suspended');
-          } else {
-            _showSnackBar('Warning issued to $userName (Strike $strikeCount/3)');
-          }
-        } else {
-          _showSnackBar('Failed to issue warning: ${result['error']}', isError: true);
-        }
-      } else if (deductAmount != null && deductAmount > 0) {
-        // Only deduction
-        final deductionResult = await _userService.deductMarks(
-          userId: user.id,
-          amount: deductAmount,
-          reason: 'Warning action: $violationReason',
-        );
-
-        if (!mounted) return;
-
-        if (deductionResult['success'] == true) {
-          _showSnackBar('Marks deducted: ${deductAmount.toStringAsFixed(2)}. New balance: ${deductionResult['newBalance']?.toStringAsFixed(2) ?? '0.00'}.');
-        } else {
-          _showSnackBar('Failed to deduct marks: ${deductionResult['error']}', isError: true);
-        }
-      }
-
-      _loadData();
-    } catch (e) {
-      if (!mounted) return;
-      _showSnackBar('Failed to process action: $e', isError: true);
-    }
-  }
 
   Future<void> _unsuspendUser(UserModel user) async {
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Activating user...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
     try {
       final result = await _userService.unsuspendUserWithReset(user.id);
 
       if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
 
       if (result['success'] == true) {
         final userName = result['userName'];
@@ -584,6 +512,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
       _loadData();
     } catch (e) {
       if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
       _showSnackBar('Failed to unsuspend user: $e', isError: true);
     }
   }
@@ -592,9 +521,14 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     final reasonController = TextEditingController();
     final durationController = TextEditingController(text: '30'); // Default 30 days
 
+    bool isLoading = false;
+    String? reasonError;
+    String? durationError;
+
     await showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
         title: const Row(
           children: [
             Icon(Icons.block, color: Colors.red),
@@ -645,123 +579,222 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
               TextField(
                 controller: reasonController,
                 maxLines: 3,
-                decoration: const InputDecoration(
+                enabled: !isLoading,
+                onChanged: (value) {
+                  if (reasonError != null) {
+                    setDialogState(() => reasonError = null);
+                  }
+                },
+                decoration: InputDecoration(
                   hintText: 'Explain why this account is being suspended...',
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.all(12),
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: reasonError != null ? Colors.red : Colors.grey,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: reasonError != null ? Colors.red : Colors.grey,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: reasonError != null ? Colors.red : Colors.blue,
+                      width: 2,
+                    ),
+                  ),
+                  errorBorder: const OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.red, width: 2),
+                  ),
+                  focusedErrorBorder: const OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.red, width: 2),
+                  ),
+                  errorText: reasonError,
+                  contentPadding: const EdgeInsets.all(12),
+                  prefixIcon: Icon(
+                    Icons.description_outlined,
+                    color: reasonError != null ? Colors.red : Colors.grey,
+                  ),
+                  fillColor: reasonError != null ? Colors.red[50] : null,
+                  filled: reasonError != null,
                 ),
                 textInputAction: TextInputAction.done,
               ),
               const SizedBox(height: 16),
               const Text(
-                'Suspension Duration (Days)',
+                'Suspension Duration (Days) *',
                 style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: durationController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: false),
-                decoration: const InputDecoration(
+                enabled: !isLoading,
+                onChanged: (value) {
+                  if (durationError != null) {
+                    setDialogState(() => durationError = null);
+                  }
+                },
+                decoration: InputDecoration(
                   hintText: 'Enter number of days (e.g., 30)',
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.all(12),
-                  prefixIcon: Icon(Icons.calendar_today, size: 20),
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: durationError != null ? Colors.red : Colors.grey,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: durationError != null ? Colors.red : Colors.grey,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: durationError != null ? Colors.red : Colors.blue,
+                      width: 2,
+                    ),
+                  ),
+                  errorBorder: const OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.red, width: 2),
+                  ),
+                  focusedErrorBorder: const OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.red, width: 2),
+                  ),
+                  errorText: durationError,
+                  contentPadding: const EdgeInsets.all(12),
+                  prefixIcon: Icon(
+                    Icons.calendar_today,
+                    size: 20,
+                    color: durationError != null ? Colors.red : Colors.grey,
+                  ),
+                  fillColor: durationError != null ? Colors.red[50] : null,
+                  filled: durationError != null,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                'Leave empty or enter 0 for indefinite suspension',
+                'Enter a number greater than 0',
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey[600],
                   fontStyle: FontStyle.italic,
                 ),
               ),
+              if (isLoading) ...[
+                const SizedBox(height: 16),
+                const Center(
+                  child: Column(
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 12),
+                      Text(
+                        'Suspending user...',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: isLoading ? null : () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () async {
-              final suspensionReason = reasonController.text.trim();
-              final durationText = durationController.text.trim();
+            onPressed: isLoading
+                ? null
+                : () async {
+                    final suspensionReason = reasonController.text.trim();
+                    final durationText = durationController.text.trim();
 
-              if (suspensionReason.isEmpty) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please provide a suspension reason'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
+                    // Reset errors
+                    reasonError = null;
+                    durationError = null;
 
-              int? durationDays;
-              if (durationText.isNotEmpty) {
-                durationDays = int.tryParse(durationText);
-                if (durationDays == null || durationDays < 0) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please enter a valid number of days (0 or positive)'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-                // If 0, set to null for indefinite suspension
-                if (durationDays == 0) {
-                  durationDays = null;
-                }
-              }
+                    // Validate reason
+                    if (suspensionReason.isEmpty) {
+                      setDialogState(() {
+                        reasonError = 'Please provide a suspension reason';
+                      });
+                      return;
+                    }
 
-              Navigator.pop(context);
-              await _suspendUser(user, suspensionReason, durationDays);
-            },
+                    // Validate duration - cannot be empty
+                    if (durationText.isEmpty) {
+                      setDialogState(() {
+                        durationError = 'Please enter suspension duration';
+                      });
+                      return;
+                    }
+
+                    int? durationDays = int.tryParse(durationText);
+                    if (durationDays == null || durationDays <= 0) {
+                      setDialogState(() {
+                        durationError = 'Must be greater than 0';
+                      });
+                      return;
+                    }
+
+                    isLoading = true;
+                    setDialogState(() {});
+
+                    try {
+                      await _userService.suspendUser(
+                        user.id,
+                        violationReason: suspensionReason,
+                        durationDays: durationDays,
+                      );
+
+                      if (context.mounted) {
+                        Navigator.pop(context);
+
+                        _showSnackBar('${user.fullName}\'s account has been suspended for $durationDays day${durationDays == 1 ? '' : 's'}');
+
+                        _loadData();
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        _showSnackBar('Failed to suspend user: $e', isError: true);
+                      }
+                    }
+                  },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Suspend Account'),
+            child: isLoading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Text('Suspend Account'),
           ),
         ],
+      ),
       ),
     );
   }
 
-  Future<void> _suspendUser(UserModel user, String suspensionReason, int? durationDays) async {
-    try {
-      await _userService.suspendUser(
-        user.id,
-        violationReason: suspensionReason,
-        durationDays: durationDays,
-      );
-
-      if (!mounted) return;
-
-      final durationText = durationDays != null 
-          ? ' for $durationDays day${durationDays == 1 ? '' : 's'}'
-          : ' indefinitely';
-      _showSnackBar('${user.fullName}\'s account has been suspended$durationText');
-
-      _loadData();
-    } catch (e) {
-      if (!mounted) return;
-      _showSnackBar('Failed to suspend user: $e', isError: true);
-    }
-  }
 
   Future<void> _showDeleteDialog(UserModel user) async {
     final reasonController = TextEditingController();
 
+    bool isLoading = false;
+
     await showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
         title: const Row(
           children: [
             Icon(Icons.delete_forever, color: Colors.red),
@@ -793,69 +826,144 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
               TextField(
                 controller: reasonController,
                 maxLines: 2,
+                enabled: !isLoading,
                 decoration: const InputDecoration(
                   hintText: 'Explain why this account is being deleted...',
                   border: OutlineInputBorder(),
                   contentPadding: EdgeInsets.all(12),
                 ),
               ),
+              if (isLoading) ...[
+                const SizedBox(height: 16),
+                const Center(
+                  child: Column(
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 12),
+                      Text(
+                        'Deleting user...',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: isLoading ? null : () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () async {
-              final deletionReason = reasonController.text.trim();
+            onPressed: isLoading
+                ? null
+                : () async {
+                    final deletionReason = reasonController.text.trim();
 
-              if (deletionReason.isEmpty) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please provide a deletion reason'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
+                    if (deletionReason.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Please provide a deletion reason'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
 
-              Navigator.pop(context);
-              await _deleteUser(user, deletionReason);
-            },
+                    isLoading = true;
+                    setDialogState(() {});
+
+                    try {
+                      final result = await _userService.deleteUserWithNotification(
+                        userId: user.id,
+                        deletionReason: deletionReason,
+                      );
+
+                      if (context.mounted) {
+                        Navigator.pop(context);
+
+                        if (result['success'] == true) {
+                          final userName = result['userName'];
+                          _showSnackBar('$userName\'s account has been deleted');
+                        } else {
+                          _showSnackBar('Failed to delete user: ${result['error']}', isError: true);
+                        }
+
+                        _loadData();
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        _showSnackBar('Failed to delete user: $e', isError: true);
+                      }
+                    }
+                  },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Delete Account'),
+            child: isLoading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Text('Delete Account'),
           ),
         ],
+      ),
       ),
     );
   }
 
-  Future<void> _deleteUser(UserModel user, String deletionReason) async {
+  Future<void> _reactivateUser(UserModel user) async {
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Reactivating user...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
     try {
-      final result = await _userService.deleteUserWithNotification(
-        userId: user.id,
-        deletionReason: deletionReason,
-      );
+      final result = await _userService.reactivateUser(user.id);
 
       if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
 
       if (result['success'] == true) {
         final userName = result['userName'];
-        _showSnackBar('$userName\'s account has been deleted');
+        _showSnackBar('$userName\'s account has been reactivated');
       } else {
-        _showSnackBar('Failed to delete user: ${result['error']}', isError: true);
+        _showSnackBar('Failed to reactivate user: ${result['error']}', isError: true);
       }
 
       _loadData();
     } catch (e) {
       if (!mounted) return;
-      _showSnackBar('Failed to delete user: $e', isError: true);
+      Navigator.pop(context); // Close loading dialog
+      _showSnackBar('Failed to reactivate user: $e', isError: true);
     }
   }
 

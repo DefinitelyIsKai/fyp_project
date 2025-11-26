@@ -471,40 +471,45 @@ class AuthService extends ChangeNotifier {
       // Normalize email
       final normalizedEmail = email.trim().toLowerCase();
 
-      // Check if the email exists in Firestore and has admin role
-      final querySnapshot = await _firestore
-          .collection('users')
-          .where('email', isEqualTo: normalizedEmail)
-          .limit(1)
-          .get();
+      // Try to check if the email exists in Firestore and has admin role
+      // This may fail due to permissions, so we'll handle it gracefully
+      try {
+        final querySnapshot = await _firestore
+            .collection('users')
+            .where('email', isEqualTo: normalizedEmail)
+            .limit(1)
+            .get();
 
-      if (querySnapshot.docs.isEmpty) {
-        return PasswordResetResult(
-          success: false,
-          error: 'No admin account found with this email address.',
-        );
-      }
+        if (querySnapshot.docs.isNotEmpty) {
+          final userData = querySnapshot.docs.first.data();
+          final role = (userData['role'] ?? '').toString().toLowerCase();
+          final allowedRoles = ['manager', 'hr', 'staff', 'admin'];
 
-      final userData = querySnapshot.docs.first.data();
-      final role = userData['role'] ?? '';
-      final allowedRoles = ['manager', 'HR', 'staff', 'admin'];
+          // Check if it's an admin role (case-insensitive)
+          if (!allowedRoles.contains(role)) {
+            return PasswordResetResult(
+              success: false,
+              error: 'This email is not associated with an admin account.',
+            );
+          }
 
-      if (!allowedRoles.contains(role)) {
-        return PasswordResetResult(
-          success: false,
-          error: 'This email is not associated with an admin account.',
-        );
-      }
-
-      // Check if account is active
-      if (userData['isActive'] == false) {
-        return PasswordResetResult(
-          success: false,
-          error: 'This account has been deactivated. Please contact system administrator.',
-        );
+          // Check if account is active
+          if (userData['isActive'] == false) {
+            return PasswordResetResult(
+              success: false,
+              error: 'This account has been deactivated. Please contact system administrator.',
+            );
+          }
+        }
+      } catch (firestoreError) {
+        // If Firestore query fails due to permissions, log it but continue
+        // Firebase Auth will still validate if the email exists
+        debugPrint('Could not verify admin status via Firestore (this is expected if security rules restrict access): $firestoreError');
+        // Continue to send reset email anyway - Firebase Auth will handle validation
       }
 
       // Send password reset email via Firebase Auth
+      // Firebase Auth will only send if the email exists in Auth system
       await _auth.sendPasswordResetEmail(email: normalizedEmail);
 
       return PasswordResetResult(

@@ -5,11 +5,28 @@ class DashboardService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Future<int> getPendingPostsCount() async {
-    final snapshot = await _firestore
-        .collection('posts')
-        .where('status', isEqualTo: 'pending')
-        .get();
-    return snapshot.docs.length;
+    try {
+      final snapshot = await _firestore
+          .collection('posts')
+          .where('status', isEqualTo: 'pending')
+          .get();
+      
+      // Filter out draft posts (only count isDraft: false or null)
+      int count = 0;
+      for (final doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data == null) continue;
+        final isDraft = data['isDraft'] as bool?;
+        // Count only if isDraft is not true (i.e., false or null)
+        if (isDraft != true) {
+          count++;
+        }
+      }
+      return count;
+    } catch (e) {
+      debugPrint('Error getting pending posts count: $e');
+      return 0;
+    }
   }
 
   Future<int> getActiveUsersCount() async {

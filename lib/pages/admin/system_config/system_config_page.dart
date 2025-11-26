@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:fyp_project/pages/admin/system_config/rules_settings_page.dart';
-import 'package:fyp_project/pages/admin/system_config/platform_settings_page.dart';
 import 'package:fyp_project/pages/admin/system_config/matching_rules_page.dart';
-import 'package:fyp_project/pages/admin/system_config/booking_rules_page.dart';
+import 'package:fyp_project/pages/admin/system_config/report_category_config_page.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 
 class SystemConfigPage extends StatelessWidget {
@@ -33,9 +31,7 @@ class SystemConfigPage extends StatelessWidget {
     );
   }
 
-  // -------------------------------------------------------
   // Header
-  // -------------------------------------------------------
   Widget _buildHeaderSection() {
     return Container(
       width: double.infinity,
@@ -55,7 +51,7 @@ class SystemConfigPage extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Manage matching rules, booking rules, and platform settings',
+            'Manage matching rules and report categories',
             style: TextStyle(
               fontSize: 16,
               color: Colors.white.withOpacity(0.9),
@@ -66,9 +62,7 @@ class SystemConfigPage extends StatelessWidget {
     );
   }
 
-  // -------------------------------------------------------
   // Grid options
-  // -------------------------------------------------------
   Widget _buildOptionsGrid(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -77,7 +71,7 @@ class SystemConfigPage extends StatelessWidget {
           crossAxisCount: 2,
           mainAxisSpacing: 16,
           crossAxisSpacing: 16,
-          childAspectRatio: 0.9,
+          childAspectRatio: 0.8,
         ),
         children: [
           _ManagementCard(
@@ -96,48 +90,18 @@ class SystemConfigPage extends StatelessWidget {
             badgeCount: 0,
           ),
           _ManagementCard(
-            title: 'General Rules',
-            description: 'Set parameters such as matching logic, credit allocation, and abuse thresholds',
-            icon: Icons.settings_applications,
-            iconColor: Colors.orange[700]!,
-            backgroundColor: Colors.orange[50]!,
+            title: 'Report Categories',
+            description: 'Configure credit deductions for each report category type',
+            icon: Icons.flag,
+            iconColor: Colors.red[700]!,
+            backgroundColor: Colors.red[50]!,
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const RulesSettingsPage()),
+                MaterialPageRoute(builder: (_) => const ReportCategoryConfigPage()),
               );
             },
-            stats: 'System rules',
-            badgeCount: 0,
-          ),
-          _ManagementCard(
-            title: 'Booking Rules',
-            description: 'Configure booking windows, cancellation policies, and limits',
-            icon: Icons.event_busy,
-            iconColor: Colors.green[700]!,
-            backgroundColor: Colors.green[50]!,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const BookingRulesPage()),
-              );
-            },
-            stats: 'Booking config',
-            badgeCount: 0,
-          ),
-          _ManagementCard(
-            title: 'Platform Settings',
-            description: 'Update platform settings and policy terms',
-            icon: Icons.business,
-            iconColor: Colors.purple[700]!,
-            backgroundColor: Colors.purple[50]!,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const PlatformSettingsPage()),
-              );
-            },
-            stats: 'Platform config',
+            stats: 'Report config',
             badgeCount: 0,
           ),
         ],
@@ -146,9 +110,7 @@ class SystemConfigPage extends StatelessWidget {
   }
 }
 
-// -------------------------------------------------------
-// Reusable Management Card (Same as Post Moderation)
-// -------------------------------------------------------
+// Management Card
 class _ManagementCard extends StatelessWidget {
   final String title;
   final String description;

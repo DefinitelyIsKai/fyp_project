@@ -21,7 +21,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
   final CategoryService _categoryService = CategoryService();
   final TextEditingController _searchController = TextEditingController();
   
-  String _searchType = 'all'; // 'all', 'users', 'posts'
+  String _searchType = 'all'; 
   String _selectedCategory = 'all';
   String _selectedStatus = 'all';
   String _selectedLocation = 'all';
@@ -64,7 +64,6 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
         _roles = roles;
       });
     } catch (e) {
-      // Handle error silently
       debugPrint('Error loading filter options: $e');
     }
   }
@@ -93,6 +92,8 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
               .where((user) => user.role == _selectedRole)
               .toList();
         }
+
+        filteredUsers.sort((a, b) => a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
 
         if (_searchType == 'users') {
           results = filteredUsers;
@@ -143,6 +144,9 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
               })
               .toList();
         }
+
+        // Sort posts alphabetically by title
+        filteredPosts.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
 
         if (_searchType == 'posts') {
           results = filteredPosts;
@@ -666,21 +670,18 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
       'terengganu',
     ];
     
-    // Check for state names in the location string
     for (final state in states) {
       if (locationLower.contains(state)) {
         // Normalize state names
         if (state == 'kuala lumpur') return 'Kuala Lumpur';
         if (state == 'pulau pinang' || state == 'penang') return 'Penang';
         if (state == 'melaka' || state == 'malacca') return 'Melaka';
-        // Capitalize first letter of each word
         return state.split(' ').map((word) => 
           word[0].toUpperCase() + word.substring(1)
         ).join(' ');
       }
     }
     
-    // If no state found, return empty string
     return '';
   }
 
@@ -1366,7 +1367,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
   }
 }
 
-// Filter Chip Widget (Similar to map_oversight_page)
+// Filter Chip Widget
 class _FilterChip extends StatelessWidget {
   final String label;
   final String value;

@@ -36,7 +36,7 @@ class _ManageTagsCategoriesPageState extends State<ManageTagsCategoriesPage> {
       if (!mounted) return;
       _categoriesCount = categories.length;
 
-      // Load tags count - get all categories with their tags for accurate count
+      // Load tags count 
       final tagCategories = await _tagService.getAllTagCategoriesWithTags();
       if (!mounted) return;
       _tagsCount = tagCategories.fold(0, (sum, category) => sum + category.tags.length);
@@ -66,7 +66,6 @@ class _ManageTagsCategoriesPageState extends State<ManageTagsCategoriesPage> {
         backgroundColor: AppColors.primaryDark,
         foregroundColor: Colors.white,
         elevation: 0,
-        // Removed refresh button from actions
       ),
       body: RefreshIndicator(
         onRefresh: _loadData,
@@ -204,7 +203,7 @@ class _ManageTagsCategoriesPageState extends State<ManageTagsCategoriesPage> {
       physics: const AlwaysScrollableScrollPhysics(),
       child: Column(
         children: [
-          // Header Section (static)
+          // Header Section
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -247,7 +246,7 @@ class _ManageTagsCategoriesPageState extends State<ManageTagsCategoriesPage> {
 
           // Loading content
           Container(
-            height: 400, // Give enough space for the refresh indicator to work
+            height: 400, 
             child: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,

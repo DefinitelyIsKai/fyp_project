@@ -48,7 +48,7 @@ class ReportService {
       // Map ReportType to Firestore type values
       String firestoreType;
       if (type == ReportType.user) {
-        firestoreType = 'employee';
+        firestoreType = 'jobseeker'; // Use 'jobseeker' as per Firebase structure
       } else if (type == ReportType.jobPost) {
         firestoreType = 'post';
       } else {
@@ -124,9 +124,10 @@ class ReportService {
     String reportedItemId = '';
     final reportType = data['type']?.toString().toLowerCase() ?? '';
     
-    if (reportType == 'employee') {
-      // For employee reports, the reported item is the employee
-      reportedItemId = data['reportedEmployeeId']?.toString() ?? '';
+    if (reportType == 'employee' || reportType == 'jobseeker') {
+      // For employee/jobseeker reports, the reported item is the jobseeker
+      reportedItemId = data['reportedJobseekerId']?.toString() ?? 
+                      data['reportedEmployeeId']?.toString() ?? '';
     } else if (reportType == 'post') {
       // For post reports, the reported item is the post
       reportedItemId = data['reportedPostId']?.toString() ?? '';
@@ -185,9 +186,9 @@ class ReportService {
     
     // Map Firestore type values to ReportType enum
     if (str == 'post') return ReportType.jobPost;
-    if (str == 'employee') return ReportType.user;
+    if (str == 'employee' || str == 'jobseeker') return ReportType.user;
     if (str.contains('job') || str.contains('post')) return ReportType.jobPost;
-    if (str.contains('user') || str.contains('employee')) return ReportType.user;
+    if (str.contains('user') || str.contains('employee') || str.contains('jobseeker')) return ReportType.user;
     if (str.contains('message')) return ReportType.message;
     return ReportType.other;
   }

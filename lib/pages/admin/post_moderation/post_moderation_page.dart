@@ -8,13 +8,26 @@ import 'package:fyp_project/utils/admin/app_colors.dart';
 class PostModerationPage extends StatelessWidget {
   const PostModerationPage({super.key});
 
-  // Real-time stream: counts all posts with status = "pending"
+  // Real-time stream: counts all posts with status = "pending" (excluding drafts)
   Stream<int> _pendingPostsCountStream() {
     return FirebaseFirestore.instance
         .collection('posts')
         .where('status', isEqualTo: 'pending')
         .snapshots()
-        .map((snap) => snap.size);
+        .map((snap) {
+          // Filter out draft posts (only count isDraft: false or null)
+          int count = 0;
+          for (final doc in snap.docs) {
+            final data = doc.data() as Map<String, dynamic>?;
+            if (data == null) continue;
+            final isDraft = data['isDraft'] as bool?;
+            // Count only if isDraft is not true (i.e., false or null)
+            if (isDraft != true) {
+              count++;
+            }
+          }
+          return count;
+        });
   }
 
   // Real-time stream: counts all categories
@@ -127,7 +140,7 @@ class PostModerationPage extends StatelessWidget {
           // Total Categories
           Expanded(
             child: SizedBox(
-              height: 120, // Fixed height for consistency
+              height: 120,
               child: StreamBuilder<int>(
                 stream: _categoryCountStream(),
                 builder: (context, snapshot) {
@@ -146,11 +159,9 @@ class PostModerationPage extends StatelessWidget {
           const SizedBox(width: 12),
 
           // Rejected Posts
-          // This shows the total count of job posts that have been rejected by moderators
-          // Useful for quality control and monitoring moderation effectiveness
           Expanded(
             child: SizedBox(
-              height: 120, // Fixed height for consistency
+              height: 120,
               child: StreamBuilder<int>(
                 stream: _rejectedPostsCountStream(),
                 builder: (context, snapshot) {
@@ -170,9 +181,7 @@ class PostModerationPage extends StatelessWidget {
     );
   }
 
-  // -------------------------------------------------------
   // Grid options
-  // -------------------------------------------------------
   Widget _buildOptionsGrid(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -184,7 +193,7 @@ class PostModerationPage extends StatelessWidget {
           childAspectRatio: 0.9,
         ),
         children: [
-          // Review Job Posts Card with StreamBuilder for badge
+          // Review Job Posts Card
           StreamBuilder<int>(
             stream: _pendingPostsCountStream(),
             builder: (context, snapshot) {
@@ -245,9 +254,7 @@ class PostModerationPage extends StatelessWidget {
   }
 }
 
-// -------------------------------------------------------
-// Reusable Management Card (Updated with badge support)
-// -------------------------------------------------------
+//  Management Card
 class _ManagementCard extends StatelessWidget {
   final String title;
   final String description;
@@ -380,9 +387,7 @@ class _ManagementCard extends StatelessWidget {
   }
 }
 
-// -------------------------------------------------------
-// Reusable Stat Card (Same as User Management)
-// -------------------------------------------------------
+// Stat Card
 class _StatCard extends StatelessWidget {
   final String title;
   final String value;

@@ -7,6 +7,14 @@ import 'package:fyp_project/utils/admin/app_colors.dart';
 class MessageOversightMainPage extends StatelessWidget {
   const MessageOversightMainPage({super.key});
 
+  // Real-time stream: counts total ratings/reviews
+  Stream<int> _totalRatingsCountStream() {
+    return FirebaseFirestore.instance
+        .collection('reviews')
+        .snapshots()
+        .map((snap) => snap.size);
+  }
+
   // Real-time stream: counts pending reports
   Stream<int> _pendingReportsCountStream() {
     return FirebaseFirestore.instance
@@ -63,6 +71,9 @@ class MessageOversightMainPage extends StatelessWidget {
             ),
           ),
 
+          // Real-time Stats Section
+          _buildStatsSection(),
+
           // Main Options Grid
           Expanded(child: _buildOptionsGrid(context)),
         ],
@@ -70,9 +81,49 @@ class MessageOversightMainPage extends StatelessWidget {
     );
   }
 
-  // -------------------------------------------------------
+  // REAL-TIME STATS
+  Widget _buildStatsSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      child: Row(
+        children: [
+          Expanded(
+            child: StreamBuilder<int>(
+              stream: _totalRatingsCountStream(),
+              builder: (context, snapshot) {
+                final totalRatings = snapshot.data ?? 0;
+                return _StatCard(
+                  title: 'Total Ratings',
+                  value: totalRatings.toString(),
+                  icon: Icons.star_outline,
+                  color: Colors.amber,
+                  subtitle: 'All reviews',
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: StreamBuilder<int>(
+              stream: _pendingReportsCountStream(),
+              builder: (context, snapshot) {
+                final pendingCount = snapshot.data ?? 0;
+                return _StatCard(
+                  title: 'Pending Reports',
+                  value: pendingCount.toString(),
+                  icon: Icons.flag_outlined,
+                  color: Colors.red,
+                  subtitle: 'Requires attention',
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // Grid options
-  // -------------------------------------------------------
   Widget _buildOptionsGrid(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -129,9 +180,7 @@ class MessageOversightMainPage extends StatelessWidget {
   }
 }
 
-// -------------------------------------------------------
-// Reusable Management Card (Updated with badge support)
-// -------------------------------------------------------
+// Management Card
 class _ManagementCard extends StatelessWidget {
   final String title;
   final String description;
@@ -258,6 +307,77 @@ class _ManagementCard extends StatelessWidget {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// Stat Card
+class _StatCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+
+  const _StatCard({
+    required this.title,
+    required this.value,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, size: 20, color: color),
+                ),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[500],
+              ),
+            ),
+          ],
         ),
       ),
     );

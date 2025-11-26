@@ -4,6 +4,10 @@ import 'package:fyp_project/services/admin/post_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
+import 'package:fyp_project/services/user/wallet_service.dart';
+import 'package:fyp_project/services/user/notification_service.dart';
+import 'dart:convert';
+import 'dart:typed_data';
 
 class PostDetailPage extends StatefulWidget {
   final JobPostModel post;
@@ -16,6 +20,7 @@ class PostDetailPage extends StatefulWidget {
 
 class _PostDetailPageState extends State<PostDetailPage> {
   final PostService _postService = PostService();
+  final NotificationService _notificationService = NotificationService();
   bool _isProcessing = false;
   final TextEditingController _rejectionReasonController = TextEditingController();
   String? _ownerName;
@@ -24,27 +29,66 @@ class _PostDetailPageState extends State<PostDetailPage> {
   Future<void> _approvePost() async {
     setState(() => _isProcessing = true);
     try {
+      // Approve the post first
       await _postService.approvePost(widget.post.id);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Post approved successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.of(context).pop(true);
+      
+      // Deduct credits from post owner (deduct both balance and heldCredits)
+      final ownerId = widget.post.ownerId;
+      if (ownerId != null && ownerId.isNotEmpty) {
+        try {
+          final success = await WalletService.deductPostCreationCreditsForUser(
+            firestore: FirebaseFirestore.instance,
+            userId: ownerId,
+            postId: widget.post.id,
+            feeCredits: 200,
+          );
+          
+          if (success) {
+            // Send notification to post owner about credit deduction
+            try {
+              await _notificationService.notifyWalletDebit(
+                userId: ownerId,
+                amount: 200,
+                reason: 'Post creation fee',
+                metadata: {
+                  'postId': widget.post.id,
+                  'postTitle': widget.post.title,
+                  'type': 'post_creation_fee_approved',
+                },
+              );
+            } catch (e) {
+              // Log but don't fail - notification is not critical
+              debugPrint('Error sending credit deduction notification: $e');
+            }
+          } else {
+            debugPrint('Warning: Failed to deduct credits for post ${widget.post.id}');
+          }
+        } catch (e) {
+          // Log error but don't fail approval - credits can be processed later
+          debugPrint('Error deducting credits for post ${widget.post.id}: $e');
+        }
       }
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Post approved and now active'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.of(context).pop(true);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
-      setState(() => _isProcessing = false);
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 
@@ -61,27 +105,69 @@ class _PostDetailPageState extends State<PostDetailPage> {
 
     setState(() => _isProcessing = true);
     try {
-      await _postService.rejectPost(widget.post.id, _rejectionReasonController.text);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Post rejected'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        Navigator.of(context).pop(true);
+      final reason = _rejectionReasonController.text.trim();
+      
+      // Reject the post first
+      await _postService.rejectPost(widget.post.id, reason);
+      
+      // Release held credits for post owner (deduct from heldCredits )
+      final ownerId = widget.post.ownerId;
+      if (ownerId != null && ownerId.isNotEmpty) {
+        try {
+          final success = await WalletService.releasePostCreationCreditsForUser(
+            firestore: FirebaseFirestore.instance,
+            userId: ownerId,
+            postId: widget.post.id,
+            feeCredits: 200,
+          );
+          
+          if (success) {
+            // Send notification to post owner about credit release
+            try {
+              await _notificationService.notifyWalletCredit(
+                userId: ownerId,
+                amount: 200,
+                reason: 'Post creation fee (Released)',
+                metadata: {
+                  'postId': widget.post.id,
+                  'postTitle': widget.post.title,
+                  'rejectionReason': reason,
+                  'type': 'post_creation_fee_released',
+                },
+              );
+            } catch (e) {
+              // Log but don't fail - notification is not critical
+              debugPrint('Error sending credit release notification: $e');
+            }
+          } else {
+            debugPrint('Warning: Failed to release credits for post ${widget.post.id}');
+          }
+        } catch (e) {
+          // Log error but don't fail rejection - credits can be processed later
+          debugPrint('Error releasing credits for post ${widget.post.id}: $e');
+        }
       }
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Post rejected'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      Navigator.of(context).pop(true);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
-      setState(() => _isProcessing = false);
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 
@@ -183,6 +269,163 @@ class _PostDetailPageState extends State<PostDetailPage> {
           fontSize: 12,
           fontWeight: FontWeight.w500,
           color: Colors.white,
+        ),
+      ),
+    );
+  }
+
+  bool _isBase64Image(String data) {
+    if (data.isEmpty) return false;
+    if (data.startsWith('data:image/')) return true;
+    if (data.length > 100) {
+      try {
+        base64Decode(data);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  Uint8List? _decodeBase64Image(String data) {
+    try {
+      if (data.startsWith('data:image/')) {
+        final base64String = data.split(',').last;
+        return base64Decode(base64String);
+      } else {
+        return base64Decode(data);
+      }
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Widget _buildImageAttachment(String attachment) {
+    final imageBytes = _decodeBase64Image(attachment);
+    if (imageBytes == null) {
+      return _buildFileAttachment(attachment);
+    }
+
+    return InkWell(
+      onTap: () => _showImageFullScreen(imageBytes),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 120,
+        height: 120,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[300]!),
+          color: Colors.grey[100],
+        ),
+        child: Stack(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.memory(
+                imageBytes,
+                width: 120,
+                height: 120,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    width: 120,
+                    height: 120,
+                    color: Colors.grey[200],
+                    child: const Icon(Icons.broken_image, color: Colors.grey),
+                  );
+                },
+              ),
+            ),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Icon(
+                  Icons.zoom_in,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFileAttachment(String attachment) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.attach_file, size: 16, color: Colors.grey[700]),
+          const SizedBox(width: 8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 200),
+            child: Text(
+              attachment.length > 30 ? '${attachment.substring(0, 30)}...' : attachment,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[700],
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showImageFullScreen(Uint8List imageBytes) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: Image.memory(
+                  imageBytes,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.close,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -671,25 +914,18 @@ class _PostDetailPageState extends State<PostDetailPage> {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      ...widget.post.attachments!.map((attachment) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          children: [
-                            Icon(Icons.attach_file, size: 16, color: Colors.grey[600]),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                attachment,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[700],
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: widget.post.attachments!.map((attachment) {
+                          final isBase64Image = _isBase64Image(attachment);
+                          if (isBase64Image) {
+                            return _buildImageAttachment(attachment);
+                          } else {
+                            return _buildFileAttachment(attachment);
+                          }
+                        }).toList(),
+                      ),
                     ],
                   ),
                 ),

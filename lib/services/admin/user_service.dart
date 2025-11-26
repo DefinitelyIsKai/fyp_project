@@ -135,10 +135,12 @@ class UserService {
     }
   }
 
-  Future<Map<String, dynamic>> deductMarks({
+  Future<Map<String, dynamic>> deductCredit({
     required String userId,
     required double amount,
     required String reason,
+    String? actionType,
+    String? reportId,
   }) async {
     try {
       // Get current admin user ID for logging
@@ -204,8 +206,8 @@ class UserService {
 
       // Create log entry
       try {
-        await _logsRef.add({
-          'actionType': 'deduct_marks',
+        final logData = <String, dynamic>{
+          'actionType': actionType ?? 'deduct_credit',
           'userId': userId,
           'userName': userName,
           'amount': amount,
@@ -214,7 +216,14 @@ class UserService {
           'reason': reason,
           'createdAt': FieldValue.serverTimestamp(),
           'createdBy': currentAdminId,
-        });
+        };
+        
+        // Add report ID if provided
+        if (reportId != null && reportId.isNotEmpty) {
+          logData['reportId'] = reportId;
+        }
+        
+        await _logsRef.add(logData);
       } catch (logError) {
         print('Error creating log entry: $logError');
         // Don't fail the operation if logging fails
@@ -227,7 +236,7 @@ class UserService {
         'newBalance': finalBalance,
       };
     } catch (e) {
-      print('Error deducting marks: $e');
+      print('Error deducting credit: $e');
       return {
         'success': false,
         'error': e.toString(),
@@ -240,6 +249,7 @@ class UserService {
     required String userId,
     required String violationReason,
     double? deductMarksAmount,
+    String? reportId,
   }) async {
     try {
       // Get user data first
@@ -265,10 +275,12 @@ class UserService {
       // Deduct marks if specified
       Map<String, dynamic>? deductionResult;
       if (deductMarksAmount != null && deductMarksAmount > 0) {
-        deductionResult = await deductMarks(
+        deductionResult = await deductCredit(
           userId: userId,
           amount: deductMarksAmount,
           reason: 'Warning issued: $violationReason',
+          actionType: violationReason, // Use violation reason as action type
+          reportId: reportId,
         );
       }
 
@@ -428,6 +440,14 @@ class UserService {
   }
 
   Future<void> suspendUser(String userId, {String? violationReason, int? durationDays}) async {
+    // Get user data for logging
+    final userDoc = await _usersRef.doc(userId).get();
+    final userData = userDoc.data();
+    final userName = userData?['fullName'] ?? 'User';
+    final userEmail = userData?['email'] ?? '';
+    final previousStatus = userData?['status'] ?? 'unknown';
+    final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
+
     await _usersRef.doc(userId).update({
       'status': 'Suspended',
       'isActive': false,
@@ -435,6 +455,25 @@ class UserService {
       'suspensionReason': violationReason,
       'suspensionDuration': durationDays,
     });
+
+    // Create log entry
+    try {
+      await _logsRef.add({
+        'actionType': 'user_suspended',
+        'userId': userId,
+        'userName': userName,
+        'userEmail': userEmail,
+        'previousStatus': previousStatus,
+        'newStatus': 'Suspended',
+        'reason': violationReason,
+        'durationDays': durationDays,
+        'createdAt': FieldValue.serverTimestamp(),
+        'createdBy': currentAdminId,
+      });
+    } catch (logError) {
+      print('Error creating suspend log entry: $logError');
+      // Don't fail the operation if logging fails
+    }
   }
 
   Future<void> unsuspendUser(String userId) async {
@@ -445,6 +484,77 @@ class UserService {
       'suspensionReason': null,
       'suspensionDuration': null,
     });
+  }
+
+  /// Check and automatically unsuspend users whose suspension period has expired
+  Future<Map<String, dynamic>> checkAndAutoUnsuspendExpiredUsers() async {
+    try {
+      final now = DateTime.now();
+      int unsuspendedCount = 0;
+      List<String> unsuspendedUserNames = [];
+
+      // Get all suspended users
+      final suspendedUsersQuery = await _usersRef
+          .where('status', isEqualTo: 'Suspended')
+          .where('isActive', isEqualTo: false)
+          .get();
+
+      for (var doc in suspendedUsersQuery.docs) {
+        final userData = doc.data();
+        final suspendedAt = userData['suspendedAt'] as Timestamp?;
+        final suspensionDuration = userData['suspensionDuration'] as int?;
+
+        // Skip if no suspension date or if indefinite suspension (duration is null)
+        if (suspendedAt == null || suspensionDuration == null) {
+          continue;
+        }
+
+        // Calculate expiration date
+        final expirationDate = suspendedAt.toDate().add(Duration(days: suspensionDuration));
+
+        // Check if suspension has expired
+        if (now.isAfter(expirationDate)) {
+          final userId = doc.id;
+          final userName = userData['fullName'] ?? 'User';
+
+          // Auto unsuspend the user
+          await unsuspendUser(userId);
+
+          // Create log entry for auto unsuspension
+          try {
+            await _logsRef.add({
+              'actionType': 'user_unsuspended',
+              'userId': userId,
+              'userName': userName,
+              'previousStatus': 'Suspended',
+              'newStatus': 'Active',
+              'reason': 'Automatic unsuspension: Suspension period expired',
+              'createdAt': FieldValue.serverTimestamp(),
+              'createdBy': 'system', // System action
+            });
+          } catch (logError) {
+            print('Error creating auto unsuspend log entry: $logError');
+          }
+
+          unsuspendedCount++;
+          unsuspendedUserNames.add(userName);
+        }
+      }
+
+      return {
+        'success': true,
+        'unsuspendedCount': unsuspendedCount,
+        'unsuspendedUserNames': unsuspendedUserNames,
+      };
+    } catch (e) {
+      print('Error checking and auto unsuspending expired users: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+        'unsuspendedCount': 0,
+        'unsuspendedUserNames': [],
+      };
+    }
   }
 
   Future<Map<String, dynamic>> deleteUserWithNotification({
@@ -459,20 +569,43 @@ class UserService {
         throw Exception('User not found');
       }
 
+      final userName = userData['fullName'] ?? 'User';
+      final userEmail = userData['email'] ?? '';
+      final previousStatus = userData['status'] ?? 'unknown';
+      final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
+
       // Send deletion notification
       await _sendDeletionNotification(
         userId: userId,
-        userName: userData['fullName'] ?? 'User',
-        userEmail: userData['email'] ?? '',
+        userName: userName,
+        userEmail: userEmail,
         deletionReason: deletionReason,
       );
 
       // Delete the user
       await deleteUser(userId, deletionReason: deletionReason);
 
+      // Create log entry
+      try {
+        await _logsRef.add({
+          'actionType': 'user_deleted',
+          'userId': userId,
+          'userName': userName,
+          'userEmail': userEmail,
+          'previousStatus': previousStatus,
+          'newStatus': 'Inactive',
+          'reason': deletionReason,
+          'createdAt': FieldValue.serverTimestamp(),
+          'createdBy': currentAdminId,
+        });
+      } catch (logError) {
+        print('Error creating delete log entry: $logError');
+        // Don't fail the operation if logging fails
+      }
+
       return {
         'success': true,
-        'userName': userData['fullName'] ?? 'User',
+        'userName': userName,
       };
     } catch (e) {
       print('Error deleting user: $e');
@@ -490,6 +623,55 @@ class UserService {
       'deletedAt': FieldValue.serverTimestamp(),
       'deletionReason': deletionReason,
     });
+  }
+
+  Future<Map<String, dynamic>> reactivateUser(String userId) async {
+    try {
+      // Get user data first
+      final userDoc = await _usersRef.doc(userId).get();
+      final userData = userDoc.data();
+      if (userData == null) {
+        throw Exception('User not found');
+      }
+
+      final userName = userData['fullName'] ?? 'User';
+      final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
+
+      // Reactivate the user
+      await _usersRef.doc(userId).update({
+        'status': 'Active',
+        'isActive': true,
+        'deletedAt': null,
+        'deletionReason': null,
+        'reactivatedAt': FieldValue.serverTimestamp(),
+        'reactivatedBy': currentAdminId,
+      });
+
+      // Create log entry
+      try {
+        await _logsRef.add({
+          'actionType': 'user_reactivated',
+          'userId': userId,
+          'userName': userName,
+          'createdAt': FieldValue.serverTimestamp(),
+          'createdBy': currentAdminId,
+        });
+      } catch (logError) {
+        print('Error creating reactivation log entry: $logError');
+        // Don't fail the operation if logging fails
+      }
+
+      return {
+        'success': true,
+        'userName': userName,
+      };
+    } catch (e) {
+      print('Error reactivating user: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
   }
 
   // Notification methods

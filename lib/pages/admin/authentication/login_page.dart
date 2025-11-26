@@ -79,128 +79,8 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  void _navigateToRegister() {
-    Navigator.of(context).pushNamed(AppRoutes.register);
-  }
-
-  Future<void> _showForgotPasswordDialog() async {
-    final emailController = TextEditingController(text: _emailController.text);
-    final formKey = GlobalKey<FormState>();
-    bool isSending = false;
-
-    await showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.lock_reset, color: Colors.blue),
-              SizedBox(width: 8),
-              Text('Reset Password'),
-            ],
-          ),
-          content: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Enter your email address and we\'ll send you a link to reset your password.',
-                  style: TextStyle(fontSize: 14),
-                ),
-                const SizedBox(height: 20),
-                TextFormField(
-                  controller: emailController,
-                  decoration: const InputDecoration(
-                    labelText: 'Email',
-                    prefixIcon: Icon(Icons.email),
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.emailAddress,
-                  enabled: !isSending,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your email';
-                    }
-                    if (!value.contains('@')) {
-                      return 'Please enter a valid email';
-                    }
-                    return null;
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: isSending ? null : () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: isSending
-                  ? null
-                  : () async {
-                      if (formKey.currentState!.validate()) {
-                        setDialogState(() => isSending = true);
-                        try {
-                          final authService =
-                              Provider.of<AuthService>(context, listen: false);
-                          final result = await authService.resetPassword(
-                            emailController.text.trim(),
-                          );
-
-                          if (context.mounted) {
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  result.success
-                                      ? (result.message ??
-                                          'Password reset email sent!')
-                                      : (result.error ??
-                                          'Failed to send reset email.'),
-                                ),
-                                backgroundColor: result.success
-                                    ? Colors.green
-                                    : Colors.red,
-                                behavior: SnackBarBehavior.floating,
-                                duration: const Duration(seconds: 5),
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Error: $e'),
-                                backgroundColor: Colors.red,
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          }
-                        }
-                      }
-                    },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryDark,
-                foregroundColor: Colors.white,
-              ),
-              child: isSending
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text('Send Reset Link'),
-            ),
-          ],
-        ),
-      ),
-    );
+  void _navigateToForgotPassword() {
+    Navigator.of(context).pushNamed(AppRoutes.adminForgotPassword);
   }
 
   @override
@@ -298,7 +178,7 @@ class _LoginPageState extends State<LoginPage> {
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
-                            onPressed: _isLoading ? null : _showForgotPasswordDialog,
+                            onPressed: _isLoading ? null : _navigateToForgotPassword,
                             child: const Text(
                               'Forgot Password?',
                               style: TextStyle(fontSize: 14),
@@ -319,20 +199,6 @@ class _LoginPageState extends State<LoginPage> {
                                 ? const CircularProgressIndicator(color: Colors.white)
                                 : const Text('Login', style: TextStyle(fontSize: 16)),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Text('Don\'t have an account? '),
-                            TextButton(
-                              onPressed: _navigateToRegister,
-                              child: const Text(
-                                'Register',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ],
                         ),
                         const SizedBox(height: 16),
                         Container(

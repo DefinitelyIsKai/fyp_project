@@ -64,7 +64,7 @@ class MessageService {
   /// Review a flagged message
   Future<void> reviewMessage({
     required String messageId,
-    required String action, // 'approved', 'removed', 'warning'
+    required String action,
     required String reviewedBy,
     String? reviewNotes,
   }) async {

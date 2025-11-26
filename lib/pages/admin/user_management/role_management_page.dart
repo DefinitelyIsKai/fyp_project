@@ -27,7 +27,6 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      // Initialize system roles if they don't exist
       await _roleService.initializeSystemRoles();
       if (mounted) {
         _loadRoles();
@@ -355,7 +354,6 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
   }
 
   Widget _buildPermissionChip(String label, Color color) {
-    // Get the darker shade for text
     final textColor = color == AppColors.success 
         ? AppColors.cardGreen 
         : color == AppColors.primaryLight 

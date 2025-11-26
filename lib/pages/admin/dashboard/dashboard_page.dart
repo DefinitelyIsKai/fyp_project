@@ -28,7 +28,6 @@ class _DashboardPageState extends State<DashboardPage> {
   bool _isLoading = true;
 
   // Role-based page access
-  // Note: This is a fallback. The permission system in auth_service should be the source of truth.
   final Map<String, List<String>> roleAccess = {
     'manager': [
       'Post Moderation',
@@ -75,7 +74,6 @@ class _DashboardPageState extends State<DashboardPage> {
             _unresolvedReports = 0; // Set to 0 on error
           });
         }
-        // Cancel subscription to prevent repeated errors
         _reportsSubscription?.cancel();
         _reportsSubscription = null;
       },
@@ -132,7 +130,7 @@ class _DashboardPageState extends State<DashboardPage> {
       appBar: AppBar(
         title: const Text('JobSeek Admin Dashboard',
             style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
-        backgroundColor: const Color(0xFF1E3A5F), // Professional dark blue
+        backgroundColor: const Color(0xFF1E3A5F),
         elevation: 0,
         automaticallyImplyLeading: false,
         actions: [
@@ -152,15 +150,13 @@ class _DashboardPageState extends State<DashboardPage> {
             color: Colors.transparent,
             child: InkWell(
               onTap: () async {
-                // Cancel any active subscriptions first
                 await _reportsSubscription?.cancel();
                 _reportsSubscription = null;
                 
-                // Navigate immediately to prevent ANR
                 if (context.mounted) {
                   Navigator.of(context).pushNamedAndRemoveUntil(
                     AppRoutes.login,
-                    (route) => false, // Remove all previous routes
+                    (route) => false, 
                   );
                 }
                 
@@ -202,8 +198,8 @@ class _DashboardPageState extends State<DashboardPage> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            const Color(0xFF1E3A5F), // Professional dark blue
-            const Color(0xFF2C5282), // Slightly lighter blue
+            const Color(0xFF1E3A5F),
+            const Color(0xFF2C5282), 
           ],
         ),
         borderRadius: const BorderRadius.only(
@@ -233,7 +229,7 @@ class _DashboardPageState extends State<DashboardPage> {
             child: _StatCard(
               title: 'Pending Posts',
               value: _pendingPosts.toString(),
-              color: const Color(0xFFFF9800), // Warm orange
+              color: const Color(0xFFFF9800), 
               icon: Icons.article,
             ),
           ),
@@ -242,7 +238,7 @@ class _DashboardPageState extends State<DashboardPage> {
             child: _StatCard(
               title: 'Active Users',
               value: _activeUsers.toString(),
-              color: const Color(0xFF4CAF50), // Fresh green
+              color: const Color(0xFF4CAF50), 
               icon: Icons.people,
             ),
           ),
@@ -251,7 +247,7 @@ class _DashboardPageState extends State<DashboardPage> {
             child: _StatCard(
               title: 'Unresolved Reports',
               value: _unresolvedReports.toString(),
-              color: const Color(0xFFE53935), // Alert red
+              color: const Color(0xFFE53935), 
               icon: Icons.flag,
             ),
           ),
@@ -274,7 +270,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header with gradient
+              // Header
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -388,11 +384,9 @@ class _DashboardPageState extends State<DashboardPage> {
                       onPressed: () async {
                         Navigator.of(context).pop();
                         
-                        // Cancel any active subscriptions first
                         await _reportsSubscription?.cancel();
                         _reportsSubscription = null;
                         
-                        // Navigate immediately to prevent ANR
                         if (context.mounted) {
                           Navigator.of(context).pushNamedAndRemoveUntil(
                             AppRoutes.login,
@@ -400,7 +394,6 @@ class _DashboardPageState extends State<DashboardPage> {
                           );
                         }
                         
-                        // Perform logout in background (non-blocking)
                         authService.logout().catchError((e) {
                           debugPrint('Logout error (non-critical): $e');
                         });
@@ -503,7 +496,7 @@ class _DashboardPageState extends State<DashboardPage> {
       _DashboardCard(
         title: 'Post Moderation',
         icon: Icons.article,
-        color: const Color(0xFF1976D2), // Professional blue
+        color: const Color(0xFF1976D2), 
         subtitle: '$_pendingPosts pending reviews',
         onTap: () => Navigator.push(
           context,
@@ -513,7 +506,7 @@ class _DashboardPageState extends State<DashboardPage> {
       _DashboardCard(
         title: 'User Management',
         icon: Icons.people_alt,
-        color: const Color(0xFF388E3C), // Professional green
+        color: const Color(0xFF388E3C),
         subtitle: '$_activeUsers active users',
         onTap: () => Navigator.push(
           context,
@@ -523,7 +516,7 @@ class _DashboardPageState extends State<DashboardPage> {
       _DashboardCard(
         title: 'Monitoring & Search',
         icon: Icons.search,
-        color: const Color(0xFFF57C00), // Professional orange
+        color: const Color(0xFFF57C00),
         subtitle: 'Monitor activities',
         onTap: () => Navigator.push(
           context,
@@ -533,7 +526,7 @@ class _DashboardPageState extends State<DashboardPage> {
       _DashboardCard(
         title: 'System Configuration',
         icon: Icons.settings,
-        color: const Color(0xFF7B1FA2), // Professional purple
+        color: const Color(0xFF7B1FA2), 
         subtitle: 'System settings',
         onTap: () => Navigator.push(
           context,
@@ -543,7 +536,7 @@ class _DashboardPageState extends State<DashboardPage> {
       _DashboardCard(
         title: 'Message Oversight',
         icon: Icons.chat_bubble,
-        color: const Color(0xFFC62828), // Professional red
+        color: const Color(0xFFC62828), 
         subtitle: '$_unresolvedReports unresolved reports',
         onTap: () => Navigator.push(
           context,
@@ -553,7 +546,7 @@ class _DashboardPageState extends State<DashboardPage> {
       _DashboardCard(
         title: 'Analytics & Reporting',
         icon: Icons.analytics,
-        color: const Color(0xFF00796B), // Professional teal
+        color: const Color(0xFF00796B), 
         subtitle: 'View reports',
         onTap: () => Navigator.push(
           context,

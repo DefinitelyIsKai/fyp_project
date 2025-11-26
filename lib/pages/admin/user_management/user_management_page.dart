@@ -39,9 +39,7 @@ class UserManagementPage extends StatelessWidget {
     );
   }
 
-  // -------------------------------------------------------
   // Header
-  // -------------------------------------------------------
   Widget _buildHeaderSection() {
     return Container(
       width: double.infinity,
@@ -72,9 +70,7 @@ class UserManagementPage extends StatelessWidget {
     );
   }
 
-  // -------------------------------------------------------
   // REAL-TIME STATS
-  // -------------------------------------------------------
   Widget _buildStatsSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
@@ -147,9 +143,7 @@ class UserManagementPage extends StatelessWidget {
     );
   }
 
-  // -------------------------------------------------------
   // Grid options
-  // -------------------------------------------------------
   Widget _buildOptionsGrid(BuildContext context) {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentAdmin = authService.currentAdmin;
@@ -220,7 +214,6 @@ class UserManagementPage extends StatelessWidget {
       );
     }
 
-    // Add Role Management card if user has access
     if (canAccessRoleManagement) {
       cards.add(
         _ManagementCard(
@@ -256,9 +249,7 @@ class UserManagementPage extends StatelessWidget {
   }
 }
 
-// -------------------------------------------------------
-// Reusable Management Card
-// -------------------------------------------------------
+// Management Card
 class _ManagementCard extends StatelessWidget {
   final String title;
   final String description;
@@ -287,7 +278,7 @@ class _ManagementCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.all(16), // Reduced padding from 20 to 16
+          padding: const EdgeInsets.all(16), 
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -301,15 +292,15 @@ class _ManagementCard extends StatelessWidget {
                 child: Icon(icon, size: 28, color: iconColor),
               ),
 
-              const SizedBox(height: 12), // Reduced from 16 to 12
+              const SizedBox(height: 12),
 
               // Title
               SizedBox(
-                height: 40, // Fixed height for title
+                height: 40, 
                 child: Text(
                   title,
                   style: const TextStyle(
-                    fontSize: 15, // Slightly smaller font
+                    fontSize: 15, 
                     fontWeight: FontWeight.w600,
                     height: 1.2,
                   ),
@@ -318,14 +309,14 @@ class _ManagementCard extends StatelessWidget {
                 ),
               ),
 
-              const SizedBox(height: 6), // Reduced from 8 to 6
+              const SizedBox(height: 6), 
 
               // Description
               Expanded(
                 child: Text(
                   description,
                   style: TextStyle(
-                    fontSize: 11, // Smaller font for description
+                    fontSize: 11,
                     color: Colors.grey[600],
                     height: 1.3,
                   ),
@@ -350,7 +341,7 @@ class _ManagementCard extends StatelessWidget {
                   ),
                   Icon(
                     Icons.arrow_forward_ios,
-                    size: 12, // Smaller icon
+                    size: 12,
                     color: Colors.grey[600],
                   ),
                 ],
@@ -363,9 +354,7 @@ class _ManagementCard extends StatelessWidget {
   }
 }
 
-// -------------------------------------------------------
-// Reusable Stat Card (Top Dashboard Stats)
-// -------------------------------------------------------
+// Stat Card (Top Dashboard Stats)
 class _StatCard extends StatelessWidget {
   final String title;
   final String value;

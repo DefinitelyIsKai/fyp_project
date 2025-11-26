@@ -33,6 +33,23 @@ class _TagsPageState extends State<TagsPage> {
     setState(() => _isLoading = true);
     try {
       final categories = await _tagService.getAllTagCategoriesWithTags();
+      
+      // Yield to UI thread before sorting
+      await Future.delayed(const Duration(milliseconds: 10));
+      
+      // Sort categories alphabetically by title
+      categories.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+      
+      // Sort tags within each category alphabetically by name
+      // Yield periodically to prevent blocking
+      for (var i = 0; i < categories.length; i++) {
+        categories[i].tags.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        if (i % 10 == 0 && i > 0) {
+          await Future.delayed(const Duration(milliseconds: 5));
+        }
+      }
+      
+      if (!mounted) return;
       setState(() {
         _categories = categories;
         // Initialize all categories as expanded by default
@@ -42,21 +59,44 @@ class _TagsPageState extends State<TagsPage> {
         _filterTags();
       });
     } catch (e) {
-      _showErrorSnackBar('Failed to load tags: $e');
+      if (mounted) {
+        _showErrorSnackBar('Failed to load tags: $e');
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   Future<void> _refreshData() async {
     try {
       final categories = await _tagService.getAllTagCategoriesWithTags();
+      
+      // Yield to UI thread before sorting
+      await Future.delayed(const Duration(milliseconds: 10));
+      
+      // Sort categories alphabetically by title
+      categories.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+      
+      // Sort tags within each category alphabetically by name
+      // Yield periodically to prevent blocking
+      for (var i = 0; i < categories.length; i++) {
+        categories[i].tags.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        if (i % 10 == 0 && i > 0) {
+          await Future.delayed(const Duration(milliseconds: 5));
+        }
+      }
+      
+      if (!mounted) return;
       setState(() {
         _categories = categories;
         _filterTags();
       });
     } catch (e) {
-      _showErrorSnackBar('Failed to refresh tags: $e');
+      if (mounted) {
+        _showErrorSnackBar('Failed to refresh tags: $e');
+      }
     }
   }
 
@@ -82,6 +122,8 @@ class _TagsPageState extends State<TagsPage> {
                 category.description.toLowerCase().contains(query));
 
         if (filteredTags.isNotEmpty || shouldShowEmptyCategory || categoryMatchesSearch) {
+          // Sort filtered tags alphabetically by name
+          filteredTags.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
           return TagCategoryModel(
             id: category.id,
             title: category.title,
@@ -95,6 +137,8 @@ class _TagsPageState extends State<TagsPage> {
       })
           .whereType<TagCategoryModel>()
           .toList();
+      // Sort filtered categories alphabetically by title
+      _filteredCategories.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
     });
   }
 
@@ -311,7 +355,7 @@ class _TagsPageState extends State<TagsPage> {
 
                                 if (isEdit) {
                                   await _tagService.updateTagCategory(
-                                      category!.id,
+                                      category.id,
                                       newCategory.title,
                                       newCategory.description
                                   );
@@ -361,217 +405,271 @@ class _TagsPageState extends State<TagsPage> {
     final TextEditingController nameController =
     TextEditingController(text: tag?.name ?? '');
     final isEdit = tag != null;
-    TagCategoryModel? currentCategory = selectedCategory ??
-        (_categories.isNotEmpty ? _categories.first : null);
     final formKey = GlobalKey<FormState>();
+    
+    final categoryNotifier = ValueNotifier<TagCategoryModel?>(
+      selectedCategory ?? (_categories.isNotEmpty ? _categories.first : null)
+    );
+    
+    final isSavingNotifier = ValueNotifier<bool>(false);
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => Container(
-        height: MediaQuery.of(context).size.height * 0.7,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.orange[700],
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    isEdit ? 'Edit Tag' : 'Create New Tag',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return ValueListenableBuilder<TagCategoryModel?>(
+            valueListenable: categoryNotifier,
+            builder: (context, currentCategory, _) {
+              return ValueListenableBuilder<bool>(
+                valueListenable: isSavingNotifier,
+                builder: (context, isSaving, _) {
+                  return Container(
+            height: MediaQuery.of(context).size.height * 0.7,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange[700],
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                  ),
+                  child: Row(
                     children: [
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                      const SizedBox(width: 8),
                       Text(
-                        'Category',
-                        style: TextStyle(
-                          fontSize: 14,
+                        isEdit ? 'Edit Tag' : 'Create New Tag',
+                        style: const TextStyle(
+                          fontSize: 18,
                           fontWeight: FontWeight.w600,
-                          color: Colors.grey[700],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: DropdownButton<TagCategoryModel>(
-                          value: currentCategory,
-                          isExpanded: true,
-                          underline: const SizedBox(),
-                          items: _categories.map((category) {
-                            return DropdownMenuItem(
-                              value: category,
-                              child: Text(
-                                category.title,
-                                style: const TextStyle(fontSize: 16),
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: isEdit ? null : (category) {
-                            setState(() {
-                              currentCategory = category;
-                            });
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      if (currentCategory != null) ...[
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.orange[50],
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.info_outline, color: Colors.orange[700]),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  currentCategory!.description,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.orange[700],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-
-                      Text(
-                        'Tag Name',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey[700],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: nameController,
-                        decoration: InputDecoration(
-                          hintText: 'Enter tag name...',
-                          filled: true,
-                          fillColor: Colors.grey[50],
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          prefixIcon: const Icon(Icons.label_outline),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                        ),
-                        style: const TextStyle(fontSize: 16),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Please enter a tag name';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Keep it short and descriptive (e.g., "Flutter", "Remote", "Senior")',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[500],
-                        ),
-                      ),
-
-                      const Spacer(),
-
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            if (formKey.currentState!.validate() && currentCategory != null) {
-                              try {
-                                if (isEdit) {
-                                  await _tagService.updateTag(
-                                      tag.id,
-                                      nameController.text.trim()
-                                  );
-                                } else {
-                                  final newTag = TagModel(
-                                    id: '',
-                                    categoryId: currentCategory!.id,
-                                    name: nameController.text.trim(),
-                                    isActive: true,
-                                  );
-                                  await _tagService.createTag(newTag);
-                                }
-
-                                Navigator.pop(context);
-                                _loadInitialData();
-                                _showSuccessSnackBar(
-                                    isEdit ? 'Tag updated successfully' : 'Tag created successfully'
-                                );
-                              } catch (e) {
-                                _showErrorSnackBar('Failed to save tag: $e');
-                              }
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange[700],
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 0,
-                          ),
-                          child: Text(
-                            isEdit ? 'Save Changes' : 'Create Tag',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 16,
-                            ),
-                          ),
+                          color: Colors.white,
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Form(
+                      key: formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Category',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[50],
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey[300]!),
+                            ),
+                            child: DropdownButtonFormField<TagCategoryModel>(
+                              value: currentCategory,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              ),
+                              items: _categories.map((category) {
+                                return DropdownMenuItem(
+                                  value: category,
+                                  child: Text(
+                                    category.title,
+                                    style: const TextStyle(fontSize: 16),
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: isEdit ? null : (category) {
+                                categoryNotifier.value = category;
+                              },
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          if (currentCategory != null) ...[
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.orange[50],
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.info_outline, color: Colors.orange[700]),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      currentCategory.description,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.orange[700],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+
+                          Text(
+                            'Tag Name',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: nameController,
+                            decoration: InputDecoration(
+                              hintText: 'Enter tag name...',
+                              filled: true,
+                              fillColor: Colors.grey[50],
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                              prefixIcon: const Icon(Icons.label_outline),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                            ),
+                            style: const TextStyle(fontSize: 16),
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Please enter a tag name';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Keep it short and descriptive',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+
+                          const Spacer(),
+
+                          SizedBox(
+                            width: double.infinity,
+                            height: 56,
+                            child: ElevatedButton(
+                              onPressed: isSaving ? null : () async {
+                                final selectedCategory = categoryNotifier.value;
+                                if (formKey.currentState!.validate() && selectedCategory != null) {
+                                  isSavingNotifier.value = true;
+                                  
+                                  try {
+                                    if (isEdit) {
+                                      await _tagService.updateTag(
+                                          tag.id,
+                                          nameController.text.trim()
+                                      );
+                                    } else {
+                                      final newTag = TagModel(
+                                        id: '',
+                                        categoryId: selectedCategory.id,
+                                        name: nameController.text.trim(),
+                                        isActive: true,
+                                      );
+                                      await _tagService.createTag(newTag);
+                                    }
+
+                                    if (!context.mounted) return;
+                                    Navigator.pop(context);
+                                    
+                                    // Dispose notifiers
+                                    isSavingNotifier.dispose();
+                                    
+                                    // Refresh data asynchronously to prevent blocking
+                                    _refreshData().then((_) {
+                                      if (context.mounted) {
+                                        _showSuccessSnackBar(
+                                            isEdit ? 'Tag updated successfully' : 'Tag created successfully'
+                                        );
+                                      }
+                                    });
+                                  } catch (e) {
+                                    isSavingNotifier.value = false;
+                                    if (context.mounted) {
+                                      _showErrorSnackBar('Failed to save tag: $e');
+                                    }
+                                  }
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.orange[700],
+                                disabledBackgroundColor: Colors.orange[400],
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 0,
+                              ),
+                              child: isSaving
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      ),
+                                    )
+                                  : Text(
+                                      isEdit ? 'Save Changes' : 'Create Tag',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+                  );
+                },
+              );
+            },
+          );
+        },
       ),
-    );
+    ).then((_) {
+      try {
+        categoryNotifier.dispose();
+      } catch (e) {
+      }
+      try {
+        isSavingNotifier.dispose();
+      } catch (e) {
+      }
+    });
   }
 
   void _deleteTag(TagCategoryModel category, TagModel tag) {
@@ -686,7 +784,7 @@ class _TagsPageState extends State<TagsPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Filter Chips - Updated to match CategoriesPage style
+                // Filter Chips
                 Row(
                   children: [
                     Expanded(
@@ -845,7 +943,7 @@ class _TagsPageState extends State<TagsPage> {
   }
 }
 
-// Add this RefreshController class
+//   RefreshController class
 class RefreshController {
   void refreshCompleted() {}
   void refreshFailed() {}
@@ -917,7 +1015,7 @@ class _CreateOptionCard extends StatelessWidget {
   }
 }
 
-// Updated FilterChip to match CategoriesPage style
+//  FilterChip
 class _FilterChip extends StatelessWidget {
   final String label;
   final bool isSelected;

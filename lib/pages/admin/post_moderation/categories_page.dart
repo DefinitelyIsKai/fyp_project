@@ -35,6 +35,8 @@ class _CategoriesPageState extends State<CategoriesPage> {
     setState(() => _isLoading = true);
     try {
       final categories = await _categoryService.getAllCategories();
+      // Sort categories alphabetically by name
+      categories.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
       setState(() => _categories = categories);
       _filterCategories();
     } catch (e) {
@@ -58,6 +60,8 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
         return matchesSearch && matchesFilter;
       }).toList();
+      // Sort filtered categories alphabetically by name
+      _filteredCategories.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     });
   }
 

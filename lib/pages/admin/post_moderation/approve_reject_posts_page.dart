@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/job_post_model.dart';
 import 'package:fyp_project/services/admin/post_service.dart';
@@ -34,17 +35,35 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   
   // Track processing posts to prevent rapid clicks
   final Set<String> _processingPostIds = {};
+  
+  // Debounce timer for search
+  Timer? _searchDebounce;
+  
+  // Throttle timer for stream updates
+  Timer? _streamThrottle;
+  List<JobPostModel>? _pendingPostsUpdate;
 
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(() {
-      setState(() {}); // Trigger rebuild for search
+    _searchController.addListener(_onSearchChanged);
+  }
+  
+  void _onSearchChanged() {
+    // Debounce search to avoid excessive rebuilds
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        setState(() {}); // Trigger rebuild for search
+      }
     });
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _streamThrottle?.cancel();
+    _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     _tabPageController.dispose();
     super.dispose();
@@ -103,14 +122,12 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                 },
               );
             } catch (e) {
-              // Log but don't fail - notification is not critical
               debugPrint('Error sending credit deduction notification: $e');
             }
           } else {
             debugPrint('Warning: Failed to deduct credits for post ${post.id}');
           }
         } catch (e) {
-          // Log error but don't fail approval - credits can be processed later
           debugPrint('Error deducting credits for post ${post.id}: $e');
         }
       }
@@ -139,7 +156,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
     
     final reason = await showDialog<String>(
       context: context,
-      builder: (context) => _RejectPostDialog(post: post), // Pass the post here
+      builder: (context) => _RejectPostDialog(post: post),
     );
 
     if (reason != null && reason.isNotEmpty) {
@@ -177,14 +194,12 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                   },
                 );
               } catch (e) {
-                // Log but don't fail - notification is not critical
                 debugPrint('Error sending credit release notification: $e');
               }
             } else {
               debugPrint('Warning: Failed to release credits for post ${post.id}');
             }
           } catch (e) {
-            // Log error but don't fail rejection - credits can be processed later
             debugPrint('Error releasing credits for post ${post.id}: $e');
           }
         }
@@ -229,39 +244,110 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
     ).toList();
   }
 
-  Future<String> _getUserName(String? ownerId) async {
+  String _getUserName(String? ownerId) {
     if (ownerId == null || ownerId.isEmpty) return 'Unknown User';
-    if (_userNameCache.containsKey(ownerId)) {
-      return _userNameCache[ownerId]!;
-    }
-    
-    try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(ownerId)
-          .get();
-      if (userDoc.exists) {
-        final userName = userDoc.data()?['fullName'] ?? 'Unknown User';
-        _userNameCache[ownerId] = userName;
-        return userName;
-      }
-    } catch (e) {
-      print('Error fetching user name: $e');
-    }
-    return 'Unknown User';
+    return _userNameCache[ownerId] ?? 'Loading...';
   }
 
   void _handlePostsUpdate(List<JobPostModel> posts) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      setState(() {
-        _allPosts = posts;
-        _pendingPosts = _allPosts.where((p) => p.status == 'pending').toList();
-        _activePosts = _allPosts.where((p) => p.status == 'active').toList();
-        _completedPosts = _allPosts.where((p) => p.status == 'completed').toList();
-        _rejectedPosts = _allPosts.where((p) => p.status == 'rejected').toList();
-        _isLoading = false;
+    // Filter out draft posts first (only show isDraft: false or null)
+    final nonDraftPosts = posts.where((p) => p.isDraft != true).toList();
+    
+    _pendingPostsUpdate = nonDraftPosts;
+    
+    _streamThrottle?.cancel();
+    _streamThrottle = Timer(const Duration(milliseconds: 200), () {
+      if (!mounted || _pendingPostsUpdate == null) return;
+      
+      final postsToProcess = _pendingPostsUpdate!;
+      _pendingPostsUpdate = null;
+      
+      // Batch fetch user names for all unique owner IDs (async, non-blocking)
+      _batchFetchUserNames(postsToProcess);
+      
+      // Use addPostFrameCallback to batch UI updates
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        
+        // Simple length check first 
+        if (_allPosts.length == postsToProcess.length && !_isLoading) {
+          if (_allPosts.isNotEmpty && postsToProcess.isNotEmpty) {
+            if (_allPosts.first.id == postsToProcess.first.id &&
+                _allPosts.last.id == postsToProcess.last.id) {
+              return;
+            }
+          }
+        }
+        
+        setState(() {
+          _allPosts = postsToProcess;
+          _pendingPosts = _allPosts.where((p) => p.status == 'pending').toList()
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          _activePosts = _allPosts.where((p) => p.status == 'active').toList()
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          _completedPosts = _allPosts.where((p) => p.status == 'completed').toList()
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          _rejectedPosts = _allPosts.where((p) => p.status == 'rejected').toList()
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          _isLoading = false;
+        });
       });
     });
+  }
+  
+  Future<void> _batchFetchUserNames(List<JobPostModel> posts) async {
+    // Collect all unique owner IDs that aren't cached
+    final uncachedIds = <String>{};
+    for (final post in posts) {
+      final ownerId = post.ownerId ?? post.submitterName;
+      if (ownerId != null && 
+          ownerId.isNotEmpty && 
+          !_userNameCache.containsKey(ownerId)) {
+        uncachedIds.add(ownerId);
+      }
+    }
+    
+    if (uncachedIds.isEmpty) return;
+    
+    final idsToFetch = uncachedIds.take(20).toList();
+    
+    // Batch fetch user names with delay to prevent blocking
+    try {
+      // Process in smaller batches to avoid blocking
+      for (var i = 0; i < idsToFetch.length; i += 10) {
+        final batch = idsToFetch.skip(i).take(10);
+        final futures = batch.map((id) async {
+          try {
+            final userDoc = await FirebaseFirestore.instance
+                .collection('users')
+                .doc(id)
+                .get();
+            if (userDoc.exists) {
+              return MapEntry(id, userDoc.data()?['fullName'] ?? 'Unknown User');
+            }
+          } catch (e) {
+            debugPrint('Error fetching user name for $id: $e');
+          }
+          return MapEntry(id, 'Unknown User');
+        });
+        
+        final results = await Future.wait(futures);
+        if (mounted) {
+          setState(() {
+            for (final entry in results) {
+              _userNameCache[entry.key] = entry.value;
+            }
+          });
+        }
+        
+        // Small delay between batches to yield to UI thread
+        if (i + 10 < idsToFetch.length) {
+          await Future.delayed(const Duration(milliseconds: 50));
+        }
+      }
+    } catch (e) {
+      debugPrint('Error batch fetching user names: $e');
+    }
   }
 
 
@@ -646,7 +732,6 @@ class _RejectPostDialogState extends State<_RejectPostDialog> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Common Reasons - Single Column for better layout
                     LayoutBuilder(
                       builder: (context, constraints) {
                         final isSmallScreen = constraints.maxWidth < 400;
@@ -972,7 +1057,7 @@ class _PostsList extends StatelessWidget {
   final Function(JobPostModel)? onComplete;
   final Function(JobPostModel)? onReopen;
   final Function(JobPostModel) onView;
-  final Future<String> Function(String?) getUserName;
+  final String Function(String?) getUserName;
   final Set<String> processingPostIds;
 
   const _PostsList({
@@ -1085,7 +1170,7 @@ class _PostsList extends StatelessWidget {
   }
 }
 
-// ---------------- Widgets ----------------
+//  Widgets
 
 class _TabButton extends StatelessWidget {
   final String label;
@@ -1171,7 +1256,7 @@ class _PostCard extends StatelessWidget {
   final Function(JobPostModel)? onComplete;
   final Function(JobPostModel)? onReopen;
   final Function(JobPostModel) onView;
-  final Future<String> Function(String?) getUserName;
+  final String Function(String?) getUserName;
   final bool isProcessing;
 
   const _PostCard({
@@ -1466,53 +1551,47 @@ class _PostCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 // Author and date
-                FutureBuilder<String>(
-                  future: getUserName(post.ownerId ?? post.submitterName),
-                  builder: (context, snapshot) {
-                    final userName = snapshot.data ?? 'Loading...';
-                    return Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Colors.blue[50],
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Icon(Icons.person_outline, size: 14, color: Colors.blue[700]),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(Icons.person_outline, size: 14, color: Colors.blue[700]),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        getUserName(post.ownerId ?? post.submitterName),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500,
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            userName,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[700],
-                              fontWeight: FontWeight.w500,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[100],
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${post.createdAt.day}/${post.createdAt.month}/${post.createdAt.year}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    );
-                  },
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${post.createdAt.day}/${post.createdAt.month}/${post.createdAt.year}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 // Action buttons

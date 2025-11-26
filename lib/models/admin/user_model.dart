@@ -61,7 +61,6 @@ class UserModel {
     // Check if user is deleted
     bool isDeleted = status == 'Deleted';
     
-    // Get isActive from JSON, but if status is 'Deleted', force it to false
     bool isActive = isDeleted ? false : (json['isActive'] ?? (status != 'Non-active'));
 
     DateTime parseCreatedAt(dynamic v) {

@@ -42,13 +42,16 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
   }
 
   Future<void> _loadAnalytics() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       final analytics = await _analyticsService.getPostAnalytics(
         startDate: _startDate,
         endDate: _endDate,
       );
-      setState(() => _analytics = analytics);
+      if (mounted) {
+        setState(() => _analytics = analytics);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -59,7 +62,9 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
         );
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -70,7 +75,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           _DateTimeRangePickerDialog(startDate: _startDate, endDate: _endDate),
     );
 
-    if (result != null) {
+    if (result != null && mounted) {
       setState(() {
         _startDate = _startOfDay(result['start']!);
         _endDate = _endOfDay(result['end']!);
@@ -2248,7 +2253,7 @@ class _DateTimeRangePickerDialogState
   @override
   void initState() {
     super.initState();
-    // Extract just the date part (remove time)
+    // Extract just the date part
     _tempStartDate = DateTime(widget.startDate.year, widget.startDate.month, widget.startDate.day);
     _tempEndDate = DateTime(widget.endDate.year, widget.endDate.month, widget.endDate.day);
   }
@@ -2260,7 +2265,7 @@ class _DateTimeRangePickerDialogState
       firstDate: DateTime(2020),
       lastDate: _tempEndDate,
     );
-    if (picked != null) {
+    if (picked != null && mounted) {
       setState(() {
         _tempStartDate = DateTime(picked.year, picked.month, picked.day);
       });
@@ -2274,7 +2279,7 @@ class _DateTimeRangePickerDialogState
       firstDate: _tempStartDate,
       lastDate: DateTime.now(),
     );
-    if (picked != null) {
+    if (picked != null && mounted) {
       setState(() {
         _tempEndDate = DateTime(picked.year, picked.month, picked.day);
       });

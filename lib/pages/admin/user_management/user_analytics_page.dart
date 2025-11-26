@@ -141,8 +141,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
   String _formatGrowthRate(double rate, String metricType, AnalyticsModel analytics) {
     const double newDataIndicator = -999.0;
     if (rate == newDataIndicator) {
-      // Show percentage based on current value when it's new data
-      // Cap all calculated percentages at 100%
+      // Cap percentages at 100%
       switch (metricType) {
         case 'userGrowth':
           return '100.0%';
@@ -182,11 +181,11 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
           return '0.0%';
       }
     }
-    // Hide negative growth rates for registration, engagement, application, and message
+    // Hide negative growth rates
     if (rate < 0 && (metricType == 'registrationGrowth' || metricType == 'engagementGrowth' || metricType == 'applicationGrowth' || metricType == 'messageGrowth')) {
       return '0.0%';
     }
-    // Cap ALL growth rates at 100% to avoid misleading high percentages (for PDF and UI consistency)
+    // Cap ALL growth rates at 100%
     if (rate > 100) {
       return '100.0%';
     }
@@ -198,9 +197,9 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
   }
 
   double _capGrowthRate(double rate) {
-    // Cap growth rate at 100% to avoid misleading high percentages
+    // Cap growth rate at 100%
     if (rate > 100.0) return 100.0;
-    // Hide negative growth rates (show as 0)
+    // Hide negative growth rates
     if (rate < 0) return 0.0;
     return rate;
   }
@@ -1324,11 +1323,9 @@ class _TrendBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Special value -999 indicates "new" data (previous was 0, current > 0)
     const double newDataIndicator = -999.0;
     
     if (trend == newDataIndicator) {
-      // Don't show badge for new data
       return const SizedBox.shrink();
     }
     
@@ -1460,7 +1457,6 @@ class _DateRangePickerDialogState extends State<_DateRangePickerDialog> {
   @override
   void initState() {
     super.initState();
-    // Extract just the date part (remove time)
     _tempStartDate = DateTime(widget.startDate.year, widget.startDate.month, widget.startDate.day);
     _tempEndDate = DateTime(widget.endDate.year, widget.endDate.month, widget.endDate.day);
   }

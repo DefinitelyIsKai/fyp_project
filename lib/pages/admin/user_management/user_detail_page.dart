@@ -67,6 +67,12 @@ class UserDetailPage extends StatelessWidget {
   }
 
   void _showStatusConfirmationDialog(BuildContext context, UserService userService, String action) {
+    if (action == 'delete') {
+      // For delete, show a dialog with reason input
+      _showDeleteDialog(context, userService);
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -111,16 +117,43 @@ class UserDetailPage extends StatelessWidget {
   }
 
   Future<void> _performStatusAction(BuildContext context, UserService userService, String action) async {
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Center(
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text(
+                  action == 'suspend' ? 'Suspending user...' :
+                  action == 'activate' ? 'Activating user...' :
+                  'Deleting user...',
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
     try {
       if (action == 'suspend') {
         await userService.suspendUser(user.id);
       } else if (action == 'activate') {
         await userService.unsuspendUser(user.id);
       } else if (action == 'delete') {
-        await userService.deleteUser(user.id);
+
+        return;
       }
 
       if (!context.mounted) return;
+      Navigator.pop(context); // Close loading dialog
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -140,6 +173,7 @@ class UserDetailPage extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
+        Navigator.pop(context); // Close loading dialog
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: ${e.toString()}'),
@@ -173,7 +207,7 @@ class UserDetailPage extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
-              // Refresh user data if needed
+              // Refresh user data
               Navigator.pop(context, true);
             },
             tooltip: 'Refresh',
@@ -362,7 +396,6 @@ class UserDetailPage extends StatelessWidget {
   Widget _buildWalletCard() {
     final userService = UserService();
     
-    // Debug: Print user ID
     print('UserDetailPage - User ID: ${user.id}');
     
     return FutureBuilder<double>(
@@ -651,9 +684,12 @@ class UserDetailPage extends StatelessWidget {
     final currentStrikes = await userService.getStrikeCount(user.id);
     final strikesRemaining = 3 - currentStrikes;
 
+    bool isLoading = false;
+
     await showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
         title: const Text('Issue Warning'),
         content: SingleChildScrollView(
           child: Column(
@@ -699,6 +735,7 @@ class UserDetailPage extends StatelessWidget {
               TextField(
                 controller: violationController,
                 maxLines: 3,
+                enabled: !isLoading,
                 decoration: const InputDecoration(
                   hintText: 'Explain the violation (this will be sent to the user)...',
                   border: OutlineInputBorder(),
@@ -715,102 +752,139 @@ class UserDetailPage extends StatelessWidget {
                   fontStyle: FontStyle.italic,
                 ),
               ),
+              if (isLoading) ...[
+                const SizedBox(height: 16),
+                const Center(
+                  child: Column(
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 12),
+                      Text(
+                        'Issuing warning...',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: isLoading ? null : () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () async {
-              final violationReason = violationController.text.trim();
+            onPressed: isLoading
+                ? null
+                : () async {
+                    final violationReason = violationController.text.trim();
 
-              if (violationReason.isEmpty) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please provide a violation reason'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
+                    if (violationReason.isEmpty) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Please provide a violation reason'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
 
-              Navigator.pop(context);
-              await _issueWarning(context, userService, violationReason);
-            },
+                    isLoading = true;
+                    setDialogState(() {});
+
+                    try {
+                      final result = await userService.issueWarning(
+                        userId: user.id,
+                        violationReason: violationReason,
+                      );
+
+                      if (context.mounted) {
+                        Navigator.pop(context);
+
+                        if (result['success'] == true) {
+                          final strikeCount = result['strikeCount'];
+                          final wasSuspended = result['wasSuspended'];
+                          final userName = result['userName'];
+
+                          if (wasSuspended) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('$userName has reached 3 strikes and has been automatically suspended'),
+                                backgroundColor: Colors.orange,
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Warning issued to $userName (Strike $strikeCount/3)'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Failed to issue warning: ${result['error']}'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+
+                        if (context.mounted) {
+                          Navigator.pop(context, true);
+                        }
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Failed to issue warning: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Issue Warning'),
+            child: isLoading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Text('Issue Warning'),
           ),
         ],
       ),
+      ),
     );
-  }
-
-  Future<void> _issueWarning(BuildContext context, UserService userService, String violationReason) async {
-    try {
-      final result = await userService.issueWarning(
-        userId: user.id,
-        violationReason: violationReason,
-      );
-
-      if (!context.mounted) return;
-
-      if (result['success'] == true) {
-        final strikeCount = result['strikeCount'];
-        final wasSuspended = result['wasSuspended'];
-        final userName = result['userName'];
-
-        if (wasSuspended) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('$userName has reached 3 strikes and has been automatically suspended'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Warning issued to $userName (Strike $strikeCount/3)'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to issue warning: ${result['error']}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-
-      if (context.mounted) {
-        Navigator.pop(context, true);
-      }
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to issue warning: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
   }
 
   Future<void> _showSuspendDialog(BuildContext context, UserService userService) async {
     final reasonController = TextEditingController();
     final durationController = TextEditingController(text: '30'); // Default 30 days
 
+    bool isLoading = false;
+    String? reasonError;
+    String? durationError;
+
     await showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
         title: const Row(
           children: [
             Icon(Icons.block, color: Colors.red),
@@ -861,129 +935,421 @@ class UserDetailPage extends StatelessWidget {
               TextField(
                 controller: reasonController,
                 maxLines: 3,
-                decoration: const InputDecoration(
+                enabled: !isLoading,
+                onChanged: (value) {
+                  if (reasonError != null) {
+                    setDialogState(() => reasonError = null);
+                  }
+                },
+                decoration: InputDecoration(
                   hintText: 'Explain why this account is being suspended...',
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.all(12),
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: reasonError != null ? Colors.red : Colors.grey,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: reasonError != null ? Colors.red : Colors.grey,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: reasonError != null ? Colors.red : Colors.blue,
+                      width: 2,
+                    ),
+                  ),
+                  errorBorder: const OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.red, width: 2),
+                  ),
+                  focusedErrorBorder: const OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.red, width: 2),
+                  ),
+                  errorText: reasonError,
+                  contentPadding: const EdgeInsets.all(12),
+                  prefixIcon: Icon(
+                    Icons.description_outlined,
+                    color: reasonError != null ? Colors.red : Colors.grey,
+                  ),
+                  fillColor: reasonError != null ? Colors.red[50] : null,
+                  filled: reasonError != null,
                 ),
                 textInputAction: TextInputAction.done,
               ),
               const SizedBox(height: 16),
               const Text(
-                'Suspension Duration (Days)',
+                'Suspension Duration (Days) *',
                 style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: durationController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: false),
-                decoration: const InputDecoration(
+                enabled: !isLoading,
+                onChanged: (value) {
+                  if (durationError != null) {
+                    setDialogState(() => durationError = null);
+                  }
+                },
+                decoration: InputDecoration(
                   hintText: 'Enter number of days (e.g., 30)',
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.all(12),
-                  prefixIcon: Icon(Icons.calendar_today, size: 20),
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: durationError != null ? Colors.red : Colors.grey,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: durationError != null ? Colors.red : Colors.grey,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color: durationError != null ? Colors.red : Colors.blue,
+                      width: 2,
+                    ),
+                  ),
+                  errorBorder: const OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.red, width: 2),
+                  ),
+                  focusedErrorBorder: const OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.red, width: 2),
+                  ),
+                  errorText: durationError,
+                  contentPadding: const EdgeInsets.all(12),
+                  prefixIcon: Icon(
+                    Icons.calendar_today,
+                    size: 20,
+                    color: durationError != null ? Colors.red : Colors.grey,
+                  ),
+                  fillColor: durationError != null ? Colors.red[50] : null,
+                  filled: durationError != null,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                'Leave empty or enter 0 for indefinite suspension',
+                'Enter a number greater than 0',
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey[600],
                   fontStyle: FontStyle.italic,
                 ),
               ),
+              if (isLoading) ...[
+                const SizedBox(height: 16),
+                const Center(
+                  child: Column(
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 12),
+                      Text(
+                        'Suspending user...',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: isLoading ? null : () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () async {
-              final suspensionReason = reasonController.text.trim();
-              final durationText = durationController.text.trim();
+            onPressed: isLoading
+                ? null
+                : () async {
+                    final suspensionReason = reasonController.text.trim();
+                    final durationText = durationController.text.trim();
 
-              if (suspensionReason.isEmpty) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please provide a suspension reason'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
+                    // Reset errors
+                    reasonError = null;
+                    durationError = null;
 
-              int? durationDays;
-              if (durationText.isNotEmpty) {
-                durationDays = int.tryParse(durationText);
-                if (durationDays == null || durationDays < 0) {
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please enter a valid number of days (0 or positive)'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-                // If 0, set to null for indefinite suspension
-                if (durationDays == 0) {
-                  durationDays = null;
-                }
-              }
+                    // Validate reason
+                    if (suspensionReason.isEmpty) {
+                      setDialogState(() {
+                        reasonError = 'Please provide a suspension reason';
+                      });
+                      return;
+                    }
 
-              Navigator.pop(context);
-              await _suspendUser(context, userService, suspensionReason, durationDays);
-            },
+                    // Validate duration - cannot be empty
+                    if (durationText.isEmpty) {
+                      setDialogState(() {
+                        durationError = 'Please enter suspension duration';
+                      });
+                      return;
+                    }
+
+                    int? durationDays = int.tryParse(durationText);
+                    if (durationDays == null || durationDays <= 0) {
+                      setDialogState(() {
+                        durationError = 'Must be greater than 0';
+                      });
+                      return;
+                    }
+
+                    isLoading = true;
+                    setDialogState(() {});
+
+                    try {
+                      await userService.suspendUser(
+                        user.id,
+                        violationReason: suspensionReason,
+                        durationDays: durationDays,
+                      );
+
+                      if (context.mounted) {
+                        Navigator.pop(context);
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('${user.fullName}\'s account has been suspended for $durationDays day${durationDays == 1 ? '' : 's'}'),
+                            backgroundColor: Colors.orange,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+
+                        if (context.mounted) {
+                          Navigator.pop(context, true);
+                        }
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Failed to suspend user: $e'),
+                            backgroundColor: Colors.red,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    }
+                  },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Suspend Account'),
+            child: isLoading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Text('Suspend Account'),
           ),
         ],
+      ),
       ),
     );
   }
 
-  Future<void> _suspendUser(BuildContext context, UserService userService, String suspensionReason, int? durationDays) async {
-    try {
-      await userService.suspendUser(
-        user.id,
-        violationReason: suspensionReason,
-        durationDays: durationDays,
-      );
+  Future<void> _showDeleteDialog(BuildContext context, UserService userService) async {
+    final reasonController = TextEditingController();
 
-      if (!context.mounted) return;
+    bool isLoading = false;
+    String? reasonError;
 
-      final durationText = durationDays != null 
-          ? ' for $durationDays day${durationDays == 1 ? '' : 's'}'
-          : ' indefinitely';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${user.fullName}\'s account has been suspended$durationText'),
-          backgroundColor: Colors.orange,
-          behavior: SnackBarBehavior.floating,
+    await showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.delete_forever, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Delete User Account'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'You are about to permanently delete ${user.fullName}\'s account.',
+                  style: const TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'This action cannot be undone and will permanently remove all user data.',
+                  style: TextStyle(fontSize: 12, color: Colors.red),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Deletion Reason *',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: reasonController,
+                  maxLines: 2,
+                  enabled: !isLoading,
+                  onChanged: (value) {
+                    if (reasonError != null) {
+                      setDialogState(() => reasonError = null);
+                    }
+                  },
+                  decoration: InputDecoration(
+                    hintText: 'Explain why this account is being deleted...',
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide(
+                        color: reasonError != null ? Colors.red : Colors.grey,
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(
+                        color: reasonError != null ? Colors.red : Colors.grey,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(
+                        color: reasonError != null ? Colors.red : Colors.blue,
+                        width: 2,
+                      ),
+                    ),
+                    errorBorder: const OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.red, width: 2),
+                    ),
+                    focusedErrorBorder: const OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.red, width: 2),
+                    ),
+                    errorText: reasonError,
+                    contentPadding: const EdgeInsets.all(12),
+                    prefixIcon: Icon(
+                      Icons.description_outlined,
+                      color: reasonError != null ? Colors.red : Colors.grey,
+                    ),
+                    fillColor: reasonError != null ? Colors.red[50] : null,
+                    filled: reasonError != null,
+                  ),
+                ),
+                if (isLoading) ...[
+                  const SizedBox(height: 16),
+                  const Center(
+                    child: Column(
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 12),
+                        Text(
+                          'Deleting user...',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isLoading ? null : () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: isLoading
+                  ? null
+                  : () async {
+                      final deletionReason = reasonController.text.trim();
+
+                      // Reset errors
+                      reasonError = null;
+
+                      // Validate reason
+                      if (deletionReason.isEmpty) {
+                        setDialogState(() {
+                          reasonError = 'Please provide a deletion reason';
+                        });
+                        return;
+                      }
+
+                      isLoading = true;
+                      setDialogState(() {});
+
+                      try {
+                        final result = await userService.deleteUserWithNotification(
+                          userId: user.id,
+                          deletionReason: deletionReason,
+                        );
+
+                        if (context.mounted) {
+                          Navigator.pop(context); // Close delete dialog
+
+                          if (result['success'] == true) {
+                            final userName = result['userName'];
+                            
+                            // Navigate back to view_users_page first
+                            if (context.mounted) {
+                              Navigator.pop(context, true);
+                            }
+                            
+                            // Show success message after navigation
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('$userName\'s account has been deleted'),
+                                  backgroundColor: Colors.red,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to delete user: ${result['error']}'),
+                                backgroundColor: Colors.red,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Failed to delete user: $e'),
+                              backgroundColor: Colors.red,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: isLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text('Delete Account'),
+            ),
+          ],
         ),
-      );
-
-      if (context.mounted) {
-        Navigator.pop(context, true);
-      }
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to suspend user: $e'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
+      ),
+    );
   }
 }
 

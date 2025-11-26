@@ -123,7 +123,6 @@ class AnalyticsModel {
       reportedMessages: json['reportedMessages'] ?? 0,
       additionalMetrics: json['additionalMetrics'],
 
-      // New fields
       newRegistrations: json['newRegistrations'] ?? 0,
       rejectedJobPosts: json['rejectedJobPosts'] ?? 0,
       resolvedReports: json['resolvedReports'] ?? 0,

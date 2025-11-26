@@ -22,7 +22,7 @@ class _MapOversightPageState extends State<MapOversightPage> {
   
   String _selectedStatus = 'all';
   String _selectedCategory = 'all';
-  String _selectedState = 'all'; // Changed from _selectedLocation to _selectedState
+  String _selectedState = 'all';
   String _searchQuery = '';
   DateTime? _startDate;
   DateTime? _endDate;
@@ -36,9 +36,8 @@ class _MapOversightPageState extends State<MapOversightPage> {
   List<JobPostModel> _posts = [];
   List<JobPostModel> _filteredPosts = [];
   Map<String, LatLng> _locationCache = {};
-  Map<String, JobPostModel> _markerPostMap = {}; // Map marker ID to post
+  Map<String, JobPostModel> _markerPostMap = {};
   
-  // Default center (Kuala Lumpur, Malaysia)
   LatLng _center = const LatLng(3.1390, 101.6869);
   double _zoom = 10.0;
 
@@ -139,7 +138,6 @@ class _MapOversightPageState extends State<MapOversightPage> {
     _applyFilters();
   }
 
-  // Extract Malaysian state from location string
   String _extractState(String location) {
     if (location.isEmpty) return '';
     
@@ -170,18 +168,15 @@ class _MapOversightPageState extends State<MapOversightPage> {
     // Check for state names in the location string
     for (final state in states) {
       if (locationLower.contains(state)) {
-        // Normalize state names
         if (state == 'kuala lumpur') return 'Kuala Lumpur';
         if (state == 'pulau pinang' || state == 'penang') return 'Penang';
         if (state == 'melaka' || state == 'malacca') return 'Melaka';
-        // Capitalize first letter of each word
         return state.split(' ').map((word) => 
           word[0].toUpperCase() + word.substring(1)
         ).join(' ');
       }
     }
     
-    // If no state found, return the location as is (might be a city or area)
     return location;
   }
 
@@ -233,7 +228,6 @@ class _MapOversightPageState extends State<MapOversightPage> {
   }
 
   Future<LatLng?> _getCoordinates(String location) async {
-    // Check cache first
     if (_locationCache.containsKey(location)) {
       return _locationCache[location];
     }
@@ -255,7 +249,6 @@ class _MapOversightPageState extends State<MapOversightPage> {
           return coordinates;
         }
       } catch (e2) {
-        // Silently fail - location cannot be geocoded
       }
     }
     return null;
@@ -609,7 +602,7 @@ class _MapOversightPageState extends State<MapOversightPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  // Filter chips row - using Row with Expanded for consistent layout
+                  // Filter chips row
                   Row(
                     children: [
                       Expanded(

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/report_model.dart';
+import 'package:fyp_project/models/admin/report_category_model.dart';
 import 'package:fyp_project/services/admin/report_service.dart';
+import 'package:fyp_project/services/admin/system_config_service.dart';
 import 'package:fyp_project/pages/admin/message_oversight/report_detail_page.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 
@@ -13,10 +15,66 @@ class FlaggedContentPage extends StatefulWidget {
 
 class _FlaggedContentPageState extends State<FlaggedContentPage> {
   final ReportService _reportService = ReportService();
+  final SystemConfigService _configService = SystemConfigService();
   String _selectedStatus = 'all';
   String _selectedType = 'all';
+  String _selectedCategory = 'all';
   String _searchQuery = '';
   bool _isFiltersExpanded = true;
+  
+  // Cache for report categories
+  List<ReportCategoryModel> _reportCategories = [];
+  bool _categoriesLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReportCategories();
+  }
+  
+  Future<void> _loadReportCategories() async {
+    try {
+      final categories = await _configService.getReportCategories();
+      if (mounted) {
+        setState(() {
+          _reportCategories = categories;
+          _categoriesLoaded = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading report categories: $e');
+      if (mounted) {
+        setState(() {
+          _categoriesLoaded = true;
+        });
+      }
+    }
+  }
+  
+  ReportCategoryModel? _getMatchedCategory(String reportReason) {
+    if (!_categoriesLoaded || _reportCategories.isEmpty) return null;
+    
+    try {
+      // Exact match first
+      return _reportCategories.firstWhere(
+        (cat) => cat.name.toLowerCase() == reportReason.toLowerCase() && cat.isEnabled,
+        orElse: () => _reportCategories.firstWhere(
+          (cat) => (cat.name.toLowerCase().contains(reportReason.toLowerCase()) ||
+                   reportReason.toLowerCase().contains(cat.name.toLowerCase())) && cat.isEnabled,
+          orElse: () => ReportCategoryModel(
+            id: '',
+            name: '',
+            description: '',
+            isEnabled: false,
+            creditDeduction: 0,
+            updatedAt: DateTime.now(),
+          ),
+        ),
+      );
+    } catch (e) {
+      return null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +101,7 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
       ),
       body: Column(
         children: [
-          // Header Section with Description
+          // Header
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -195,6 +253,24 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
                                     ),
                                   ],
                                 ),
+                                const SizedBox(height: 8),
+                                _FilterChip(
+                                  label: 'Category',
+                                  value: _selectedCategory == 'all' 
+                                      ? 'All Categories' 
+                                      : _reportCategories.firstWhere(
+                                          (c) => c.id == _selectedCategory,
+                                          orElse: () => ReportCategoryModel(
+                                            id: '',
+                                            name: 'Unknown',
+                                            description: '',
+                                            isEnabled: false,
+                                            creditDeduction: 0,
+                                            updatedAt: DateTime.now(),
+                                          ),
+                                        ).name,
+                                  onTap: () => _showCategoryFilter(),
+                                ),
                                 // Active Filters Indicator
                                 if (_hasActiveFilters()) ...[
                                   const SizedBox(height: 12),
@@ -334,13 +410,14 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
   }
 
   bool _hasActiveFilters() {
-    return _selectedStatus != 'all' || _selectedType != 'all';
+    return _selectedStatus != 'all' || _selectedType != 'all' || _selectedCategory != 'all';
   }
 
   int _getActiveFilterCount() {
     int count = 0;
     if (_selectedStatus != 'all') count++;
     if (_selectedType != 'all') count++;
+    if (_selectedCategory != 'all') count++;
     return count;
   }
 
@@ -348,6 +425,7 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
     setState(() {
       _selectedStatus = 'all';
       _selectedType = 'all';
+      _selectedCategory = 'all';
       _searchQuery = '';
     });
   }
@@ -371,8 +449,8 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
     switch (type) {
       case 'post':
         return 'Post Report';
-      case 'employee':
-        return 'Employee Report';
+      case 'jobseeker':
+        return 'Jobseeker Report';
       case 'message':
         return 'Message';
       case 'other':
@@ -395,7 +473,7 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            ...['all', 'pending', 'underReview', 'resolved', 'dismissed'].map((status) {
+            ...['all', 'pending', 'resolved', 'dismissed'].map((status) {
               return ListTile(
                 title: Text(status == 'all' ? 'All Status' : _getStatusDisplayName(status)),
                 trailing: _selectedStatus == status
@@ -426,7 +504,7 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            ...['all', 'post', 'employee', 'message', 'other'].map((type) {
+            ...['all', 'post', 'jobseeker'].map((type) {
               return ListTile(
                 title: Text(type == 'all' ? 'All Types' : _getTypeDisplayName(type)),
                 trailing: _selectedType == type
@@ -443,6 +521,83 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
       ),
     );
   }
+  
+  void _showCategoryFilter() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.7,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  const Text(
+                    'Select Report Category',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListTile(
+                      title: const Text('All Categories'),
+                      trailing: _selectedCategory == 'all'
+                          ? const Icon(Icons.check, color: Colors.blue)
+                          : null,
+                      onTap: () {
+                        setState(() => _selectedCategory = 'all');
+                        Navigator.pop(context);
+                      },
+                    ),
+                    const Divider(),
+                    if (_categoriesLoaded && _reportCategories.isNotEmpty)
+                      ..._reportCategories.where((c) => c.isEnabled).map((category) {
+                        return ListTile(
+                          title: Text(category.name),
+                          subtitle: Text('${category.creditDeduction} credits deduction'),
+                          trailing: _selectedCategory == category.id
+                              ? const Icon(Icons.check, color: Colors.blue)
+                              : null,
+                          onTap: () {
+                            setState(() => _selectedCategory = category.id);
+                            Navigator.pop(context);
+                          },
+                        );
+                      })
+                    else if (!_categoriesLoaded)
+                      const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: CircularProgressIndicator(),
+                      )
+                    else
+                      const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Text('No categories available'),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Stream<List<ReportModel>> _getReportsStream() {
     if (_selectedStatus == 'all') {
@@ -454,16 +609,23 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
 
   List<ReportModel> _filterReports(List<ReportModel> reports) {
     return reports.where((report) {
-      // Filter by type - map ReportType enum to Firestore type values
+      // Filter by type 
       bool matchesType = true;
       if (_selectedType != 'all') {
         if (_selectedType == 'post') {
           matchesType = report.reportType == ReportType.jobPost;
-        } else if (_selectedType == 'employee') {
+        } else if (_selectedType == 'jobseeker' || _selectedType == 'employee') {
           matchesType = report.reportType == ReportType.user;
         } else {
           matchesType = report.reportType.toString().split('.').last == _selectedType;
         }
+      }
+
+      // Filter by category
+      bool matchesCategory = true;
+      if (_selectedCategory != 'all') {
+        final matchedCategory = _getMatchedCategory(report.reason);
+        matchesCategory = matchedCategory != null && matchedCategory.id == _selectedCategory;
       }
 
       // Filter by search query
@@ -471,13 +633,14 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
           report.reason.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           (report.description?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
 
-      return matchesType && matchesSearch;
+      return matchesType && matchesCategory && matchesSearch;
     }).toList();
   }
 
   Widget _buildReportCard(ReportModel report) {
     final statusColor = _getStatusColor(report.status);
     final typeIcon = _getReportIcon(report.reportType);
+    final matchedCategory = _getMatchedCategory(report.reason);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -535,6 +698,33 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
                             color: Colors.grey[600],
                           ),
                         ),
+                        // Show credit deduction info 
+                        if (matchedCategory != null && matchedCategory.id.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.orange[50],
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.orange[200]!),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.account_balance_wallet, size: 12, color: Colors.orange[700]),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${matchedCategory.creditDeduction} credits deduction',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.orange[800],
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -638,7 +828,7 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
       case ReportType.jobPost:
         return 'Post Report';
       case ReportType.user:
-        return 'Employee Report';
+        return 'Jobseeker Report';
       case ReportType.message:
         return 'Message Report';
       default:
@@ -688,7 +878,7 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
   }
 }
 
-// Filter Chip Widget (Similar to map_oversight_page)
+// Filter Chip Widget
 class _FilterChip extends StatelessWidget {
   final String label;
   final String value;

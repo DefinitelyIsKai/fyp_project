@@ -1,36 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/pages/admin/monitoring/search_filter_page.dart';
-import 'package:fyp_project/pages/admin/message_oversight/flagged_content_page.dart';
 import 'package:fyp_project/pages/admin/monitoring/map_oversight_page.dart';
+import 'package:fyp_project/pages/admin/monitoring/admin_logs_page.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 
 class MonitoringPage extends StatelessWidget {
   const MonitoringPage({super.key});
 
-  // Real-time stream: counts pending reports
-  Stream<int> _pendingReportsCountStream() {
+  // Real-time stream: counts total posts
+  Stream<int> _totalPostsCountStream() {
     return FirebaseFirestore.instance
-        .collection('reports')
-        .where('status', isEqualTo: 'pending')
+        .collection('posts')
         .snapshots()
         .map((snap) => snap.size);
   }
 
-  // Real-time stream: counts flagged messages
-  Stream<int> _flaggedMessagesCountStream() {
-    return FirebaseFirestore.instance
-        .collection('messages')
-        .where('status', isEqualTo: 'reported')
-        .snapshots()
-        .map((snap) => snap.size);
-  }
-
-  // Real-time stream: counts reported users
-  Stream<int> _reportedUsersCountStream() {
+  // Real-time stream: counts total users
+  Stream<int> _totalUsersCountStream() {
     return FirebaseFirestore.instance
         .collection('users')
-        .where('reportCount', isGreaterThan: 0)
         .snapshots()
         .map((snap) => snap.size);
   }
@@ -92,9 +81,7 @@ class MonitoringPage extends StatelessWidget {
     );
   }
 
-  // -------------------------------------------------------
   // REAL-TIME STATS
-  // -------------------------------------------------------
   Widget _buildStatsSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
@@ -102,15 +89,15 @@ class MonitoringPage extends StatelessWidget {
         children: [
           Expanded(
             child: StreamBuilder<int>(
-              stream: _pendingReportsCountStream(),
+              stream: _totalPostsCountStream(),
               builder: (context, snapshot) {
-                final pendingCount = snapshot.data ?? 0;
+                final totalPosts = snapshot.data ?? 0;
                 return _StatCard(
-                  title: 'Pending Reports',
-                  value: pendingCount.toString(),
-                  icon: Icons.flag_outlined,
-                  color: Colors.red,
-                  subtitle: 'Requires attention',
+                  title: 'Total Posts',
+                  value: totalPosts.toString(),
+                  icon: Icons.work_outline,
+                  color: Colors.blue,
+                  subtitle: 'All job posts',
                 );
               },
             ),
@@ -118,31 +105,15 @@ class MonitoringPage extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: StreamBuilder<int>(
-              stream: _flaggedMessagesCountStream(),
+              stream: _totalUsersCountStream(),
               builder: (context, snapshot) {
-                final flaggedCount = snapshot.data ?? 0;
+                final totalUsers = snapshot.data ?? 0;
                 return _StatCard(
-                  title: 'Flagged Messages',
-                  value: flaggedCount.toString(),
-                  icon: Icons.message_outlined,
-                  color: Colors.orange,
-                  subtitle: 'Under review',
-                );
-              },
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: StreamBuilder<int>(
-              stream: _reportedUsersCountStream(),
-              builder: (context, snapshot) {
-                final reportedCount = snapshot.data ?? 0;
-                return _StatCard(
-                  title: 'Reported Users',
-                  value: reportedCount.toString(),
-                  icon: Icons.person_off_outlined,
-                  color: Colors.purple,
-                  subtitle: 'Needs review',
+                  title: 'Total Users',
+                  value: totalUsers.toString(),
+                  icon: Icons.people_outline,
+                  color: Colors.green,
+                  subtitle: 'All registered users',
                 );
               },
             ),
@@ -152,9 +123,7 @@ class MonitoringPage extends StatelessWidget {
     );
   }
 
-  // -------------------------------------------------------
   // Grid options
-  // -------------------------------------------------------
   Widget _buildOptionsGrid(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -183,29 +152,6 @@ class MonitoringPage extends StatelessWidget {
                 badgeCount: 0,
               ),
 
-          // Flagged Content Card with real-time badge
-          StreamBuilder<int>(
-            stream: _pendingReportsCountStream(),
-            builder: (context, snapshot) {
-              final pendingCount = snapshot.data ?? 0;
-              return _ManagementCard(
-                title: 'Flagged Content',
-                description: 'Monitor and review flagged content and user reports',
-                icon: Icons.flag,
-                iconColor: Colors.red[700]!,
-                backgroundColor: Colors.red[50]!,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const FlaggedContentPage()),
-                  );
-                },
-                stats: 'Review reports',
-                badgeCount: pendingCount,
-              );
-            },
-          ),
-
           // Map Oversight Card
           _ManagementCard(
             title: 'Map Oversight',
@@ -222,15 +168,30 @@ class MonitoringPage extends StatelessWidget {
             stats: 'View on map',
             badgeCount: 0,
           ),
+
+          // Admin Logs Card
+          _ManagementCard(
+            title: 'Admin Logs',
+            description: 'View all admin activity logs and system actions',
+            icon: Icons.description,
+            iconColor: Colors.orange[700]!,
+            backgroundColor: Colors.orange[50]!,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AdminLogsPage()),
+              );
+            },
+            stats: 'View logs',
+            badgeCount: 0,
+          ),
         ],
       ),
     );
   }
 }
 
-// -------------------------------------------------------
-// Reusable Management Card (Updated with badge support)
-// -------------------------------------------------------
+// Management Card
 class _ManagementCard extends StatelessWidget {
   final String title;
   final String description;
@@ -363,9 +324,7 @@ class _ManagementCard extends StatelessWidget {
   }
 }
 
-// -------------------------------------------------------
-// Reusable Stat Card
-// -------------------------------------------------------
+//  Stat Card
 class _StatCard extends StatelessWidget {
   final String title;
   final String value;

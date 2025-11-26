@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:fyp_project/models/admin/analytics_model.dart';
 import 'package:fyp_project/services/admin/analytics_service.dart';
-import 'package:fyp_project/pages/admin/analytics/analytics_detail_page.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -19,7 +18,7 @@ class AnalyticsPage extends StatefulWidget {
 class _AnalyticsPageState extends State<AnalyticsPage> {
   final AnalyticsService _analyticsService = AnalyticsService();
   AnalyticsModel? _analytics;
-  AnalyticsModel? _allTimeAnalytics; // For comparison
+  AnalyticsModel? _allTimeAnalytics;
   List<AnalyticsModel> _trendData = [];
   List<Map<String, dynamic>> _creditLogs = [];
   bool _isLoading = true;
@@ -37,7 +36,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   @override
   void initState() {
     super.initState();
-    // Normalize initial dates
+    
     _startDate = _startOfDay(_startDate);
     _endDate = _endOfDay(_endDate);
     _loadAnalytics();
@@ -125,11 +124,72 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   }
 
   double _capGrowthRate(double rate) {
-    // Cap growth rate at 100% to avoid misleading high percentages
+    // Cap growth rate at 100%
     if (rate > 100.0) return 100.0;
-    // Hide negative growth rates (show as 0)
+    // Hide negative growth rates
     if (rate < 0) return 0.0;
     return rate;
+  }
+
+  String _formatGrowthRateForPDF(double rate, String metricType, AnalyticsModel analytics) {
+    const double newDataIndicator = -999.0;
+    if (rate == newDataIndicator) {
+      // Show percentage based on current value
+      // Cap all calculated percentages at 100%
+      switch (metricType) {
+        case 'userGrowth':
+          return '100.0%';
+        case 'activeUserGrowth':
+          if (analytics.totalUsers > 0) {
+            final calculated = (analytics.activeUsers / analytics.totalUsers * 100);
+            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
+          }
+          return '0.0%';
+        case 'registrationGrowth':
+          if (analytics.totalUsers > 0) {
+            final calculated = (analytics.newRegistrations / analytics.totalUsers * 100);
+            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
+          }
+          return '100.0%';
+        case 'engagementGrowth':
+          return '${_capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%';
+        case 'messageGrowth':
+          if (analytics.totalUsers > 0) {
+            final calculated = (analytics.totalMessages / analytics.totalUsers * 100);
+            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
+          }
+          return '0.0%';
+        case 'applicationGrowth':
+          if (analytics.totalUsers > 0) {
+            final calculated = (analytics.totalApplications / analytics.totalUsers * 100);
+            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
+          }
+          return '0.0%';
+        case 'reportGrowth':
+          if (analytics.totalUsers > 0) {
+            final calculated = (analytics.totalReports / analytics.totalUsers * 100);
+            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
+          }
+          return '0.0%';
+        case 'jobPostGrowth':
+          if (analytics.totalUsers > 0) {
+            final calculated = (analytics.totalJobPosts / analytics.totalUsers * 100);
+            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
+          }
+          return '0.0%';
+        default:
+          return '0.0%';
+      }
+    }
+    // Hide negative growth rates
+    if (rate < 0 && (metricType == 'registrationGrowth' || metricType == 'engagementGrowth' || metricType == 'applicationGrowth' || metricType == 'messageGrowth')) {
+      return '0.0%';
+    }
+    // Cap ALL growth rates at 100%
+    if (rate > 100) {
+      return '100.0%';
+    }
+    return '${rate.toStringAsFixed(1)}%';
   }
 
   String _getDateRangeText() {
@@ -144,11 +204,25 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   }
 
   Future<void> _generatePDFReport() async {
-    if (_analytics == null) return;
+    if (_analytics == null || _allTimeAnalytics == null) return;
 
     try {
       final pdf = pw.Document();
       final analytics = _analytics!;
+      final allTime = _allTimeAnalytics!;
+
+      // Calculate credit topup statistics
+      final processedLogs = _creditLogs.where((log) => log['status'] == 'processed').toList();
+      final totalTopupAmount = processedLogs.fold<double>(0.0, (sum, log) => sum + (log['amount'] as double));
+      final totalTopupCredits = processedLogs.fold<int>(0, (sum, log) => sum + (log['credits'] as int));
+      final avgTopupAmount = processedLogs.isNotEmpty ? totalTopupAmount / processedLogs.length : 0.0;
+      final avgTopupCredits = processedLogs.isNotEmpty ? totalTopupCredits / processedLogs.length : 0.0;
+      final maxTopupAmount = processedLogs.isNotEmpty 
+          ? processedLogs.map((log) => log['amount'] as double).reduce((a, b) => a > b ? a : b)
+          : 0.0;
+      final minTopupAmount = processedLogs.isNotEmpty 
+          ? processedLogs.map((log) => log['amount'] as double).reduce((a, b) => a < b ? a : b)
+          : 0.0;
 
       pdf.addPage(
         pw.MultiPage(
@@ -156,103 +230,285 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           margin: const pw.EdgeInsets.all(40),
           build: (pw.Context context) {
             return [
-              pw.Header(
-                level: 0,
+              // Header
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'Platform Analytics Report',
+                    style: pw.TextStyle(
+                      fontSize: 20,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.blue700,
+                    ),
+                  ),
+                  pw.Text(
+                    DateFormat('dd MMM yyyy HH:mm').format(DateTime.now()),
+                    style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 15),
+
+              // Date Range
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                  borderRadius: pw.BorderRadius.circular(6),
+                ),
                 child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
                     pw.Text(
-                      'Platform Analytics Report',
+                      'Period: ',
                       style: pw.TextStyle(
-                        fontSize: 24,
+                        fontSize: 12,
                         fontWeight: pw.FontWeight.bold,
                       ),
                     ),
                     pw.Text(
-                      DateFormat('dd MMM yyyy').format(DateTime.now()),
+                      '${_formatDate(_startDate)} - ${_formatDate(_endDate)}',
                       style: pw.TextStyle(fontSize: 12),
                     ),
                   ],
                 ),
               ),
               pw.SizedBox(height: 20),
-              
-              // Date Range
-              pw.Text(
-                'Period: ${_formatDate(_startDate)} - ${_formatDate(_endDate)}',
-                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-              ),
-              pw.SizedBox(height: 20),
 
-              // Executive Summary
+              // Overview Statistics
               pw.Text(
-                'Executive Summary',
-                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+                'Overview Statistics',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
               ),
               pw.SizedBox(height: 10),
-              pw.Table(
-                border: pw.TableBorder.all(),
-                children: [
-                  _buildPDFTableRow('Total Users', analytics.totalUsers.toString()),
-                  _buildPDFTableRow('Active Users', '${analytics.activeUsers} (${analytics.activeUserPercentage.toStringAsFixed(1)}%)'),
-                  _buildPDFTableRow('New Registrations', analytics.newRegistrations.toString()),
-                  _buildPDFTableRow('Job Posts Created', analytics.totalJobPosts.toString()),
-                  _buildPDFTableRow('Total Applications', analytics.totalApplications.toString()),
-                  _buildPDFTableRow('Flagged Content', analytics.totalReports.toString()),
-                  _buildPDFTableRow('Engagement Rate', '${analytics.engagementRate.toStringAsFixed(1)}%'),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey400,
+                  width: 0.5,
+                ),
+                cellAlignment: pw.Alignment.centerLeft,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                headerStyle: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                cellStyle: pw.TextStyle(fontSize: 9),
+                rowDecoration: pw.BoxDecoration(
+                  border: pw.Border(
+                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  ),
+                ),
+                headers: ['Metric', 'All Time', 'Selected Period'],
+                data: [
+                  ['Total Users', allTime.totalUsers.toString(), analytics.totalUsers.toString()],
+                  ['Active Users', allTime.activeUsers.toString(), analytics.activeUsers.toString()],
+                  ['Inactive Users', allTime.inactiveUsers.toString(), analytics.inactiveUsers.toString()],
+                  ['New Registrations', allTime.newRegistrations.toString(), analytics.newRegistrations.toString()],
+                  ['Total Job Posts', allTime.totalJobPosts.toString(), analytics.totalJobPosts.toString()],
+                  ['Total Applications', allTime.totalApplications.toString(), analytics.totalApplications.toString()],
+                  ['Total Reports', allTime.totalReports.toString(), analytics.totalReports.toString()],
+                  ['Engagement Rate', '${_capEngagementRate(allTime.engagementRate).toStringAsFixed(1)}%', '${_capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%'],
                 ],
               ),
               pw.SizedBox(height: 20),
 
-              // User Activity Trends
+              // User Engagement
               pw.Text(
-                'User Activity Trends',
-                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+                'User Engagement',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
               ),
               pw.SizedBox(height: 10),
-              pw.Table(
-                border: pw.TableBorder.all(),
-                children: [
-                  _buildPDFTableRow('User Growth Rate', '${analytics.userGrowthRate.toStringAsFixed(1)}%'),
-                  _buildPDFTableRow('Active User Growth', '${analytics.activeUserGrowth.toStringAsFixed(1)}%'),
-                  _buildPDFTableRow('Registration Growth', '${analytics.registrationGrowth.toStringAsFixed(1)}%'),
-                  _buildPDFTableRow('Engagement Growth', '${analytics.engagementGrowth.toStringAsFixed(1)}%'),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey400,
+                  width: 0.5,
+                ),
+                cellAlignment: pw.Alignment.centerLeft,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                headerStyle: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                cellStyle: pw.TextStyle(fontSize: 9),
+                rowDecoration: pw.BoxDecoration(
+                  border: pw.Border(
+                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  ),
+                ),
+                headers: ['Metric', 'All Time', 'Selected Period'],
+                data: [
+                  ['Engagement Rate', '${_capEngagementRate(allTime.engagementRate).toStringAsFixed(1)}%', '${_capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%'],
+                  ['Job Applications', allTime.totalApplications.toString(), analytics.totalApplications.toString()],
+                  ['Messages Sent', allTime.totalMessages.toString(), analytics.totalMessages.toString()],
                 ],
               ),
               pw.SizedBox(height: 20),
 
-              // Content & Moderation
+              // Content & Moderation Statistics
               pw.Text(
                 'Content & Moderation Statistics',
-                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
               ),
               pw.SizedBox(height: 10),
-              pw.Table(
-                border: pw.TableBorder.all(),
-                children: [
-                  _buildPDFTableRow('Total Job Posts', analytics.totalJobPosts.toString()),
-                  _buildPDFTableRow('Pending Posts', analytics.pendingJobPosts.toString()),
-                  _buildPDFTableRow('Approved Posts', analytics.approvedJobPosts.toString()),
-                  _buildPDFTableRow('Rejected Posts', analytics.rejectedJobPosts.toString()),
-                  _buildPDFTableRow('Total Reports', analytics.totalReports.toString()),
-                  _buildPDFTableRow('Pending Reports', analytics.pendingReports.toString()),
-                  _buildPDFTableRow('Resolved Reports', analytics.resolvedReports.toString()),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey400,
+                  width: 0.5,
+                ),
+                cellAlignment: pw.Alignment.centerLeft,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                headerStyle: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                cellStyle: pw.TextStyle(fontSize: 9),
+                rowDecoration: pw.BoxDecoration(
+                  border: pw.Border(
+                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  ),
+                ),
+                headers: ['Metric', 'All Time', 'Selected Period'],
+                data: [
+                  ['Total Job Posts', allTime.totalJobPosts.toString(), analytics.totalJobPosts.toString()],
+                  ['Pending Posts', allTime.pendingJobPosts.toString(), analytics.pendingJobPosts.toString()],
+                  ['Approved Posts', allTime.approvedJobPosts.toString(), analytics.approvedJobPosts.toString()],
+                  ['Rejected Posts', allTime.rejectedJobPosts.toString(), analytics.rejectedJobPosts.toString()],
+                  ['Total Reports', allTime.totalReports.toString(), analytics.totalReports.toString()],
+                  ['Pending Reports', allTime.pendingReports.toString(), analytics.pendingReports.toString()],
+                  ['Resolved Reports', allTime.resolvedReports.toString(), analytics.resolvedReports.toString()],
+                  ['Dismissed Reports', allTime.dismissedReports.toString(), analytics.dismissedReports.toString()],
                 ],
               ),
               pw.SizedBox(height: 20),
 
-              // Application Trends
+              // Credit & Billing
               pw.Text(
-                'Application Trends',
-                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+                'Credit & Billing',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
               ),
               pw.SizedBox(height: 10),
-              pw.Table(
-                border: pw.TableBorder.all(),
-                children: [
-                  _buildPDFTableRow('Total Applications', analytics.totalApplications.toString()),
-                  _buildPDFTableRow('Application Growth', '${analytics.applicationGrowth.toStringAsFixed(1)}%'),
-                  _buildPDFTableRow('Avg Applications per Job', analytics.avgApplicationsPerJob.toStringAsFixed(1)),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey400,
+                  width: 0.5,
+                ),
+                cellAlignment: pw.Alignment.centerLeft,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                headerStyle: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                cellStyle: pw.TextStyle(fontSize: 9),
+                rowDecoration: pw.BoxDecoration(
+                  border: pw.Border(
+                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  ),
+                ),
+                headers: ['Metric', 'All Time', 'Selected Period'],
+                data: [
+                  ['Total Credits Used', allTime.totalCreditsUsed.toString(), analytics.totalCreditsUsed.toString()],
+                  ['Active Subscriptions', allTime.activeSubscriptions.toString(), analytics.activeSubscriptions.toString()],
+                  ['Revenue', 'RM ${allTime.revenue.toStringAsFixed(2)}', 'RM ${analytics.revenue.toStringAsFixed(2)}'],
+                  ['Credit Purchases', allTime.creditPurchases.toString(), analytics.creditPurchases.toString()],
+                ],
+              ),
+              pw.SizedBox(height: 20),
+
+              // Credit Topup Statistics
+              if (processedLogs.isNotEmpty) ...[
+                pw.Text(
+                  'Credit Topup Statistics',
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+                pw.TableHelper.fromTextArray(
+                  context: context,
+                  border: pw.TableBorder.all(
+                    color: PdfColors.grey400,
+                    width: 0.5,
+                  ),
+                  cellAlignment: pw.Alignment.centerLeft,
+                  headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                  headerStyle: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                  cellStyle: pw.TextStyle(fontSize: 9),
+                  rowDecoration: pw.BoxDecoration(
+                    border: pw.Border(
+                      bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                    ),
+                  ),
+                  headers: ['Metric', 'Value'],
+                  data: [
+                    ['Total Topup Amount', 'RM ${totalTopupAmount.toStringAsFixed(2)}'],
+                    ['Total Credits', totalTopupCredits.toString()],
+                    ['Average Amount', 'RM ${avgTopupAmount.toStringAsFixed(2)}'],
+                    ['Average Credits', avgTopupCredits.toStringAsFixed(0)],
+                    ['Max Topup', 'RM ${maxTopupAmount.toStringAsFixed(2)}'],
+                    ['Min Topup', 'RM ${minTopupAmount.toStringAsFixed(2)}'],
+                    ['Total Transactions', '${processedLogs.length} processed'],
+                  ],
+                ),
+                pw.SizedBox(height: 20),
+              ],
+
+              // Growth Rates
+              pw.Text(
+                'Growth Rates',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey400,
+                  width: 0.5,
+                ),
+                cellAlignment: pw.Alignment.centerLeft,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                headerStyle: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                cellStyle: pw.TextStyle(fontSize: 9),
+                rowDecoration: pw.BoxDecoration(
+                  border: pw.Border(
+                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  ),
+                ),
+                headers: ['Metric', 'Growth Rate'],
+                data: [
+                  ['User Growth', _formatGrowthRateForPDF(analytics.userGrowthRate, 'userGrowth', analytics)],
+                  ['Active User Growth', _formatGrowthRateForPDF(analytics.activeUserGrowth, 'activeUserGrowth', analytics)],
+                  ['Registration Growth', _formatGrowthRateForPDF(analytics.registrationGrowth, 'registrationGrowth', analytics)],
+                  ['Engagement Growth', _formatGrowthRateForPDF(analytics.engagementGrowth, 'engagementGrowth', analytics)],
+                  ['Message Growth', _formatGrowthRateForPDF(analytics.messageGrowth, 'messageGrowth', analytics)],
+                  ['Application Growth', _formatGrowthRateForPDF(analytics.applicationGrowth, 'applicationGrowth', analytics)],
+                  ['Report Growth', _formatGrowthRateForPDF(analytics.reportGrowth, 'reportGrowth', analytics)],
+                  ['Job Post Growth', _formatGrowthRateForPDF(analytics.jobPostGrowth, 'jobPostGrowth', analytics)],
                 ],
               ),
             ];
@@ -270,20 +526,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     }
   }
 
-  pw.TableRow _buildPDFTableRow(String label, String value) {
-    return pw.TableRow(
-      children: [
-        pw.Padding(
-          padding: const pw.EdgeInsets.all(8),
-          child: pw.Text(label, style: pw.TextStyle(fontSize: 12)),
-        ),
-        pw.Padding(
-          padding: const pw.EdgeInsets.all(8),
-          child: pw.Text(value, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-        ),
-      ],
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -448,55 +690,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                   const SizedBox(height: 20),
 
                   _buildAnalyticsCards(),
-                  const SizedBox(height: 20),
-
-                  // Action Buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => AnalyticsDetailPage(analytics: _analytics!),
-                            ),
-                          ),
-                          icon: const Icon(Icons.analytics),
-                          label: const Text(
-                            'Detailed Report',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primaryDark,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _generatePDFReport,
-                          icon: const Icon(Icons.picture_as_pdf),
-                          label: const Text(
-                            'Export PDF',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.error,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
                 ],
               ),
             ),
@@ -771,22 +964,22 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             _MetricRow(
               label: 'Total Credits Used',
               value: _analytics!.totalCreditsUsed.toString(),
-              trend: _analytics!.creditUsageGrowth,
+              trend: 0.0, 
             ),
             _MetricRow(
               label: 'Active Subscriptions',
               value: _analytics!.activeSubscriptions.toString(),
-              trend: _analytics!.subscriptionGrowth,
+              trend: 0.0,
             ),
             _MetricRow(
               label: 'Revenue',
-              value: '\$${_analytics!.revenue.toStringAsFixed(2)}',
-              trend: _analytics!.revenueGrowth,
+              value: 'RM ${_analytics!.revenue.toStringAsFixed(2)}',
+              trend: 0.0, 
             ),
             _MetricRow(
               label: 'Credit Purchases',
               value: _analytics!.creditPurchases.toString(),
-              trend: _analytics!.purchaseGrowth,
+              trend: 0.0, 
             ),
           ],
         ),
@@ -855,6 +1048,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               [
                 _buildSubMetric('Pending', _analytics!.pendingReports, _allTimeAnalytics!.pendingReports),
                 _buildSubMetric('Resolved', _analytics!.resolvedReports, _allTimeAnalytics!.resolvedReports),
+                _buildSubMetric('Dismissed', _analytics!.dismissedReports, _allTimeAnalytics!.dismissedReports),
               ],
             ),
           ],

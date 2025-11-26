@@ -23,7 +23,6 @@ class _UserActionsPageState extends State<UserActionsPage> {
   void initState() {
     super.initState();
     _searchController.addListener(_filterUsers);
-    // Load users after frame is built to prevent blocking
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadUsers();
     });

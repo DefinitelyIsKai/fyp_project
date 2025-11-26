@@ -3,9 +3,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fyp_project/models/admin/report_model.dart';
 import 'package:fyp_project/models/admin/job_post_model.dart';
+import 'package:fyp_project/models/admin/report_category_model.dart';
 import 'package:fyp_project/services/admin/report_service.dart';
 import 'package:fyp_project/services/admin/user_service.dart';
 import 'package:fyp_project/services/admin/post_service.dart';
+import 'package:fyp_project/services/admin/system_config_service.dart';
 import 'package:fyp_project/pages/admin/post_moderation/post_detail_page.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 
@@ -22,17 +24,18 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
   final ReportService _reportService = ReportService();
   final UserService _userService = UserService();
   final PostService _postService = PostService();
+  final SystemConfigService _configService = SystemConfigService();
   bool _isProcessing = false;
   final TextEditingController _notesController = TextEditingController();
   final TextEditingController _violationController = TextEditingController();
   final TextEditingController _deductAmountController = TextEditingController();
   
   // Cached user and post information
-  Map<String, String> _userInfo = {}; // userId -> "Name (email)"
-  Map<String, String> _postInfo = {}; // postId -> "Post Title"
-  Map<String, JobPostModel> _postModels = {}; // postId -> JobPostModel
-  Map<String, bool> _postExists = {}; // postId -> exists/deleted status
-  Map<String, String> _postStatus = {}; // postId -> post status
+  Map<String, String> _userInfo = {}; // "Name (email)"
+  Map<String, String> _postInfo = {}; // "Post Title"
+  Map<String, JobPostModel> _postModels = {}; 
+  Map<String, bool> _postExists = {}; // exists/deleted status
+  Map<String, String> _postStatus = {}; //  post status
   bool _isLoadingInfo = true;
 
   String? _getCurrentUserId() {
@@ -141,40 +144,175 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
     final strikesRemaining = 3 - currentStrikes;
     final walletBalance = await _userService.getWalletBalance(userId);
     
-    bool giveWarning = true;
-    bool deductMarks = false;
-    double? deductAmount;
+    // Fetch report categories and match with report reason
+    List<ReportCategoryModel> reportCategories = [];
+    ReportCategoryModel? matchedCategory;
+    try {
+      reportCategories = await _configService.getReportCategories();
+      try {
+        matchedCategory = reportCategories.firstWhere(
+          (cat) => cat.name.toLowerCase() == widget.report.reason.toLowerCase(),
+        );
+      } catch (e) {
+        try {
+          matchedCategory = reportCategories.firstWhere(
+            (cat) => cat.name.toLowerCase().contains(widget.report.reason.toLowerCase()) ||
+                     widget.report.reason.toLowerCase().contains(cat.name.toLowerCase()),
+          );
+        } catch (e2) {
+          // No match found
+          matchedCategory = null;
+        }
+      }
+      // Only use if category is enabled and has valid ID
+      if (matchedCategory != null && (matchedCategory.id.isEmpty || !matchedCategory.isEnabled)) {
+        matchedCategory = null;
+      }
+    } catch (e) {
+      matchedCategory = null;
+    }
+    
+    final deductAmount = matchedCategory?.creditDeduction.toDouble();
 
     _violationController.clear();
-    _deductAmountController.clear();
     
     await showDialog(
       context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text(
+          'Handle User Report',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
           ),
-          title: const Text(
-            'Handle User Report',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Choose actions to take against the reported user.',
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Colors.grey[800],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'The following actions will be taken against the reported user.',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Colors.grey[800],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Warning action info
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange[200]!),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: Colors.orange[700], size: 24),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Warning will be issued',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Current strikes: $currentStrikes/3',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.orange[900],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            strikesRemaining > 0 
+                                ? '$strikesRemaining more strike${strikesRemaining == 1 ? '' : 's'} until automatic suspension'
+                                : 'Account will be suspended automatically',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.orange[800],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Credit deduction info 
+              if (matchedCategory != null && deductAmount != null && deductAmount > 0) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.red[200]!),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.account_balance_wallet, color: Colors.red[700], size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Credits will be deducted',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Category: ${matchedCategory.name}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.red[900],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Amount: ${deductAmount.toInt()} credits',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.red[900],
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Current balance: ${walletBalance.toStringAsFixed(0)} credits',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.red[800],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 16),
+              ] else ...[
+                const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -185,11 +323,11 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.account_balance_wallet, color: Colors.blue[700], size: 20),
+                      Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Current wallet balance: ${walletBalance.toStringAsFixed(2)}',
+                          'Current wallet balance: ${walletBalance.toStringAsFixed(0)} credits',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.blue[900],
@@ -200,381 +338,197 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.orange[50],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.orange[200]!),
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey[300]!),
                   ),
                   child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.info_outline, color: Colors.orange[700], size: 20),
-                      const SizedBox(width: 12),
+                      Icon(Icons.info_outline, color: Colors.grey[600], size: 18),
+                      const SizedBox(width: 8),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Current strikes: $currentStrikes/3',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.orange[900],
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              strikesRemaining > 0 
-                                  ? '$strikesRemaining more strike${strikesRemaining == 1 ? '' : 's'} until automatic suspension'
-                                  : 'Account will be suspended automatically',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.orange[800],
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          'No matching report category found. Only warning will be issued.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[700],
+                            fontStyle: FontStyle.italic,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
-                // Action checkboxes
-                CheckboxListTile(
-                  value: giveWarning,
-                  onChanged: (value) {
-                    setDialogState(() => giveWarning = value ?? true);
-                  },
-                  title: const Text(
-                    'Give Warning',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: const Text('Add a strike to the user\'s account'),
-                  controlAffinity: ListTileControlAffinity.leading,
-                ),
-                CheckboxListTile(
-                  value: deductMarks,
-                  onChanged: (value) {
-                    setDialogState(() {
-                      deductMarks = value ?? false;
-                      if (!deductMarks) {
-                        _deductAmountController.clear();
-                      }
-                    });
-                  },
-                  title: const Text(
-                    'Deduct Marks',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: const Text('Deduct marks from user\'s wallet'),
-                  controlAffinity: ListTileControlAffinity.leading,
-                ),
-                if (deductMarks) ...[
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _deductAmountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(
-                      labelText: 'Amount to Deduct *',
-                      hintText: 'Enter amount (can go negative)',
-                      prefixIcon: const Icon(Icons.attach_money),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey[50],
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 20),
-                const Text(
-                  'Violation Reason *',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _violationController,
-                  maxLines: 4,
-                  decoration: InputDecoration(
-                    hintText: 'Explain the violation (this will be sent to the user)...',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    filled: true,
-                    fillColor: Colors.grey[50],
-                    contentPadding: const EdgeInsets.all(16),
-                  ),
-                  textInputAction: TextInputAction.done,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  giveWarning
-                      ? 'The user will receive a warning notification. After 3 strikes, their account will be automatically suspended.'
-                      : 'No warning will be issued.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
               ],
+              const SizedBox(height: 20),
+              const Text(
+                'Violation Reason *',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _violationController,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  hintText: 'Explain the violation (this will be sent to the user)...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                  contentPadding: const EdgeInsets.all(16),
+                ),
+                textInputAction: TextInputAction.done,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'The user will receive a warning notification. After 3 strikes, their account will be automatically suspended.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: Colors.grey[700],
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              ),
-              child: Text(
-                'Cancel',
-                style: TextStyle(
-                  color: Colors.grey[700],
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final violationReason = _violationController.text.trim();
+          ElevatedButton(
+            onPressed: () async {
+              final violationReason = _violationController.text.trim();
 
-                if (violationReason.isEmpty) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please provide a violation reason'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
+              if (violationReason.isEmpty) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please provide a violation reason'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
 
-                if (deductMarks) {
-                  final amountText = _deductAmountController.text.trim();
-                  if (amountText.isEmpty) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Please enter the amount to deduct'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                    return;
-                  }
-                  deductAmount = double.tryParse(amountText);
-                  if (deductAmount == null || deductAmount! <= 0) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Please enter a valid amount'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                    return;
-                  }
-                  // Allow negative balances - no need to check if amount exceeds balance
-                }
-
-                if (!giveWarning && !deductMarks) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please select at least one action'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-
-                Navigator.pop(context);
-                await _issueWarningToUser(userId, violationReason, giveWarning, deductAmount);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text(
-                'Apply Actions',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                ),
+              Navigator.pop(context);
+              // Always give warning, and deduct if category matched
+              await _issueWarningToUser(userId, violationReason, deductAmount);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
               ),
             ),
-          ],
-        ),
+            child: const Text(
+              'Apply Actions',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Future<void> _issueWarningToUser(String userId, String violationReason, bool giveWarning, double? deductAmount) async {
+  Future<void> _issueWarningToUser(String userId, String violationReason, double? deductAmount) async {
     setState(() => _isProcessing = true);
     try {
       String actionTaken = '';
       
-      if (giveWarning && deductAmount != null && deductAmount > 0) {
-        // Both warning and deduction
-        final result = await _userService.issueWarning(
-          userId: userId,
-          violationReason: violationReason,
-          deductMarksAmount: deductAmount,
+      // Always issue warning, and deduct credits if amount is provided
+      final result = await _userService.issueWarning(
+        userId: userId,
+        violationReason: violationReason,
+        deductMarksAmount: deductAmount,
+        reportId: widget.report.id,
+      );
+      
+      if (!mounted) return;
+      
+      if (result['success'] == true) {
+        final strikeCount = result['strikeCount'];
+        final wasSuspended = result['wasSuspended'];
+        final userName = result['userName'];
+        final deductionResult = result['deductionResult'] as Map<String, dynamic>?;
+        
+        String actionMsg = '';
+        if (wasSuspended) {
+          actionMsg = 'Warning issued - User suspended (3 strikes). ';
+        } else {
+          actionMsg = 'Warning issued (Strike $strikeCount/3). ';
+        }
+        
+        if (deductionResult != null && deductionResult['success'] == true) {
+          actionMsg += 'Credits deducted: ${deductAmount?.toStringAsFixed(0) ?? '0'}. New balance: ${deductionResult['newBalance']?.toStringAsFixed(0) ?? '0'}.';
+        } else if (deductAmount != null && deductAmount > 0) {
+          actionMsg += 'Warning issued but credit deduction failed: ${deductionResult?['error'] ?? 'Unknown error'}.';
+        }
+        
+        actionTaken = actionMsg;
+        
+        // Update report status
+        await _reportService.updateReportStatus(
+          widget.report.id,
+          ReportStatus.resolved,
+          notes: _notesController.text.isEmpty ? null : _notesController.text,
+          reviewedBy: _getCurrentUserId(),
+          actionTaken: actionTaken,
         );
         
-        if (!mounted) return;
-        
-        if (result['success'] == true) {
-          final strikeCount = result['strikeCount'];
-          final wasSuspended = result['wasSuspended'];
-          final userName = result['userName'];
-          final deductionResult = result['deductionResult'] as Map<String, dynamic>?;
-          
-          String actionMsg = '';
-          if (wasSuspended) {
-            actionMsg = 'Warning issued - User suspended (3 strikes). ';
-          } else {
-            actionMsg = 'Warning issued (Strike $strikeCount/3). ';
-          }
-          
-          if (deductionResult != null && deductionResult['success'] == true) {
-            actionMsg += 'Marks deducted: ${deductAmount.toStringAsFixed(2)}. New balance: ${deductionResult['newBalance']?.toStringAsFixed(2) ?? '0.00'}.';
-          } else if (deductionResult != null) {
-            actionMsg += 'Warning issued but mark deduction failed: ${deductionResult['error']}.';
-          }
-          
-          actionTaken = actionMsg;
-          
-          // Update report status
-          await _reportService.updateReportStatus(
-            widget.report.id,
-            ReportStatus.resolved,
-            notes: _notesController.text.isEmpty ? null : _notesController.text,
-            reviewedBy: _getCurrentUserId(),
-            actionTaken: actionTaken,
+        if (wasSuspended) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                deductAmount != null && deductAmount > 0
+                    ? '$userName has reached 3 strikes and has been automatically suspended. Credits deducted: ${deductAmount.toInt()}.'
+                    : '$userName has reached 3 strikes and has been automatically suspended.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
           );
-          
-          if (wasSuspended) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('$userName has reached 3 strikes and has been automatically suspended. Marks deducted: ${deductAmount.toStringAsFixed(2)}'),
-                backgroundColor: Colors.orange,
-              ),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Warning issued to $userName (Strike $strikeCount/3). Marks deducted: ${deductAmount.toStringAsFixed(2)}'),
-                backgroundColor: Colors.green,
-              ),
-            );
-          }
-          Navigator.pop(context, true);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to issue warning: ${result['error']}'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      } else if (giveWarning) {
-        // Only warning
-        final result = await _userService.issueWarning(
-          userId: userId,
-          violationReason: violationReason,
-        );
-        
-        if (!mounted) return;
-        
-        if (result['success'] == true) {
-          final strikeCount = result['strikeCount'];
-          final wasSuspended = result['wasSuspended'];
-          final userName = result['userName'];
-          
-          actionTaken = wasSuspended 
-              ? 'Warning issued - User suspended (3 strikes)' 
-              : 'Warning issued (Strike $strikeCount/3)';
-          
-          // Update report status
-          await _reportService.updateReportStatus(
-            widget.report.id,
-            ReportStatus.resolved,
-            notes: _notesController.text.isEmpty ? null : _notesController.text,
-            reviewedBy: _getCurrentUserId(),
-            actionTaken: actionTaken,
-          );
-          
-          if (wasSuspended) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('$userName has reached 3 strikes and has been automatically suspended'),
-                backgroundColor: Colors.orange,
+              content: Text(
+                deductAmount != null && deductAmount > 0
+                    ? 'Warning issued to $userName (Strike $strikeCount/3). Credits deducted: ${deductAmount.toInt()}.'
+                    : 'Warning issued to $userName (Strike $strikeCount/3).',
               ),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Warning issued to $userName (Strike $strikeCount/3)'),
-                backgroundColor: Colors.green,
-              ),
-            );
-          }
-          Navigator.pop(context, true);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to issue warning: ${result['error']}'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      } else if (deductAmount != null && deductAmount > 0) {
-        // Only deduction
-        final deductionResult = await _userService.deductMarks(
-          userId: userId,
-          amount: deductAmount,
-          reason: 'Report action: $violationReason',
-        );
-        
-        if (!mounted) return;
-        
-        if (deductionResult['success'] == true) {
-          actionTaken = 'Marks deducted: ${deductAmount.toStringAsFixed(2)}. New balance: ${deductionResult['newBalance']?.toStringAsFixed(2) ?? '0.00'}.';
-          
-          // Update report status
-          await _reportService.updateReportStatus(
-            widget.report.id,
-            ReportStatus.resolved,
-            notes: _notesController.text.isEmpty ? null : _notesController.text,
-            reviewedBy: _getCurrentUserId(),
-            actionTaken: actionTaken,
-          );
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Marks deducted: ${deductAmount.toStringAsFixed(2)}. New balance: ${deductionResult['newBalance']?.toStringAsFixed(2) ?? '0.00'}'),
               backgroundColor: Colors.green,
             ),
           );
-          Navigator.pop(context, true);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to deduct marks: ${deductionResult['error']}'),
-              backgroundColor: Colors.red,
-            ),
-          );
         }
+        Navigator.pop(context, true);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to issue warning: ${result['error']}'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     } catch (e) {
       if (!mounted) return;
@@ -820,6 +774,7 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
       final result = await _userService.issueWarning(
         userId: employerId,
         violationReason: 'Post rejected: $reason',
+        reportId: widget.report.id,
       );
 
       if (!mounted) return;
@@ -979,14 +934,12 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
         _postExists[postId] = true;
         _postStatus[postId] = status;
         
-        // Store the full post model for viewing details
         try {
           _postModels[postId] = JobPostModel.fromFirestore(postDoc);
         } catch (e) {
           print('Error parsing post model: $e');
         }
         
-        // Also load post owner if not already loaded
         final ownerId = data?['ownerId']?.toString();
         if (ownerId != null && ownerId.isNotEmpty && !_userInfo.containsKey(ownerId)) {
           await _loadUserInfo(ownerId);
@@ -1033,7 +986,7 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
             duration: Duration(seconds: 4),
           ),
         );
-        // Refresh the page after a short delay
+        // Refresh the page
         Future.delayed(const Duration(milliseconds: 500), () {
           if (mounted) {
             Navigator.pop(context, true);
@@ -1042,7 +995,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
       }
     } catch (e) {
       print('Error auto-resolving report: $e');
-      // Don't show error to user, just log it
     }
   }
 
@@ -1083,7 +1035,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
       return;
     }
 
-    // Check if we already have the post model
     if (_postModels.containsKey(postId)) {
       Navigator.push(
         context,
@@ -1094,7 +1045,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
       return;
     }
 
-    // Load the post if we don't have it
     try {
       final postDoc = await FirebaseFirestore.instance
           .collection('posts')
@@ -1483,7 +1433,7 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
               ),
             ),
 
-            // Review Notes Section (only show if report is not resolved)
+            // Review Notes Section 
             if (widget.report.status != ReportStatus.resolved) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1527,7 +1477,7 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
               const SizedBox(height: 24),
             ],
 
-            // Action Buttons (only show if report is not resolved)
+            // Action Buttons 
             if (widget.report.status != ReportStatus.resolved) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1651,7 +1601,7 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
                       ),
                       const SizedBox(height: 12),
                     ] else ...[
-                      // Post exists and can be rejected (only show if we've loaded the post info)
+                      // Post exists and can be rejected
                       if (!_isLoadingInfo && _postExists.containsKey(
                         widget.report.reportedPostId ?? widget.report.reportedItemId
                       )) ...[
@@ -1829,8 +1779,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
   }
 
   String _formatDateTime(DateTime date) {
-    // The date should already be in local time from report_service
-    // Just format it directly without any conversion
     final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     final day = date.day;
     final month = months[date.month - 1];
