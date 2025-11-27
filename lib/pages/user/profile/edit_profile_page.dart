@@ -179,6 +179,20 @@ class _EditProfilePageState extends State<EditProfilePage> {
           message: 'Resume uploaded successfully',
         );
       }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _uploadingResume = false);
+      // Extract error message from exception
+      String errorMessage = 'Failed to upload resume';
+      if (e is Exception) {
+        errorMessage = e.toString().replaceFirst('Exception: ', '');
+      } else if (e is FirebaseException) {
+        errorMessage = e.message ?? 'Firestore error: ${e.code}';
+      }
+      DialogUtils.showWarningMessage(
+        context: context,
+        message: errorMessage,
+      );
     } finally {
       if (mounted && _uploadingResume) {
         setState(() => _uploadingResume = false);

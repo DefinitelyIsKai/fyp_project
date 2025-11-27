@@ -26,6 +26,18 @@ class _AddSlotDialogState extends State<AddSlotDialog> {
     final time = await showTimePicker(
       context: context,
       initialTime: _startTime ?? TimeOfDay.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: const Color(0xFF00C8A0),
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
     if (time != null) {
       setState(() {
@@ -38,6 +50,18 @@ class _AddSlotDialogState extends State<AddSlotDialog> {
     final time = await showTimePicker(
       context: context,
       initialTime: _endTime ?? TimeOfDay.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: const Color(0xFF00C8A0),
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
     if (time != null) {
       setState(() {

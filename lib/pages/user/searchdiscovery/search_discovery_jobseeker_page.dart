@@ -9,6 +9,7 @@ import '../../../services/user/wallet_service.dart';
 import '../../../utils/user/dialog_utils.dart';
 import '../../../utils/user/post_utils.dart';
 import '../../../widgets/user/search_discovery_widgets.dart';
+import '../../../widgets/user/pagination_dots_widget.dart';
 import '../post/post_details_page.dart';
 import 'search_discovery_base.dart';
 import 'dart:async';
@@ -344,22 +345,9 @@ class _SearchDiscoveryJobseekerPageState
             if (computedPages.length > 1)
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(
-                    computedPages.length,
-                    (index) => Container(
-                      width: 8,
-                      height: 8,
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: index == currentPage
-                            ? const Color(0xFF00C8A0)
-                            : Colors.grey[300],
-                      ),
-                    ),
-                  ),
+                child: PaginationDotsWidget(
+                  totalPages: computedPages.length,
+                  currentPage: currentPage,
                 ),
               ),
           ],
@@ -367,6 +355,7 @@ class _SearchDiscoveryJobseekerPageState
       },
     );
   }
+
 
 }
 
@@ -395,6 +384,19 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
   Future<void> _handleApply(BuildContext context) async {
     // Prevent multiple simultaneous executions
     if (_isApplying || !mounted) return;
+    
+    // Show confirmation dialog
+    final confirmed = await DialogUtils.showConfirmationDialog(
+      context: context,
+      title: 'Apply to Job',
+      message: 'Are you sure you want to apply to "${widget.post.title}"? This will hold 100 points until the recruiter makes a decision.',
+      icon: Icons.work_outline,
+      confirmText: 'Apply',
+      cancelText: 'Cancel',
+      isDestructive: false,
+    );
+    
+    if (confirmed != true || !mounted) return;
     
     setState(() => _isApplying = true);
     try {

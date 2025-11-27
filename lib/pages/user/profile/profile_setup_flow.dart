@@ -683,9 +683,30 @@ class _ResumePickerState extends State<_ResumePicker> {
     try {
       final attachment = await _storage.pickAndUploadResume();
       if (!mounted) return;
-      if (attachment != null) widget.onChanged(attachment);
+      setState(() {
+        _uploading = false;
+        if (attachment != null) {
+          widget.onChanged(attachment);
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _uploading = false);
+      // Extract error message from exception
+      String errorMessage = 'Failed to upload resume';
+      if (e is Exception) {
+        errorMessage = e.toString().replaceFirst('Exception: ', '');
+      } else if (e is FirebaseException) {
+        errorMessage = e.message ?? 'Firestore error: ${e.code}';
+      }
+      DialogUtils.showWarningMessage(
+        context: context,
+        message: errorMessage,
+      );
     } finally {
-      if (mounted) setState(() => _uploading = false);
+      if (mounted && _uploading) {
+        setState(() => _uploading = false);
+      }
     }
   }
 

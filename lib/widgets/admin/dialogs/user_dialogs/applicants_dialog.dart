@@ -298,6 +298,19 @@ class _ApplicantsDialogState extends State<ApplicantsDialog> {
                       padding: const EdgeInsets.only(right: 8),
                       child: TextButton.icon(
                         onPressed: () async {
+                          // Show confirmation dialog
+                          final confirmed = await DialogUtils.showConfirmationDialog(
+                            context: context,
+                            title: 'Mark as Completed',
+                            message: 'Are you sure you want to mark "${widget.post.title}" as completed? This will close the post to new applications.',
+                            icon: Icons.flag,
+                            confirmText: 'Mark Complete',
+                            cancelText: 'Cancel',
+                            isDestructive: false,
+                          );
+                          
+                          if (confirmed != true || !mounted) return;
+                          
                           try {
                             await _postService.markCompleted(
                               postId: widget.post.id,

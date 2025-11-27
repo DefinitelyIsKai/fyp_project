@@ -334,6 +334,90 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
     }
   }
 
+  Future<void> _completePendingPayment(String sessionId, String paymentId, {String checkoutUrl = ''}) async {
+    if (!mounted) return;
+    
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: CircularProgressIndicator(
+          color: const Color(0xFF00C8A0),
+        ),
+      ),
+    );
+
+    try {
+      await _walletService.completePendingPayment(sessionId: sessionId);
+      
+      if (!mounted) return;
+      
+      // Close loading dialog
+      Navigator.of(context).pop();
+      
+      // Refresh pending payments
+      await _refreshPendingPayments();
+      
+      // Show success message
+      DialogUtils.showSuccessMessage(
+        context: context,
+        message: 'Payment completed successfully! Credits have been added to your wallet.',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      
+      // Close loading dialog
+      Navigator.of(context).pop();
+      
+      // Handle PAYMENT_NOT_COMPLETED - show dialog with option to open payment page
+      if (e.toString().contains('PAYMENT_NOT_COMPLETED')) {
+        if (checkoutUrl.isNotEmpty) {
+          final shouldOpen = await DialogUtils.showConfirmationDialog(
+            context: context,
+            title: 'Payment Not Completed',
+            message: 'The payment has not been completed yet. Would you like to open the payment page?',
+            icon: Icons.payment,
+            confirmText: 'Open Payment Page',
+            cancelText: 'Cancel',
+            isDestructive: false,
+          );
+          
+          if (shouldOpen == true && mounted) {
+            await _openPendingPayment(checkoutUrl);
+          }
+        } else {
+          DialogUtils.showWarningMessage(
+            context: context,
+            message: 'Payment not completed yet. Please complete the payment first.',
+          );
+        }
+        return;
+      }
+      
+      // Show appropriate error message for other errors
+      String errorMessage = 'Failed to complete payment';
+      
+      if (e.toString().contains('PAYMENT_ALREADY_PROCESSED')) {
+        errorMessage = 'This payment has already been processed. Please refresh the page.';
+        // Refresh to update UI
+        await _refreshPendingPayments();
+      } else if (e.toString().contains('PAYMENT_ALREADY_PROCESSING')) {
+        errorMessage = 'Payment is being processed. Please wait a moment and refresh.';
+      } else if (e.toString().contains('Payment not found')) {
+        errorMessage = 'Payment not found. It may have already been processed.';
+        await _refreshPendingPayments();
+      } else {
+        errorMessage = 'Error: ${e.toString()}';
+      }
+      
+      DialogUtils.showWarningMessage(
+        context: context,
+        message: errorMessage,
+      );
+    }
+  }
+
   Future<void> _cancelPendingPayment(String sessionId, String paymentId) async {
     if (!mounted) return;
     
@@ -580,9 +664,11 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
                                 ),
                                 const SizedBox(width: 6),
                                 ElevatedButton(
-                                  onPressed: checkoutUrl.isNotEmpty
-                                      ? () => _openPendingPayment(checkoutUrl)
-                                      : null,
+                                  onPressed: () => _completePendingPayment(
+                                    payment['sessionId'] as String? ?? '',
+                                    payment['id'] as String? ?? '',
+                                    checkoutUrl: checkoutUrl,
+                                  ),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.orange.shade600,
                                     foregroundColor: Colors.white,

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -21,31 +22,169 @@ class StorageService {
 
   // 🔹 Convert resume file to Base64 and store in Firestore
   Future<ResumeAttachment?> pickAndUploadResume() async {
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: false,
-      type: FileType.custom,
-      allowedExtensions: const ['pdf', 'png', 'jpg', 'jpeg'],
-      withData: true,
-    );
-    if (result == null || result.files.isEmpty) return null;
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: false,
+        type: FileType.custom,
+        allowedExtensions: const ['pdf', 'png', 'jpg', 'jpeg'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return null;
 
-    final file = result.files.single;
-    final bytes = file.bytes ?? await File(file.path!).readAsBytes();
-    final base64String = base64Encode(bytes);
-    final ext = file.extension?.toLowerCase() ?? 'unknown';
+      final file = result.files.single;
+      
+      // Handle both web (file.bytes) and mobile (file.path) platforms
+      Uint8List bytes;
+      if (file.bytes != null) {
+        bytes = file.bytes!;
+      } else if (file.path != null) {
+        bytes = await File(file.path!).readAsBytes();
+      } else {
+        throw Exception('Unable to read file: both bytes and path are null');
+      }
+      
+      // Check file size EARLY - Firestore limit is 1MB per document (including all fields)
+      // Base64 encoding increases size by ~33%, and we need space for other fields
+      // So we limit original file to ~650KB to ensure total document stays under 1MB
+      const int maxOriginalSize = 650 * 1024; // 650KB original ≈ 870KB base64 + metadata
+      if (bytes.length > maxOriginalSize) {
+        final fileSizeMB = (bytes.length / 1024 / 1024).toStringAsFixed(2);
+        throw Exception('File is too large (${fileSizeMB}MB / ${(bytes.length / 1024).toStringAsFixed(0)}KB). '
+            'Maximum allowed size is 650KB. '
+            'Please select a smaller file or compress your resume before uploading.');
+      }
+      
+      final base64String = base64Encode(bytes);
+      
+      // Estimate total document size (base64 + metadata fields)
+      // Metadata: fileName (~100 bytes), fileType (~10 bytes), uploadedAt (~30 bytes)
+      const int estimatedMetadataSize = 200; // bytes
+      final int estimatedTotalSize = base64String.length + estimatedMetadataSize;
+      
+      // Final check on estimated total document size (Firestore's hard limit is 1MB)
+      const int maxDocumentSize = 1000 * 1024; // 1000KB - leave some margin
+      if (estimatedTotalSize > maxDocumentSize) {
+        final base64SizeMB = (base64String.length / 1024 / 1024).toStringAsFixed(2);
+        final totalSizeMB = (estimatedTotalSize / 1024 / 1024).toStringAsFixed(2);
+        throw Exception('File is too large after encoding (${base64SizeMB}MB base64, ~${totalSizeMB}MB total). '
+            'Firestore document limit is 1MB. '
+            'Please select a smaller file or compress your resume before uploading.');
+      }
+      
+      // Validate and sanitize file extension
+      String ext = (file.extension?.toLowerCase() ?? 'unknown').trim();
+      // Remove any invalid characters and normalize
+      ext = ext.replaceAll(RegExp(r'[^a-z0-9]'), '').toLowerCase();
+      // Normalize common formats
+      if (ext == 'jpeg') ext = 'jpg';
+      // Validate extension is allowed
+      if (ext.isEmpty || !['pdf', 'png', 'jpg', 'jpeg'].contains(ext)) {
+        ext = 'pdf'; // Default fallback
+      }
+      
+      // Sanitize file name (remove invalid characters for Firestore)
+      String fileName = file.name.trim();
+      if (fileName.isEmpty) {
+        fileName = 'Resume.$ext';
+      }
+      // Remove any control characters and limit length
+      fileName = fileName.replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '');
+      if (fileName.length > 255) {
+        fileName = '${fileName.substring(0, 250)}.$ext';
+      }
 
-    final attachment = ResumeAttachment(
-      fileName: file.name,
-      fileType: ext,
-      base64Data: base64String,
-    );
+      // Validate base64 string is not empty and contains only valid base64 characters
+      if (base64String.isEmpty) {
+        throw Exception('Failed to encode file: base64 string is empty');
+      }
+      // Validate base64 string contains only valid characters (A-Z, a-z, 0-9, +, /, =)
+      if (!RegExp(r'^[A-Za-z0-9+/=]+$').hasMatch(base64String)) {
+        throw Exception('Invalid base64 string: contains invalid characters');
+      }
+      // Try to decode to verify it's valid base64
+      try {
+        base64Decode(base64String);
+      } catch (e) {
+        throw Exception('Invalid base64 string: failed to decode - $e');
+      }
 
-    await _firestore.collection('users').doc(_uid).set({
-      'resume': attachment.toMap()
-        ..['uploadedAt'] = DateTime.now().toIso8601String(),
-    }, SetOptions(merge: true));
+      final attachment = ResumeAttachment(
+        fileName: fileName,
+        fileType: ext,
+        base64Data: base64String,
+      );
 
-    return attachment;
+      // Create a new Map instead of modifying the returned Map
+      final resumeData = Map<String, dynamic>.from(attachment.toMap());
+      
+      // Validate all required fields are present and not empty
+      if (resumeData['fileName'] == null || (resumeData['fileName'] as String).isEmpty) {
+        throw Exception('Invalid file name');
+      }
+      if (resumeData['fileType'] == null || (resumeData['fileType'] as String).isEmpty) {
+        throw Exception('Invalid file type');
+      }
+      if (resumeData['base64'] == null || (resumeData['base64'] as String).isEmpty) {
+        throw Exception('Invalid base64 data');
+      }
+      
+      // Add uploadedAt timestamp
+      final uploadedAt = DateTime.now().toIso8601String();
+      resumeData['uploadedAt'] = uploadedAt;
+
+      // Validate field names don't start with __ (Firestore reserved)
+      for (final key in resumeData.keys) {
+        if (key.startsWith('__')) {
+          throw Exception('Invalid field name: field names cannot start with __');
+        }
+        if (key.isEmpty) {
+          throw Exception('Invalid field name: field names cannot be empty');
+        }
+      }
+
+      // Final validation: Calculate actual document size before saving
+      final actualBase64Length = (resumeData['base64'] as String).length;
+      final estimatedFirestoreSize = actualBase64Length + 
+          (resumeData['fileName'] as String).length +
+          (resumeData['fileType'] as String).length +
+          uploadedAt.length +
+          200; // Overhead for Firestore structure
+      
+      // Debug: Print resume data structure (without base64 content for privacy)
+      print('Uploading resume - fileName: "${resumeData['fileName']}", fileType: "${resumeData['fileType']}", '
+          'base64 length: ${(actualBase64Length / 1024).toStringAsFixed(1)}KB, '
+          'estimated total: ${(estimatedFirestoreSize / 1024).toStringAsFixed(1)}KB');
+      
+      // Final safety check before saving
+      const int maxFirestoreDocumentSize = 1024 * 1024; // 1MB exactly
+      if (estimatedFirestoreSize > maxFirestoreDocumentSize) {
+        throw Exception('File is too large for Firestore (${(estimatedFirestoreSize / 1024 / 1024).toStringAsFixed(2)}MB). '
+            'Maximum document size is 1MB. '
+            'Please select a smaller file (recommended: under 650KB original size).');
+      }
+
+      // Use update instead of set to avoid potential merge issues
+      try {
+        await _firestore.collection('users').doc(_uid).update({
+          'resume': resumeData,
+        });
+      } catch (updateError) {
+        // If update fails (document doesn't exist), use set with merge
+        if (updateError is FirebaseException && 
+            (updateError.code == 'not-found' || updateError.code == 'permission-denied')) {
+          await _firestore.collection('users').doc(_uid).set({
+            'resume': resumeData,
+          }, SetOptions(merge: true));
+        } else {
+          rethrow;
+        }
+      }
+
+      return attachment;
+    } catch (e) {
+      print('Error uploading resume: $e');
+      rethrow;
+    }
   }
 
   // 🔹 Convert image to Base64 and store in Firestore

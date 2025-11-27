@@ -6,6 +6,7 @@ import '../../../services/user/application_service.dart';
 import '../../../services/user/auth_service.dart';
 import '../../../utils/user/post_utils.dart';
 import '../../../widgets/user/search_discovery_widgets.dart';
+import '../../../widgets/user/pagination_dots_widget.dart';
 import '../post/post_details_page.dart';
 import '../../../widgets/admin/dialogs/user_dialogs/applicants_dialog.dart';
 import 'search_discovery_base.dart';
@@ -343,22 +344,9 @@ class _SearchDiscoveryRecruiterPageState
             if (computedPages.length > 1)
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(
-                    computedPages.length,
-                    (index) => Container(
-                      width: 8,
-                      height: 8,
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: index == currentPage
-                            ? const Color(0xFF00C8A0)
-                            : Colors.grey[300],
-                      ),
-                    ),
-                  ),
+                child: PaginationDotsWidget(
+                  totalPages: computedPages.length,
+                  currentPage: currentPage,
                 ),
               ),
           ],
@@ -366,6 +354,7 @@ class _SearchDiscoveryRecruiterPageState
       },
     );
   }
+
 
 }
 

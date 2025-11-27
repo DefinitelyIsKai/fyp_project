@@ -437,6 +437,8 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                   _buildInfoRow('Budget Range', _budgetText(widget.post)),
                   const SizedBox(height: 16),
                   _buildInfoRow('Availability', widget.post.jobType.label),
+                  const SizedBox(height: 16),
+                  _buildInfoRow('Work Time', _formatWorkTime()),
                 ],
               ),
             ),
@@ -789,16 +791,18 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
   }
 
   bool get _hasRequirementsSection {
-    // Only show requirements section if there are age or quota requirements
+    // Only show requirements section if there are age, quota, or gender requirements
     // Skills are already shown in Categories & Skills section
     return widget.post.minAgeRequirement != null ||
         widget.post.maxAgeRequirement != null ||
-        widget.post.applicantQuota != null;
+        widget.post.applicantQuota != null ||
+        (widget.post.genderRequirement != null && widget.post.genderRequirement!.isNotEmpty);
   }
 
   Widget _buildRequirementsCard() {
     final hasAge = widget.post.minAgeRequirement != null || widget.post.maxAgeRequirement != null;
     final hasQuota = widget.post.applicantQuota != null;
+    final hasGender = widget.post.genderRequirement != null && widget.post.genderRequirement!.isNotEmpty;
 
     return Container(
       width: double.infinity,
@@ -845,6 +849,13 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
               value: '${widget.post.applicantQuota} candidates',
             ),
           ],
+          if (hasGender) ...[
+            if (hasAge || hasQuota) const SizedBox(height: 12),
+            _RequirementRow(
+              label: 'Gender Requirement',
+              value: _formatGenderRequirement(),
+            ),
+          ],
         ],
       ),
     );
@@ -859,6 +870,34 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
     if (min != null) return 'At least $min years old';
     if (max != null) return 'Up to $max years old';
     return 'Not specified';
+  }
+
+  String _formatWorkTime() {
+    final start = widget.post.workTimeStart;
+    final end = widget.post.workTimeEnd;
+    if (start != null && end != null) {
+      return '$start - $end';
+    }
+    if (start != null) return 'From $start';
+    if (end != null) return 'Until $end';
+    return 'Not specified';
+  }
+
+  String _formatGenderRequirement() {
+    final gender = widget.post.genderRequirement;
+    if (gender == null || gender.isEmpty) {
+      return 'Not specified';
+    }
+    switch (gender.toLowerCase()) {
+      case 'male':
+        return 'Male';
+      case 'female':
+        return 'Female';
+      case 'any':
+        return 'Any';
+      default:
+        return gender;
+    }
   }
 
   static int _daysAgo(DateTime createdAt) {
@@ -1306,6 +1345,19 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
   Future<void> _handleApply(BuildContext context) async {
     // Prevent multiple simultaneous executions
     if (_isApplying || !mounted) return;
+    
+    // Show confirmation dialog
+    final confirmed = await DialogUtils.showConfirmationDialog(
+      context: context,
+      title: 'Apply to Job',
+      message: 'Are you sure you want to apply to "${widget.post.title}"? This will hold 100 points until the recruiter makes a decision.',
+      icon: Icons.work_outline,
+      confirmText: 'Apply',
+      cancelText: 'Cancel',
+      isDestructive: false,
+    );
+    
+    if (confirmed != true || !mounted) return;
     
     setState(() {
       _isApplying = true;

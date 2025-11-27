@@ -955,12 +955,9 @@ class WalletService {
         if (sessionId.isNotEmpty && credits > 0) {
           try {
             print('Processing payment: sessionId=$sessionId, credits=$credits');
-            // Try to credit (will skip if already credited)
-            await creditFromStripeSession(sessionId: sessionId, credits: credits);
-
-            // Mark as processed only if credit succeeded
-            await doc.reference.update({'status': 'processed'});
-            print('Successfully credited and marked as processed: $sessionId');
+            // Use the new method that handles duplicate prevention
+            await completePendingPayment(sessionId: sessionId);
+            print('Successfully processed payment: $sessionId');
           } catch (e) {
             // Log error but continue with other payments
             print('Error crediting payment $sessionId: $e');
@@ -971,6 +968,105 @@ class WalletService {
     } catch (e) {
       print('Error checking pending payments: $e');
       // Don't rethrow - fail silently so UI doesn't show errors
+    }
+  }
+
+  // Complete a specific pending payment (verify and credit atomically)
+  // This method prevents duplicate credits by using atomic status updates
+  Future<void> completePendingPayment({required String sessionId}) async {
+    final paymentDocRef = _firestore.collection('pending_payments').doc(sessionId);
+    
+    // Use transaction to atomically check status and mark as processing
+    await _firestore.runTransaction((tx) async {
+      final paymentSnap = await tx.get(paymentDocRef);
+      
+      if (!paymentSnap.exists) {
+        throw StateError('Payment not found');
+      }
+      
+      final data = paymentSnap.data()!;
+      final status = data['status'] as String? ?? 'pending';
+      final uid = data['uid'] as String? ?? '';
+      
+      // Verify it's for this user
+      if (uid != _uid) {
+        throw StateError('Payment belongs to different user');
+      }
+      
+      // Check if already processed
+      if (status == 'processed') {
+        throw StateError('PAYMENT_ALREADY_PROCESSED');
+      }
+      
+      // Handle processing status - check if stuck
+      bool shouldProcess = false;
+      if (status == 'pending') {
+        shouldProcess = true;
+      } else if (status == 'processing') {
+        final processingStartedAt = data['processingStartedAt'] as Timestamp?;
+        if (processingStartedAt != null) {
+          final now = Timestamp.now();
+          final duration = now.seconds - processingStartedAt.seconds;
+          // If stuck in processing for more than 5 minutes, allow retry
+          if (duration > 300) {
+            print('Payment stuck in processing for ${duration}s, allowing retry');
+            shouldProcess = true; // Allow retry by updating to processing again
+          } else {
+            // Still processing normally, throw error to prevent duplicate
+            throw StateError('PAYMENT_ALREADY_PROCESSING');
+          }
+        } else {
+          // No timestamp, allow retry
+          print('Payment in processing state without timestamp, allowing retry');
+          shouldProcess = true;
+        }
+      } else {
+        throw StateError('PAYMENT_INVALID_STATUS: $status');
+      }
+      
+      // Mark as processing to prevent duplicate processing
+      if (shouldProcess) {
+        tx.update(paymentDocRef, {
+          'status': 'processing',
+          'processingStartedAt': FieldValue.serverTimestamp(),
+        });
+      }
+    });
+    
+    try {
+      // Get payment data again (outside transaction)
+      final paymentDoc = await paymentDocRef.get();
+      final data = paymentDoc.data()!;
+      final credits = _parseIntFromFirestore(data['credits']);
+      
+      if (credits <= 0) {
+        throw StateError('INVALID_CREDIT_AMOUNT');
+      }
+      
+      // Verify and credit the payment
+      await creditFromStripeSession(sessionId: sessionId, credits: credits);
+      
+      // Mark as processed only after successful credit
+      await paymentDocRef.update({
+        'status': 'processed',
+        'processedAt': FieldValue.serverTimestamp(),
+      });
+      
+      print('Successfully completed payment: $sessionId');
+    } catch (e) {
+      // If credit failed, reset status back to pending so user can retry
+      try {
+        await paymentDocRef.update({
+          'status': 'pending',
+          'lastError': e.toString(),
+          'lastErrorAt': FieldValue.serverTimestamp(),
+        });
+      } catch (updateError) {
+        print('Error resetting payment status: $updateError');
+      }
+      
+      // Re-throw the original error
+      rethrow;
     }
   }
 
@@ -996,6 +1092,7 @@ class WalletService {
     }
 
     // Check if already credited (prevent duplicate credits)
+    // This is an additional safety check, though the status check should prevent duplicates
     final existingTxn = await _txnCol
         .where('referenceId', isEqualTo: sessionId)
         .where('type', isEqualTo: 'credit')
@@ -1004,20 +1101,18 @@ class WalletService {
 
     if (existingTxn.docs.isNotEmpty) {
       // Already credited, just return
+      print('Payment already credited: $sessionId');
       return;
     }
 
-    // Verify session with backend (optional - for security)
-    // For now, we'll trust the sessionId and credit directly
-    // In production, you might want to verify with Stripe API first
-
     // Credit the wallet with the sessionId as reference
+    // Use the verified amount, not the expected amount
     try {
-      await credit(amount: credits, description: 'Top-up payment', referenceId: sessionId);
+      await credit(amount: amountToCredit, description: 'Top-up payment', referenceId: sessionId);
 
-      await _notificationService.notifyTopUpStatus(userId: _uid, success: true, credits: credits);
+      await _notificationService.notifyTopUpStatus(userId: _uid, success: true, credits: amountToCredit);
     } catch (e) {
-      await _notificationService.notifyTopUpStatus(userId: _uid, success: false, credits: credits, error: e.toString());
+      await _notificationService.notifyTopUpStatus(userId: _uid, success: false, credits: amountToCredit, error: e.toString());
       rethrow;
     }
   }

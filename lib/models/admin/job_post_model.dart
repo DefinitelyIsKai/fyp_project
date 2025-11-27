@@ -31,6 +31,9 @@ class JobPostModel {
   final double? longitude;
   final int? minAgeRequirement;
   final int? maxAgeRequirement;
+  final String? workTimeStart; // Format: "HH:mm" (e.g., "09:00")
+  final String? workTimeEnd; // Format: "HH:mm" (e.g., "17:00")
+  final String? genderRequirement; // Gender requirement: "male", "female", or "any"
   final int? views;
 
   JobPostModel({
@@ -63,6 +66,9 @@ class JobPostModel {
     this.longitude,
     this.minAgeRequirement,
     this.maxAgeRequirement,
+    this.workTimeStart,
+    this.workTimeEnd,
+    this.genderRequirement,
     this.views,
   });
 
@@ -110,6 +116,9 @@ class JobPostModel {
       longitude: data['longitude'] != null ? (data['longitude'] as num).toDouble() : null,
       minAgeRequirement: data['minAgeRequirement'] != null ? (data['minAgeRequirement'] as num).toInt() : null,
       maxAgeRequirement: data['maxAgeRequirement'] != null ? (data['maxAgeRequirement'] as num).toInt() : null,
+      workTimeStart: data['workTimeStart'] as String?,
+      workTimeEnd: data['workTimeEnd'] as String?,
+      genderRequirement: data['genderRequirement'] as String?,
       views: data['views'] != null ? (data['views'] as num).toInt() : null,
     );
   }
