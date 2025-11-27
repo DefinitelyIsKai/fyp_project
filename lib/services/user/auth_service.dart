@@ -222,6 +222,36 @@ class AuthService {
     // Remove createdAt to prevent overwriting the original account creation timestamp
     final dataToUpdate = Map<String, dynamic>.from(data);
     dataToUpdate.remove('createdAt');
+    
+    // Clean up base64 data from resume and image fields to prevent Firestore document size limit (1MB) error
+    if (dataToUpdate['resume'] is Map) {
+      final resumeData = Map<String, dynamic>.from(dataToUpdate['resume'] as Map);
+      // Remove base64 data, only keep downloadUrl and metadata
+      resumeData.remove('base64');
+      if (resumeData.containsKey('downloadUrl') && resumeData['downloadUrl'] != null) {
+        dataToUpdate['resume'] = resumeData;
+      } else if (resumeData.isEmpty || (resumeData.length == 1 && resumeData.containsKey('uploadedAt'))) {
+        // If only metadata remains without downloadUrl, remove the resume field
+        dataToUpdate.remove('resume');
+      } else {
+        dataToUpdate['resume'] = resumeData;
+      }
+    }
+    
+    if (dataToUpdate['image'] is Map) {
+      final imageData = Map<String, dynamic>.from(dataToUpdate['image'] as Map);
+      // Remove base64 data, only keep downloadUrl and metadata
+      imageData.remove('base64');
+      if (imageData.containsKey('downloadUrl') && imageData['downloadUrl'] != null) {
+        dataToUpdate['image'] = imageData;
+      } else if (imageData.isEmpty || (imageData.length == 1 && imageData.containsKey('uploadedAt'))) {
+        // If only metadata remains without downloadUrl, remove the image field
+        dataToUpdate.remove('image');
+      } else {
+        dataToUpdate['image'] = imageData;
+      }
+    }
+    
     await _firestore.collection('users').doc(currentUserId).set(dataToUpdate, SetOptions(merge: true));
   }
 }

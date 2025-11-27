@@ -163,21 +163,118 @@ class StorageService {
             'Please select a smaller file (recommended: under 650KB original size).');
       }
 
+      // Before saving, clean up existing base64 data from resume and image fields
+      // to prevent Firestore document size limit (1MB) error
+      Map<String, dynamic>? existingData;
+      try {
+        final userDoc = await _firestore.collection('users').doc(_uid).get();
+        if (userDoc.exists) {
+          existingData = userDoc.data();
+          if (existingData != null) {
+            // Clean up existing resume base64 data
+            if (existingData['resume'] is Map) {
+              final existingResume = Map<String, dynamic>.from(existingData['resume'] as Map);
+              if (existingResume.containsKey('base64')) {
+                existingResume.remove('base64');
+                // Only keep resume if it has downloadUrl
+                if (existingResume.containsKey('downloadUrl') && existingResume['downloadUrl'] != null) {
+                  await _firestore.collection('users').doc(_uid).update({
+                    'resume': existingResume,
+                  });
+                  // Update existingData to reflect the change
+                  existingData['resume'] = existingResume;
+                } else {
+                  // Remove resume if no downloadUrl
+                  await _firestore.collection('users').doc(_uid).update({
+                    'resume': FieldValue.delete(),
+                  });
+                  existingData.remove('resume');
+                }
+              }
+            }
+            
+            // Clean up existing image base64 data
+            if (existingData['image'] is Map) {
+              final existingImage = Map<String, dynamic>.from(existingData['image'] as Map);
+              if (existingImage.containsKey('base64')) {
+                existingImage.remove('base64');
+                // Only keep image if it has downloadUrl
+                if (existingImage.containsKey('downloadUrl') && existingImage['downloadUrl'] != null) {
+                  await _firestore.collection('users').doc(_uid).update({
+                    'image': existingImage,
+                  });
+                  // Update existingData to reflect the change
+                  existingData['image'] = existingImage;
+                } else {
+                  // Remove image if no downloadUrl
+                  await _firestore.collection('users').doc(_uid).update({
+                    'image': FieldValue.delete(),
+                  });
+                  existingData.remove('image');
+                }
+              }
+            }
+          }
+        }
+      } catch (cleanupError) {
+        // Log but don't fail - cleanup is best effort
+        print('Warning: Failed to cleanup existing base64 data: $cleanupError');
+      }
+
+      // Estimate total document size with new resume data
+      // Calculate size of existing document (without resume)
+      int existingSize = 0;
+      if (existingData != null) {
+        final tempData = Map<String, dynamic>.from(existingData);
+        tempData.remove('resume'); // Remove old resume to calculate size without it
+        existingSize = _estimateDocumentSize(tempData);
+      }
+      
+      // Calculate size of new resume data
+      final newResumeSize = _estimateDocumentSize({'resume': resumeData});
+      
+      // Total estimated size
+      final totalEstimatedSize = existingSize + newResumeSize;
+      const int maxDocSize = 1024 * 1024; // 1MB
+      
+      // If total size would exceed limit, don't save base64 data
+      Map<String, dynamic> resumeDataToSave = Map<String, dynamic>.from(resumeData);
+      if (totalEstimatedSize > maxDocSize) {
+        print('Warning: Document would exceed 1MB limit. Removing base64 data from resume.');
+        // Remove base64 data, only keep metadata
+        resumeDataToSave.remove('base64');
+        // If no downloadUrl, we can't save the resume
+        if (!resumeDataToSave.containsKey('downloadUrl') || resumeDataToSave['downloadUrl'] == null) {
+          throw Exception('Cannot save resume: Document size would exceed Firestore limit (1MB). '
+              'Please remove other large data (like images) or use a smaller resume file.');
+        }
+      }
+
       // Use update instead of set to avoid potential merge issues
       try {
         await _firestore.collection('users').doc(_uid).update({
-          'resume': resumeData,
+          'resume': resumeDataToSave,
         });
       } catch (updateError) {
         // If update fails (document doesn't exist), use set with merge
         if (updateError is FirebaseException && 
             (updateError.code == 'not-found' || updateError.code == 'permission-denied')) {
           await _firestore.collection('users').doc(_uid).set({
-            'resume': resumeData,
+            'resume': resumeDataToSave,
           }, SetOptions(merge: true));
         } else {
           rethrow;
         }
+      }
+      
+      // Return attachment without base64 if we removed it
+      if (resumeDataToSave.containsKey('base64') == false && resumeData.containsKey('base64')) {
+        return ResumeAttachment(
+          fileName: attachment.fileName,
+          fileType: attachment.fileType,
+          downloadUrl: attachment.downloadUrl,
+          base64Data: null, // base64 was not saved
+        );
       }
 
       return attachment;
@@ -202,10 +299,12 @@ class StorageService {
         }
 
         final ImagePicker picker = ImagePicker();
-        // Use lower quality for camera to reduce file size and allow larger images, higher for gallery
+        // Use very low quality to reduce file size and prevent Firestore document size limit
+        // Camera: 30% quality (camera photos are typically larger and uncompressed)
+        // Gallery: 40% quality (may already be compressed, but still need aggressive compression)
         final XFile? x = fromCamera
-            ? await picker.pickImage(source: ImageSource.camera, imageQuality: 60)
-            : await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+            ? await picker.pickImage(source: ImageSource.camera, imageQuality: 30)
+            : await picker.pickImage(source: ImageSource.gallery, imageQuality: 40);
 
         if (x == null) return null;
 
@@ -254,24 +353,93 @@ class StorageService {
         ext = file.extension?.toLowerCase() ?? 'jpg';
       }
 
-      // Check image size
+      // Check image size BEFORE encoding
       // Firestore limit is 1MB per document total, base64 increases size by ~33%
-      // We'll allow larger original images and check the final base64 size
-      const int maxOriginalSize = 1500 * 1024; // 1.5MB original - will be compressed by imageQuality
+      // We need to be very conservative to account for existing document data
+      // With aggressive compression (30-40% quality), we can allow slightly larger originals
+      const int maxOriginalSize = 400 * 1024; // 400KB original - very conservative limit
       
       if (bytes.length > maxOriginalSize) {
-        throw Exception('Image is too large (${(bytes.length / 1024 / 1024).toStringAsFixed(2)}MB). '
-            'Maximum size is 1.5MB. Please try taking the photo again or select a smaller image.');
+        throw Exception('Image is too large (${(bytes.length / 1024).toStringAsFixed(0)}KB). '
+            'Maximum size is 400KB. Please try taking the photo again or select a smaller image.');
       }
       
       final base64String = base64Encode(bytes);
       
-      // Final check on actual base64 size (Firestore's hard limit is 1MB per document)
-      // We'll allow up to 980KB base64 to leave minimal room for other fields (fileType, uploadedAt are small)
-      const int maxBase64Size = 980 * 1024; // 980KB - very close to 1MB limit
-      if (base64String.length > maxBase64Size) {
-        throw Exception('Image is too large for Firestore after encoding (${(base64String.length / 1024).toStringAsFixed(1)}KB). '
-            'Firestore limit is 1MB per document. The image quality has been reduced, but it\'s still too large. '
+      // Before saving, clean up existing base64 data from image and resume fields
+      // to prevent Firestore document size limit (1MB) error
+      Map<String, dynamic>? existingData;
+      try {
+        final userDoc = await _firestore.collection('users').doc(_uid).get();
+        if (userDoc.exists) {
+          existingData = userDoc.data();
+          if (existingData != null) {
+            // Clean up existing image base64 data
+            if (existingData['image'] is Map) {
+              final existingImage = Map<String, dynamic>.from(existingData['image'] as Map);
+              if (existingImage.containsKey('base64')) {
+                existingImage.remove('base64');
+                // Only keep image if it has downloadUrl
+                if (existingImage.containsKey('downloadUrl') && existingImage['downloadUrl'] != null) {
+                  await _firestore.collection('users').doc(_uid).update({
+                    'image': existingImage,
+                  });
+                } else {
+                  // Remove image if no downloadUrl
+                  await _firestore.collection('users').doc(_uid).update({
+                    'image': FieldValue.delete(),
+                  });
+                }
+              }
+            }
+            
+            // Also clean up resume base64 data to free up space
+            if (existingData['resume'] is Map) {
+              final existingResume = Map<String, dynamic>.from(existingData['resume'] as Map);
+              if (existingResume.containsKey('base64')) {
+                existingResume.remove('base64');
+                if (existingResume.containsKey('downloadUrl') && existingResume['downloadUrl'] != null) {
+                  await _firestore.collection('users').doc(_uid).update({
+                    'resume': existingResume,
+                  });
+                } else {
+                  await _firestore.collection('users').doc(_uid).update({
+                    'resume': FieldValue.delete(),
+                  });
+                }
+              }
+            }
+          }
+        }
+      } catch (cleanupError) {
+        // Log but don't fail - cleanup is best effort
+        print('Warning: Failed to cleanup existing base64 data: $cleanupError');
+      }
+      
+      // Estimate total document size with new image data
+      // Calculate size of existing document (without image)
+      int existingSize = 0;
+      if (existingData != null) {
+        final tempData = Map<String, dynamic>.from(existingData);
+        tempData.remove('image'); // Remove old image to calculate size without it
+        existingSize = _estimateDocumentSize(tempData);
+      }
+      
+      // Calculate size of new image data
+      final newImageSize = _estimateDocumentSize({'image': {
+        'fileType': ext,
+        'base64': base64String,
+      }});
+      
+      // Total estimated size
+      final totalEstimatedSize = existingSize + newImageSize;
+      const int maxDocSize = 1024 * 1024; // 1MB
+      
+      // If total size would exceed limit, don't save base64 data
+      if (totalEstimatedSize > maxDocSize) {
+        final base64SizeKB = (base64String.length / 1024).toStringAsFixed(1);
+        throw Exception('Image is too large for Firestore (${base64SizeKB}KB base64). '
+            'The document would exceed the 1MB limit. '
             'Please try taking the photo again with lower resolution or select a smaller image.');
       }
       
@@ -620,6 +788,47 @@ class StorageService {
       }
       rethrow;
     }
+  }
+
+  /// Estimate the size of a Firestore document in bytes
+  int _estimateDocumentSize(Map<String, dynamic> data) {
+    int size = 0;
+    for (final entry in data.entries) {
+      // Field name size
+      size += entry.key.length;
+      // Field value size
+      size += _estimateValueSize(entry.value);
+    }
+    // Add overhead for Firestore structure (approximately 100 bytes)
+    size += 100;
+    return size;
+  }
+
+  /// Estimate the size of a value in bytes
+  int _estimateValueSize(dynamic value) {
+    if (value == null) return 0;
+    if (value is String) return value.length;
+    if (value is int) return 8; // 8 bytes for int64
+    if (value is double) return 8; // 8 bytes for double
+    if (value is bool) return 1; // 1 byte for boolean
+    if (value is DateTime) return 8; // 8 bytes for timestamp
+    if (value is List) {
+      int listSize = 0;
+      for (final item in value) {
+        listSize += _estimateValueSize(item);
+      }
+      return listSize;
+    }
+    if (value is Map) {
+      int mapSize = 0;
+      for (final entry in value.entries) {
+        mapSize += (entry.key as String).length; // Key size
+        mapSize += _estimateValueSize(entry.value); // Value size
+      }
+      return mapSize;
+    }
+    // For other types, estimate as string representation
+    return value.toString().length;
   }
 
 }

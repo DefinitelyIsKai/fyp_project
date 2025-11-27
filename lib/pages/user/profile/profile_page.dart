@@ -571,6 +571,13 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _handlePhotoUpdate() async {
+    // Get current image data to check if photo exists
+    final currentDoc = await _authService.getUserDoc();
+    final currentData = currentDoc.data();
+    final Map<String, dynamic>? currentImageData = (currentData?['image'] as Map<String, dynamic>?);
+    final bool hasPhoto = currentImageData != null && 
+                         (currentImageData['base64'] != null || currentImageData['downloadUrl'] != null);
+    
     final source = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -629,6 +636,25 @@ class _ProfilePageState extends State<ProfilePage> {
                 title: const Text('Choose from gallery'),
                 onTap: () => Navigator.pop(context, 'gallery'),
               ),
+              if (hasPhoto) ...[
+                const Divider(height: 1, indent: 72),
+                ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  ),
+                  title: const Text(
+                    'Remove Photo',
+                    style: TextStyle(color: Colors.redAccent),
+                  ),
+                  onTap: () => Navigator.pop(context, 'remove'),
+                ),
+              ],
               const SizedBox(height: 16),
             ],
           ),
@@ -637,6 +663,14 @@ class _ProfilePageState extends State<ProfilePage> {
     );
     
     if (source == null) return;
+    
+    // Handle remove photo
+    if (source == 'remove') {
+      await _removeProfilePhoto();
+      return;
+    }
+    
+    // Handle upload photo
     final url = await _storage.pickAndUploadImage(fromCamera: source == 'camera');
     if (url != null && mounted) {
       setState(() {
@@ -645,6 +679,46 @@ class _ProfilePageState extends State<ProfilePage> {
       DialogUtils.showSuccessMessage(
         context: context,
         message: 'Profile photo updated successfully',
+      );
+    }
+  }
+
+  Future<void> _removeProfilePhoto() async {
+    // Show confirmation dialog
+    final confirmed = await DialogUtils.showConfirmationDialog(
+      context: context,
+      title: 'Remove Profile Photo',
+      message: 'Are you sure you want to remove your profile photo? This action cannot be undone.',
+      icon: Icons.delete_outline,
+      confirmText: 'Remove',
+      cancelText: 'Cancel',
+      isDestructive: true,
+    );
+    
+    if (confirmed != true || !mounted) return;
+    
+    try {
+      // Immediately delete image from Firestore
+      await _authService.updateUserProfile({
+        'image': FieldValue.delete(),
+      });
+      
+      // Refresh user data
+      if (mounted) {
+        setState(() {
+          _userFuture = _authService.getUserDoc();
+        });
+        
+        DialogUtils.showSuccessMessage(
+          context: context,
+          message: 'Profile photo removed successfully',
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      DialogUtils.showWarningMessage(
+        context: context,
+        message: 'Failed to remove profile photo: $e',
       );
     }
   }

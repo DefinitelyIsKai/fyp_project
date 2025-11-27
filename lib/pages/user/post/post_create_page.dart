@@ -588,10 +588,25 @@ class _PostCreatePageState extends State<PostCreatePage> {
       return 'Work end time is required';
     }
     // Check if end time is after start time
+    // If the job post spans multiple days (including overnight), allow end time to be before or equal to start time
     final startMinutes = _workTimeStart!.hour * 60 + _workTimeStart!.minute;
     final endMinutes = _workTimeEnd!.hour * 60 + _workTimeEnd!.minute;
-    if (endMinutes <= startMinutes) {
-      return 'Work end time must be after start time';
+    
+    // Calculate the duration between start and end dates
+    if (_eventStartDate != null && _eventEndDate != null) {
+      final duration = _eventEndDate!.difference(_eventStartDate!);
+      final daysDifference = duration.inDays;
+      
+      // Only validate end time > start time if it's the same day (daysDifference == 0)
+      // If the job spans multiple days (daysDifference >= 1), allow overnight shifts
+      if (daysDifference == 0 && endMinutes <= startMinutes) {
+        return 'Work end time must be after start time';
+      }
+    } else {
+      // If dates are not set, use the original validation
+      if (endMinutes <= startMinutes) {
+        return 'Work end time must be after start time';
+      }
     }
     
     // Validate gender requirement (required field)

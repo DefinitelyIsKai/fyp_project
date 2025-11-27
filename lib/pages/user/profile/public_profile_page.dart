@@ -100,6 +100,7 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
           final email = (data['email'] as String?) ?? 'No email provided';
           final phone = (data['phoneNumber'] as String?) ?? 'Not shared';
           final location = (data['location'] as String?) ?? 'Location not specified';
+          final gender = (data['gender'] as String?);
           final summary = (data['professionalSummary'] as String?) ?? 'No professional summary available.';
           final professionalProfile = (data['professionalProfile'] as String?) ?? 'Not specified';
           final workExperience = (data['workExperience'] as String?) ?? 'Not specified';
@@ -117,7 +118,7 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      _buildContactCard(email, phone, location),
+                      _buildContactCard(email, phone, location, gender),
                       const SizedBox(height: 16),
                       _buildProfessionalDetailsCard(professionalProfile, workExperience, roleRaw),
                       const SizedBox(height: 16),
@@ -214,7 +215,7 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
     );
   }
 
-  Widget _buildContactCard(String email, String phone, String location) {
+  Widget _buildContactCard(String email, String phone, String location, String? gender) {
     return _SectionCard(
       icon: Icons.contact_mail_outlined,
       title: 'Contact Information',
@@ -237,6 +238,14 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
             value: location,
             icon: Icons.location_on_outlined,
           ),
+          if (gender != null && gender.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _InfoRow(
+              label: 'Gender',
+              value: _formatGender(gender),
+              icon: Icons.person_outline,
+            ),
+          ],
         ],
       ),
     );
@@ -457,6 +466,19 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
         return 'Actively seeking opportunities';
       default:
         return 'Not specified';
+    }
+  }
+
+  String _formatGender(String gender) {
+    switch (gender.toLowerCase()) {
+      case 'male':
+        return 'Male';
+      case 'female':
+        return 'Female';
+      case 'other':
+        return 'Other';
+      default:
+        return gender;
     }
   }
 }

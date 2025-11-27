@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../services/user/review_service.dart';
 import '../../../services/user/auth_service.dart';
 import '../../../models/user/review.dart';
@@ -326,7 +327,7 @@ class ReputationPage extends StatelessWidget {
                                   }
                                   return Column(
                                     children: reviews
-                                        .map((r) => _buildReviewCard(r))
+                                        .map((r) => _buildReviewCard(r, role == 'recruiter'))
                                         .toList(),
                                   );
                                 },
@@ -400,7 +401,7 @@ class ReputationPage extends StatelessWidget {
     );
   }
 
-  Widget _buildReviewCard(Review review) {
+  Widget _buildReviewCard(Review review, bool isRecruiterView) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -436,6 +437,52 @@ class ReputationPage extends StatelessWidget {
               ),
             ],
           ),
+          // Show jobseeker name for recruiters
+          if (isRecruiterView) ...[
+            const SizedBox(height: 8),
+            FutureBuilder<DocumentSnapshot>(
+              future: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(review.jobseekerId)
+                  .get(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Row(
+                    children: [
+                      Icon(Icons.person, size: 16, color: Colors.grey[600]),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Loading...',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey[600],
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  );
+                }
+                
+                final userData = snapshot.data?.data() as Map<String, dynamic>?;
+                final jobseekerName = userData?['fullName'] as String? ?? 'Unknown User';
+                
+                return Row(
+                  children: [
+                    Icon(Icons.person, size: 16, color: const Color(0xFF00C8A0)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Reviewed: $jobseekerName',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[700],
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
           const SizedBox(height: 8),
           if (review.comment.isNotEmpty)
             Text(

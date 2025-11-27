@@ -146,7 +146,7 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
       final ageText = _ageCtrl.text.trim();
       final ageValue = ageText.isEmpty ? null : int.tryParse(ageText);
       await _authService.updateUserProfile({
-        'fullName': _fullNameCtrl.text.trim().isEmpty ? null : _fullNameCtrl.text.trim(),
+       
         'phoneNumber': _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
         'location': _locationController.text.trim().isEmpty ? null : _locationController.text.trim(),
         'latitude': _latitude,
@@ -155,7 +155,6 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
         'professionalSummary': _summaryCtrl.text.trim().isEmpty ? null : _summaryCtrl.text.trim(),
         'workExperience': _workExperienceCtrl.text.trim(),
         'age': ageValue,
-        'cvUrl': _resumeAttachment?.legacyValue,
         if (_resumeAttachment != null) 'resume': _resumeAttachment!.toMap() else 'resume': FieldValue.delete(),
         'role': role,
         'acceptedTerms': _acceptedTerms,
@@ -304,21 +303,9 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Full name*',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextFormField(
-                            controller: _fullNameCtrl,
-                            decoration: inputDecoration('Your full name'),
-                            validator: InputValidators.required,
-                          ),
-                          const SizedBox(height: 20),
+                          
+                          
+                          
                           Text(
                             'Phone Number*',
                             style: TextStyle(
@@ -676,6 +663,7 @@ class _ResumePicker extends StatefulWidget {
 class _ResumePickerState extends State<_ResumePicker> {
   bool _uploading = false;
   final StorageService _storage = StorageService();
+  final AuthService _authService = AuthService();
 
   Future<void> _pick() async {
     if (_uploading) return;
@@ -689,6 +677,12 @@ class _ResumePickerState extends State<_ResumePicker> {
           widget.onChanged(attachment);
         }
       });
+      if (attachment != null) {
+        DialogUtils.showSuccessMessage(
+          context: context,
+          message: 'Resume uploaded successfully',
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _uploading = false);
@@ -710,13 +704,52 @@ class _ResumePickerState extends State<_ResumePicker> {
     }
   }
 
+  Future<void> _removeResume() async {
+    // Show confirmation dialog
+    final confirmed = await DialogUtils.showConfirmationDialog(
+      context: context,
+      title: 'Remove Resume',
+      message: 'Are you sure you want to remove your resume? This action cannot be undone.',
+      icon: Icons.delete_outline,
+      confirmText: 'Remove',
+      cancelText: 'Cancel',
+      isDestructive: true,
+    );
+    
+    if (confirmed != true || !mounted) return;
+    
+    try {
+      // Immediately delete resume and cvUrl from Firestore
+      await _authService.updateUserProfile({
+        'resume': FieldValue.delete(),
+        'cvUrl': FieldValue.delete(),
+      });
+      
+      // Update UI state
+      if (mounted) {
+        widget.onChanged(null);
+        
+        DialogUtils.showSuccessMessage(
+          context: context,
+          message: 'Resume removed successfully',
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      DialogUtils.showWarningMessage(
+        context: context,
+        message: 'Failed to remove resume: $e',
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ResumePreviewCard(
       attachment: widget.value,
       uploading: _uploading,
       onUpload: _pick,
-      onRemove: widget.value == null ? null : () => widget.onChanged(null),
+      onRemove: widget.value == null ? null : _removeResume,
     );
   }
 }
