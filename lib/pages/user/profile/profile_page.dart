@@ -25,6 +25,7 @@ class _ProfilePageState extends State<ProfilePage> {
   final StorageService _storage = StorageService();
   final NotificationService _notificationService = NotificationService();
   late Future<DocumentSnapshot<Map<String, dynamic>>> _userFuture;
+  bool _uploadingPhoto = false;
 
   @override
   void initState() {
@@ -176,7 +177,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       children: [
                         // Profile Photo
                         GestureDetector(
-                          onTap: _handlePhotoUpdate,
+                          onTap: _uploadingPhoto ? null : _handlePhotoUpdate,
                           child: Stack(
                             children: [
                               Container(
@@ -204,21 +205,47 @@ class _ProfilePageState extends State<ProfilePage> {
                                       : null,
                                 ),
                               ),
+                              if (_uploadingPhoto)
+                                Positioned.fill(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.black.withOpacity(0.5),
+                                    ),
+                                    child: const Center(
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               Positioned(
                                 right: 0,
                                 bottom: 0,
                                 child: Container(
                                   width: 32,
                                   height: 32,
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFF00C8A0),
+                                  decoration: BoxDecoration(
+                                    color: _uploadingPhoto 
+                                        ? Colors.grey 
+                                        : const Color(0xFF00C8A0),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(
-                                    Icons.camera_alt,
-                                    color: Colors.white,
-                                    size: 16,
-                                  ),
+                                  child: _uploadingPhoto
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.camera_alt,
+                                          color: Colors.white,
+                                          size: 16,
+                                        ),
                                 ),
                               ),
                             ],
@@ -571,6 +598,13 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _handlePhotoUpdate() async {
+    // Get current image data to check if photo exists
+    final currentDoc = await _authService.getUserDoc();
+    final currentData = currentDoc.data();
+    final Map<String, dynamic>? currentImageData = (currentData?['image'] as Map<String, dynamic>?);
+    final bool hasPhoto = currentImageData != null && 
+                         (currentImageData['base64'] != null || currentImageData['downloadUrl'] != null);
+    
     final source = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -629,6 +663,25 @@ class _ProfilePageState extends State<ProfilePage> {
                 title: const Text('Choose from gallery'),
                 onTap: () => Navigator.pop(context, 'gallery'),
               ),
+              if (hasPhoto) ...[
+                const Divider(height: 1, indent: 72),
+                ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  ),
+                  title: const Text(
+                    'Remove Photo',
+                    style: TextStyle(color: Colors.redAccent),
+                  ),
+                  onTap: () => Navigator.pop(context, 'remove'),
+                ),
+              ],
               const SizedBox(height: 16),
             ],
           ),
@@ -637,14 +690,89 @@ class _ProfilePageState extends State<ProfilePage> {
     );
     
     if (source == null) return;
-    final url = await _storage.pickAndUploadImage(fromCamera: source == 'camera');
-    if (url != null && mounted) {
-      setState(() {
-        _userFuture = _authService.getUserDoc();
-      });
-      DialogUtils.showSuccessMessage(
+    
+    // Handle remove photo
+    if (source == 'remove') {
+      await _removeProfilePhoto();
+      return;
+    }
+    
+    // Handle upload photo
+    if (!mounted) return;
+    setState(() => _uploadingPhoto = true);
+    
+    try {
+      final url = await _storage.pickAndUploadImage(fromCamera: source == 'camera');
+      if (!mounted) return;
+      
+      if (url != null) {
+        setState(() {
+          _userFuture = _authService.getUserDoc();
+          _uploadingPhoto = false;
+        });
+        DialogUtils.showSuccessMessage(
+          context: context,
+          message: 'Profile photo updated successfully',
+        );
+      } else {
+        setState(() => _uploadingPhoto = false);
+        // Error message is already shown by storage service, but we can add a generic one if needed
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _uploadingPhoto = false);
+      
+      // Extract error message
+      String errorMessage = 'Failed to upload profile photo';
+      if (e is Exception) {
+        final errorStr = e.toString();
+        // Remove "Exception: " prefix if present
+        errorMessage = errorStr.replaceFirst(RegExp(r'^Exception:\s*'), '');
+      }
+      
+      DialogUtils.showWarningMessage(
         context: context,
-        message: 'Profile photo updated successfully',
+        message: errorMessage,
+      );
+    }
+  }
+
+  Future<void> _removeProfilePhoto() async {
+    // Show confirmation dialog
+    final confirmed = await DialogUtils.showConfirmationDialog(
+      context: context,
+      title: 'Remove Profile Photo',
+      message: 'Are you sure you want to remove your profile photo? This action cannot be undone.',
+      icon: Icons.delete_outline,
+      confirmText: 'Remove',
+      cancelText: 'Cancel',
+      isDestructive: true,
+    );
+    
+    if (confirmed != true || !mounted) return;
+    
+    try {
+      // Immediately delete image from Firestore
+      await _authService.updateUserProfile({
+        'image': FieldValue.delete(),
+      });
+      
+      // Refresh user data
+      if (mounted) {
+        setState(() {
+          _userFuture = _authService.getUserDoc();
+        });
+        
+        DialogUtils.showSuccessMessage(
+          context: context,
+          message: 'Profile photo removed successfully',
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      DialogUtils.showWarningMessage(
+        context: context,
+        message: 'Failed to remove profile photo: $e',
       );
     }
   }

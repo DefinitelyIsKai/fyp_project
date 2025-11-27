@@ -46,6 +46,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   bool _loading = true;
   bool _saving = false;
   bool _uploadingResume = false;
+  String? _selectedGender; // "male", "female", or "any"
 
   @override
   void initState() {
@@ -91,6 +92,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       _profProfileCtrl.text = (data['professionalProfile'] as String?) ?? '';
       _summaryCtrl.text = (data['professionalSummary'] as String?) ?? '';
       _experienceCtrl.text = (data['workExperience'] as String?) ?? '';
+      _selectedGender = data['gender'] as String?;
       final attachment =
           ResumeAttachment.fromMap(data['resume']) ?? ResumeAttachment.fromLegacyValue(data['cvUrl']);
       final parsedTags = parseTagSelection(data['tags']);
@@ -131,7 +133,24 @@ class _EditProfilePageState extends State<EditProfilePage> {
     setState(() => _saving = true);
     try {
       final tagsToSave = sanitizeTagSelection(_selectedTags);
-      final resumeData = _resumeAttachment?.toMap();
+      
+      // Prepare resume data - only save downloadUrl, not base64 data to avoid Firestore size limit
+      Map<String, dynamic>? resumeData;
+      if (_resumeAttachment != null) {
+        resumeData = {
+          'fileName': _resumeAttachment!.fileName,
+          'fileType': _resumeAttachment!.fileType,
+          // Only save downloadUrl if it exists, don't save base64 data
+          if (_resumeAttachment!.downloadUrl != null && _resumeAttachment!.downloadUrl!.isNotEmpty)
+            'downloadUrl': _resumeAttachment!.downloadUrl,
+          // Don't include base64 data to prevent Firestore document size limit (1MB) error
+        };
+        // If no downloadUrl and no base64, don't save resume data
+        if (resumeData['downloadUrl'] == null) {
+          resumeData = null;
+        }
+      }
+      
       final ageText = _ageCtrl.text.trim();
       final ageValue = ageText.isEmpty ? null : int.tryParse(ageText);
       final payload = <String, dynamic>{
@@ -142,11 +161,20 @@ class _EditProfilePageState extends State<EditProfilePage> {
         'professionalSummary': _summaryCtrl.text.trim().isEmpty ? null : _summaryCtrl.text.trim(),
         'workExperience': _experienceCtrl.text.trim().isEmpty ? null : _experienceCtrl.text.trim(),
         'age': ageValue,
-        'cvUrl': _resumeAttachment?.legacyValue,
+        'gender': _selectedGender,
         if (tagsToSave.isNotEmpty) 'tags': tagsToSave else 'tags': FieldValue.delete(),
         'profileCompleted': true,
       };
-      payload['resume'] = resumeData ?? FieldValue.delete();
+      // Handle resume field
+      if (resumeData != null) {
+        // Save resume if it has downloadUrl (not base64 data)
+        payload['resume'] = resumeData;
+      } else {
+        // If resume was removed, delete both resume and cvUrl fields
+        // (cvUrl is deleted for backward compatibility - clean up old data)
+        payload['resume'] = FieldValue.delete();
+        payload['cvUrl'] = FieldValue.delete();
+      }
       await _authService.updateUserProfile(payload);
       if (!mounted) return;
       Navigator.pop(context, true);
@@ -200,10 +228,45 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
-  void _removeResume() {
-    setState(() {
-      _resumeAttachment = null;
-    });
+  Future<void> _removeResume() async {
+    // Show confirmation dialog
+    final confirmed = await DialogUtils.showConfirmationDialog(
+      context: context,
+      title: 'Remove Resume',
+      message: 'Are you sure you want to remove your resume? This action cannot be undone.',
+      icon: Icons.delete_outline,
+      confirmText: 'Remove',
+      cancelText: 'Cancel',
+      isDestructive: true,
+    );
+    
+    if (confirmed != true || !mounted) return;
+    
+    try {
+      // Immediately delete resume and cvUrl from Firestore
+      await _authService.updateUserProfile({
+        'resume': FieldValue.delete(),
+        'cvUrl': FieldValue.delete(),
+      });
+      
+      // Update UI state
+      if (mounted) {
+        setState(() {
+          _resumeAttachment = null;
+        });
+        
+        DialogUtils.showSuccessMessage(
+          context: context,
+          message: 'Resume removed successfully',
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      DialogUtils.showWarningMessage(
+        context: context,
+        message: 'Failed to remove resume: $e',
+      );
+    }
   }
 
   void _onTagCategoryChanged(String categoryId, List<String> values) {
@@ -367,6 +430,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
                               ],
                               validator: (v) => InputValidators.age(v, errorMessage: 'Age must be 18 or above'),
                             ),
+                            const SizedBox(height: 16),
+                            _buildGenderDropdown(),
                             const SizedBox(height: 16),
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -663,6 +728,83 @@ class _EditProfilePageState extends State<EditProfilePage> {
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 12,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGenderDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Gender',
+          style: TextStyle(
+            color: Colors.grey[700],
+            fontWeight: FontWeight.w500,
+            fontSize: 14,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: Colors.grey[400]!,
+              width: 1,
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedGender,
+                hint: Text(
+                  'Select gender',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 16,
+                  ),
+                ),
+                isExpanded: true,
+                icon: Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
+                iconSize: 24,
+                dropdownColor: Colors.white,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 16,
+                ),
+                items: [
+                  DropdownMenuItem<String>(
+                    value: 'male',
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text('Male'),
+                    ),
+                  ),
+                  DropdownMenuItem<String>(
+                    value: 'female',
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text('Female'),
+                    ),
+                  ),
+                  DropdownMenuItem<String>(
+                    value: 'any',
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text('Any'),
+                    ),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedGender = value;
+                  });
+                },
+              ),
             ),
           ),
         ),
