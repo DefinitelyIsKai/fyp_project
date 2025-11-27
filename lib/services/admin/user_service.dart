@@ -503,26 +503,45 @@ class UserService {
           .where('isActive', isEqualTo: false)
           .get();
 
+        print('Auto unsuspend check: Found ${suspendedUsersQuery.docs.length} suspended users');
+
       for (var doc in suspendedUsersQuery.docs) {
         final userData = doc.data();
         final suspendedAt = userData['suspendedAt'] as Timestamp?;
         final suspensionDuration = userData['suspensionDuration'] as int?;
+        final userId = doc.id;
+        final userName = userData['fullName'] ?? 'User';
+        final userEmail = userData['email'] ?? '';
 
         // Skip if no suspension date or if indefinite suspension (duration is null)
         if (suspendedAt == null || suspensionDuration == null) {
+          print('Auto unsuspend check: Skipping user $userId - missing suspendedAt or suspensionDuration');
           continue;
         }
 
         // Calculate expiration date
         final expirationDate = suspendedAt.toDate().add(Duration(days: suspensionDuration));
+        
+        print('Auto unsuspend check: User $userName - suspendedAt: ${suspendedAt.toDate()}, duration: $suspensionDuration days, expires: $expirationDate, now: $now');
 
-        // Check if suspension has expired
-        if (now.isAfter(expirationDate)) {
-          final userId = doc.id;
-          final userName = userData['fullName'] ?? 'User';
+        // Check if suspension has expired (using !isBefore to handle exact expiration time)
+        if (!now.isBefore(expirationDate)) {
+          print('Auto unsuspend check: Unsuspending user $userName - expiration time reached');
 
           // Auto unsuspend the user
           await unsuspendUser(userId);
+
+          // Send unsuspension notification
+          try {
+            await _sendUnsuspensionNotification(
+              userId: userId,
+              userName: userName,
+              userEmail: userEmail,
+            );
+          } catch (notifError) {
+            print('Error sending auto unsuspend notification: $notifError');
+            // Don't fail the operation if notification fails
+          }
 
           // Create log entry for auto unsuspension
           try {
@@ -542,9 +561,13 @@ class UserService {
 
           unsuspendedCount++;
           unsuspendedUserNames.add(userName);
+        } else {
+          final hoursRemaining = expirationDate.difference(now).inHours;
+          print('Auto unsuspend check: User $userName - suspension not yet expired (expires in $hoursRemaining hours)');
         }
       }
 
+      print('Auto unsuspend check: Completed - unsuspended $unsuspendedCount user(s)');
       return {
         'success': true,
         'unsuspendedCount': unsuspendedCount,

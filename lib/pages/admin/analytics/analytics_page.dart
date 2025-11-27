@@ -887,7 +887,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                       labelRotation: -45,
                       majorGridLines: const MajorGridLines(width: 0),
                     ),
-                    primaryYAxis: NumericAxis(),
+                    primaryYAxis: NumericAxis(
+                      numberFormat: NumberFormat('#'),
+                      interval: 1,
+                    ),
                     legend: Legend(
                       isVisible: true,
                       position: LegendPosition.bottom,

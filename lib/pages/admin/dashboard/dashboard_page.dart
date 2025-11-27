@@ -9,6 +9,7 @@ import 'package:fyp_project/pages/admin/message_oversight/message_oversight_main
 import 'package:fyp_project/pages/admin/analytics/analytics_page.dart';
 import 'package:fyp_project/services/admin/auth_service.dart';
 import 'package:fyp_project/services/admin/dashboard_service.dart';
+import 'package:fyp_project/services/admin/user_service.dart';
 import 'package:fyp_project/routes/app_routes.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -20,6 +21,7 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   final DashboardService _dashboardService = DashboardService();
+  final UserService _userService = UserService();
   StreamSubscription<int>? _reportsSubscription;
   StreamSubscription<int>? _pendingPostsSubscription;
 
@@ -43,6 +45,7 @@ class _DashboardPageState extends State<DashboardPage> {
       'User Management',
       'Monitoring & Search',
       'Analytics & Reporting',
+      'Message Oversight',
     ],
     'staff': [
       'Post Moderation',
@@ -114,6 +117,17 @@ class _DashboardPageState extends State<DashboardPage> {
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
+      // Check and auto unsuspend expired suspensions (background task, don't wait)
+      _userService.checkAndAutoUnsuspendExpiredUsers().catchError((e) {
+        debugPrint('Error in auto unsuspend check: $e');
+        return <String, dynamic>{
+          'success': false,
+          'error': e.toString(),
+          'unsuspendedCount': 0,
+          'unsuspendedUserNames': [],
+        };
+      });
+      
       // Pending posts are now handled by real-time stream
       final users = await _dashboardService.getActiveUsersCount();
       // Unresolved reports are also handled by real-time stream, but load initial value
@@ -162,8 +176,15 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context, listen: false);
-    final role = authService.currentAdmin?.role.toLowerCase() ?? 'staff';
-    final allowedPages = roleAccess[role] ?? [];
+    final rawRole = authService.currentAdmin?.role ?? 'staff';
+    final role = rawRole.toLowerCase().trim();
+    final allowedPages = roleAccess[role] ?? roleAccess['staff'] ?? [];
+    
+    // Debug logging
+    debugPrint('Dashboard - Raw role from authService: "$rawRole"');
+    debugPrint('Dashboard - Normalized role: "$role"');
+    debugPrint('Dashboard - Allowed pages for role "$role": $allowedPages');
+    debugPrint('Dashboard - Available roles in roleAccess: ${roleAccess.keys.toList()}');
 
     return WillPopScope(
       onWillPop: () async {
@@ -616,6 +637,11 @@ class _DashboardPageState extends State<DashboardPage> {
 
     // Filter cards based on role
     final filteredCards = cards.where((c) => allowedPages.contains(c.title)).toList();
+    
+    // Debug logging
+    debugPrint('Dashboard - Allowed pages: $allowedPages');
+    debugPrint('Dashboard - Filtered cards count: ${filteredCards.length}');
+    debugPrint('Dashboard - Filtered card titles: ${filteredCards.map((c) => c.title).toList()}');
 
     return SliverPadding(
       padding: const EdgeInsets.all(16),

@@ -174,7 +174,7 @@ class RoleService {
       {
         'name': 'hr',
         'description': 'Human Resources with access to user, post, analytics, and monitoring modules',
-        'permissions': ['post_moderation', 'user_management', 'analytics', 'monitoring'],
+        'permissions': ['post_moderation', 'user_management', 'analytics', 'monitoring', 'message_oversight'],
         'isSystemRole': true,
       },
       {

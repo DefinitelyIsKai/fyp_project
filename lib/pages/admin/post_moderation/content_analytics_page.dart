@@ -946,16 +946,24 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
   Widget _buildStatusChart() {
     final analytics = _analytics!;
     // Show selected period data
-    final data = [
-      ChartData('Active', analytics['activeInPeriod'].toDouble(), Colors.green),
-      ChartData('Pending', analytics['pendingInPeriod'].toDouble(), Colors.orange),
-      ChartData('Completed', analytics['completedInPeriod'].toDouble(), Colors.blue),
-      ChartData('Rejected', analytics['rejectedInPeriod'].toDouble(), Colors.red),
-    ].where((item) => item.value > 0).toList();
+    final statusData = [
+      MapEntry('Active', analytics['activeInPeriod'] as int? ?? 0),
+      MapEntry('Pending', analytics['pendingInPeriod'] as int? ?? 0),
+      MapEntry('Completed', analytics['completedInPeriod'] as int? ?? 0),
+      MapEntry('Rejected', analytics['rejectedInPeriod'] as int? ?? 0),
+    ].where((entry) => entry.value > 0).toList();
 
-    if (data.isEmpty) {
+    if (statusData.isEmpty) {
       return const SizedBox.shrink();
     }
+
+    final totalPosts = analytics['postsInPeriod'] as int;
+    final statusColors = {
+      'Active': Colors.green,
+      'Pending': Colors.orange,
+      'Completed': Colors.blue,
+      'Rejected': Colors.red,
+    };
 
     return Card(
       elevation: 2,
@@ -969,21 +977,90 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
               'Status Distribution (Selected Period)',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
+            const SizedBox(height: 8),
+            Text(
+              'Post status breakdown in selected period',
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 16),
+            // Statistics List
+            Container(
+              constraints: const BoxConstraints(maxHeight: 200),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: statusData.length,
+                itemBuilder: (context, index) {
+                  final entry = statusData[index];
+                  final count = entry.value;
+                  final percentage = totalPosts > 0
+                      ? (count / totalPosts * 100)
+                      : 0.0;
+                  final statusColor = statusColors[entry.key] ?? Colors.grey;
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            entry.key,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            '$count posts',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[700],
+                            ),
+                            textAlign: TextAlign.right,
+                          ),
+                        ),
+                        SizedBox(
+                          width: 60,
+                          child: Text(
+                            '${percentage.toStringAsFixed(1)}%',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: statusColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            textAlign: TextAlign.right,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
             const SizedBox(height: 16),
             SizedBox(
               height: 300,
-              child: SfCircularChart(
-                legend: Legend(
-                  isVisible: true,
-                  position: LegendPosition.bottom,
+              child: SfCartesianChart(
+                primaryXAxis: CategoryAxis(
+                  isVisible: false,
                 ),
-                series: <CircularSeries>[
-                  DoughnutSeries<ChartData, String>(
-                    dataSource: data,
-                    xValueMapper: (data, _) => data.label,
-                    yValueMapper: (data, _) => data.value,
-                    dataLabelSettings: const DataLabelSettings(isVisible: true),
-                    pointColorMapper: (data, _) => data.color,
+                primaryYAxis: NumericAxis(),
+                legend: const Legend(isVisible: false),
+                tooltipBehavior: TooltipBehavior(enable: true),
+                series: <CartesianSeries>[
+                  ColumnSeries<MapEntry<String, int>, String>(
+                    name: 'Posts',
+                    dataSource: statusData,
+                    xValueMapper: (entry, _) => entry.key,
+                    yValueMapper: (entry, _) => entry.value,
+                    pointColorMapper: (entry, _) => statusColors[entry.key] ?? Colors.grey,
+                    dataLabelSettings: DataLabelSettings(
+                      isVisible: true,
+                      labelPosition: ChartDataLabelPosition.outside,
+                      textStyle: const TextStyle(fontSize: 10),
+                    ),
                   ),
                 ],
               ),
@@ -1356,7 +1433,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
 
   Widget _buildIndustryChart() {
     final analytics = _analytics!;
-    // Use period data
+    // Use period data (now using event field)
     final industryBreakdown =
         analytics['industryBreakdownInPeriod'] as Map<String, dynamic>?;
 
@@ -1391,15 +1468,20 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Top Industries (Selected Period)',
+              'Top Events (Selected Period)',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Top 10 Events by post count in selected period',
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
             SizedBox(
               height: 300,
               child: SfCartesianChart(
                 primaryXAxis: CategoryAxis(
-                  labelRotation: topIndustries.length > 5 ? -45 : 0,
+                  isVisible: false,
                 ),
                 primaryYAxis: NumericAxis(),
                 legend: const Legend(isVisible: false),
@@ -1779,6 +1861,11 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
             const Text(
               'Top Industries: All Time vs Selected Period',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Based on event field from posts collection',
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
             _buildComparisonHeader(),

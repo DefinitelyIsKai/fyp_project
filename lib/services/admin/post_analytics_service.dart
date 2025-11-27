@@ -107,16 +107,22 @@ class PostAnalyticsService {
       }
     }
 
-    // Industry breakdown - All Time
+    // Industry breakdown - All Time (using event field)
     final industryBreakdown = <String, int>{};
     for (final post in allPosts) {
-      industryBreakdown[post.industry] = (industryBreakdown[post.industry] ?? 0) + 1;
+      final event = post.event ?? '';
+      if (event.isNotEmpty) {
+        industryBreakdown[event] = (industryBreakdown[event] ?? 0) + 1;
+      }
     }
 
-    // Industry breakdown for the period
+    // Industry breakdown for the period (using event field)
     final industryBreakdownInPeriod = <String, int>{};
     for (final post in postsInRange) {
-      industryBreakdownInPeriod[post.industry] = (industryBreakdownInPeriod[post.industry] ?? 0) + 1;
+      final event = post.event ?? '';
+      if (event.isNotEmpty) {
+        industryBreakdownInPeriod[event] = (industryBreakdownInPeriod[event] ?? 0) + 1;
+      }
     }
 
     // Job type breakdown - All Time
