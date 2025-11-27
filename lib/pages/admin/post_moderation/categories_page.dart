@@ -34,7 +34,8 @@ class _CategoriesPageState extends State<CategoriesPage> {
   Future<void> _loadCategories() async {
     setState(() => _isLoading = true);
     try {
-      final categories = await _categoryService.getAllCategories();
+      // Use getAllCategoriesWithJobCounts to get real-time accurate counts
+      final categories = await _categoryService.getAllCategoriesWithJobCounts();
       // Sort categories alphabetically by name
       categories.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
       setState(() => _categories = categories);

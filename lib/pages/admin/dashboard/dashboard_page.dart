@@ -21,6 +21,7 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   final DashboardService _dashboardService = DashboardService();
   StreamSubscription<int>? _reportsSubscription;
+  StreamSubscription<int>? _pendingPostsSubscription;
 
   int _pendingPosts = 0;
   int _activeUsers = 0;
@@ -78,11 +79,34 @@ class _DashboardPageState extends State<DashboardPage> {
         _reportsSubscription = null;
       },
     );
+
+    // Listen to real-time updates for pending posts
+    _pendingPostsSubscription = _dashboardService.streamPendingPostsCount().listen(
+      (count) {
+        if (mounted) {
+          setState(() {
+            _pendingPosts = count;
+          });
+        }
+      },
+      onError: (error) {
+        // Handle permission errors gracefully
+        debugPrint('Error listening to pending posts stream: $error');
+        if (mounted) {
+          setState(() {
+            _pendingPosts = 0; // Set to 0 on error
+          });
+        }
+        _pendingPostsSubscription?.cancel();
+        _pendingPostsSubscription = null;
+      },
+    );
   }
 
   @override
   void dispose() {
     _reportsSubscription?.cancel();
+    _pendingPostsSubscription?.cancel();
     super.dispose();
   }
 
@@ -90,13 +114,13 @@ class _DashboardPageState extends State<DashboardPage> {
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      final posts = await _dashboardService.getPendingPostsCount();
+      // Pending posts are now handled by real-time stream
       final users = await _dashboardService.getActiveUsersCount();
+      // Unresolved reports are also handled by real-time stream, but load initial value
       final unresolvedReports = await _dashboardService.getUnresolvedReportsCount();
 
       if (mounted) {
         setState(() {
-          _pendingPosts = posts;
           _activeUsers = users;
           _unresolvedReports = unresolvedReports;
         });
@@ -111,6 +135,28 @@ class _DashboardPageState extends State<DashboardPage> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  Future<void> _refreshDashboard() async {
+    try {
+      // Refresh active users count
+      final users = await _dashboardService.getActiveUsersCount();
+      // Refresh unresolved reports count
+      final unresolvedReports = await _dashboardService.getUnresolvedReportsCount();
+
+      if (mounted) {
+        setState(() {
+          _activeUsers = users;
+          _unresolvedReports = unresolvedReports;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error refreshing dashboard: $e')));
+      }
+    }
+    // Note: Pending posts are handled by real-time stream, so they update automatically
   }
 
   @override
@@ -151,7 +197,9 @@ class _DashboardPageState extends State<DashboardPage> {
             child: InkWell(
               onTap: () async {
                 await _reportsSubscription?.cancel();
+                await _pendingPostsSubscription?.cancel();
                 _reportsSubscription = null;
+                _pendingPostsSubscription = null;
                 
                 if (context.mounted) {
                   Navigator.of(context).pushNamedAndRemoveUntil(
@@ -177,13 +225,16 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeaderSection(),
-                _buildStatsSection(),
-                Expanded(child: _buildDashboardGrid(allowedPages)),
-              ],
+          : RefreshIndicator(
+              onRefresh: _refreshDashboard,
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverToBoxAdapter(child: _buildHeaderSection()),
+                  SliverToBoxAdapter(child: _buildStatsSection()),
+                  _buildDashboardGridSliver(allowedPages),
+                ],
+              ),
             ),
       ),
     );
@@ -226,11 +277,17 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Row(
         children: [
           Expanded(
-            child: _StatCard(
-              title: 'Pending Posts',
-              value: _pendingPosts.toString(),
-              color: const Color(0xFFFF9800), 
-              icon: Icons.article,
+            child: StreamBuilder<int>(
+              stream: _dashboardService.streamPendingPostsCount(),
+              builder: (context, snapshot) {
+                final pendingCount = snapshot.data ?? 0;
+                return _StatCard(
+                  title: 'Pending Posts',
+                  value: pendingCount.toString(),
+                  color: const Color(0xFFFF9800), 
+                  icon: Icons.article,
+                );
+              },
             ),
           ),
           const SizedBox(width: 12),
@@ -385,7 +442,9 @@ class _DashboardPageState extends State<DashboardPage> {
                         Navigator.of(context).pop();
                         
                         await _reportsSubscription?.cancel();
+                        await _pendingPostsSubscription?.cancel();
                         _reportsSubscription = null;
+                        _pendingPostsSubscription = null;
                         
                         if (context.mounted) {
                           Navigator.of(context).pushNamedAndRemoveUntil(
@@ -491,7 +550,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  Widget _buildDashboardGrid(List<String> allowedPages) {
+  Widget _buildDashboardGridSliver(List<String> allowedPages) {
     final cards = [
       _DashboardCard(
         title: 'Post Moderation',
@@ -558,14 +617,21 @@ class _DashboardPageState extends State<DashboardPage> {
     // Filter cards based on role
     final filteredCards = cards.where((c) => allowedPages.contains(c.title)).toList();
 
-    return Padding(
+    return SliverPadding(
       padding: const EdgeInsets.all(16),
-      child: GridView.count(
-        crossAxisCount: 2,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 0.9,
-        children: filteredCards,
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+          childAspectRatio: 0.9,
+        ),
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            return filteredCards[index];
+          },
+          childCount: filteredCards.length,
+        ),
       ),
     );
   }

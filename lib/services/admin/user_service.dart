@@ -141,6 +141,7 @@ class UserService {
     required String reason,
     String? actionType,
     String? reportId,
+    bool skipLogging = false, // Skip creating log entry (used when called from issueWarning)
   }) async {
     try {
       // Get current admin user ID for logging
@@ -204,29 +205,31 @@ class UserService {
       final finalData = finalWalletDoc.data();
       final finalBalance = (finalData?['balance'] as num?)?.toDouble() ?? 0.0;
 
-      // Create log entry
-      try {
-        final logData = <String, dynamic>{
-          'actionType': actionType ?? 'deduct_credit',
-          'userId': userId,
-          'userName': userName,
-          'amount': amount,
-          'previousBalance': currentBalance,
-          'newBalance': finalBalance,
-          'reason': reason,
-          'createdAt': FieldValue.serverTimestamp(),
-          'createdBy': currentAdminId,
-        };
-        
-        // Add report ID if provided
-        if (reportId != null && reportId.isNotEmpty) {
-          logData['reportId'] = reportId;
+      // Create log entry only if not skipping (skip when called from issueWarning)
+      if (!skipLogging) {
+        try {
+          final logData = <String, dynamic>{
+            'actionType': actionType ?? 'deduct_credit',
+            'userId': userId,
+            'userName': userName,
+            'amount': amount,
+            'previousBalance': currentBalance,
+            'newBalance': finalBalance,
+            'reason': reason,
+            'createdAt': FieldValue.serverTimestamp(),
+            'createdBy': currentAdminId,
+          };
+          
+          // Add report ID if provided
+          if (reportId != null && reportId.isNotEmpty) {
+            logData['reportId'] = reportId;
+          }
+          
+          await _logsRef.add(logData);
+        } catch (logError) {
+          print('Error creating log entry: $logError');
+          // Don't fail the operation if logging fails
         }
-        
-        await _logsRef.add(logData);
-      } catch (logError) {
-        print('Error creating log entry: $logError');
-        // Don't fail the operation if logging fails
       }
 
       return {
@@ -272,14 +275,14 @@ class UserService {
       // Get current admin user ID for logging
       final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
 
-      // Deduct marks if specified
+      // Deduct marks if specified (skip logging - will be included in warning log)
       Map<String, dynamic>? deductionResult;
       if (deductMarksAmount != null && deductMarksAmount > 0) {
         deductionResult = await deductCredit(
           userId: userId,
           amount: deductMarksAmount,
           reason: 'Warning issued: $violationReason',
-          actionType: violationReason, // Use violation reason as action type
+          skipLogging: true, // Skip creating separate log - warning log will include deduction info
           reportId: reportId,
         );
       }
@@ -291,6 +294,7 @@ class UserService {
           'userId': userId,
           'userName': userData['fullName'] ?? 'User',
           'violationReason': violationReason,
+          'description': violationReason, // Save violation reason as description field
           'strikeCount': newStrikes,
           'wasSuspended': false, // Will be updated if suspended
           'deductedMarks': deductMarksAmount,

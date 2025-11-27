@@ -136,4 +136,30 @@ class DashboardService {
       return 0;
     });
   }
+
+  /// Stream pending posts count in real-time (excluding drafts)
+  Stream<int> streamPendingPostsCount() {
+    return _firestore
+        .collection('posts')
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((snapshot) {
+      // Filter out draft posts (only count isDraft: false or null)
+      int count = 0;
+      for (final doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data == null) continue;
+        final isDraft = data['isDraft'] as bool?;
+        // Count only if isDraft is not true (i.e., false or null)
+        if (isDraft != true) {
+          count++;
+        }
+      }
+      return count;
+    }).handleError((error) {
+      // Handle permission errors gracefully
+      debugPrint('Error streaming pending posts count: $error');
+      return 0;
+    });
+  }
 }
