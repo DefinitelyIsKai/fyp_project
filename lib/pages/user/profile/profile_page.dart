@@ -25,6 +25,7 @@ class _ProfilePageState extends State<ProfilePage> {
   final StorageService _storage = StorageService();
   final NotificationService _notificationService = NotificationService();
   late Future<DocumentSnapshot<Map<String, dynamic>>> _userFuture;
+  bool _uploadingPhoto = false;
 
   @override
   void initState() {
@@ -176,7 +177,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       children: [
                         // Profile Photo
                         GestureDetector(
-                          onTap: _handlePhotoUpdate,
+                          onTap: _uploadingPhoto ? null : _handlePhotoUpdate,
                           child: Stack(
                             children: [
                               Container(
@@ -204,21 +205,47 @@ class _ProfilePageState extends State<ProfilePage> {
                                       : null,
                                 ),
                               ),
+                              if (_uploadingPhoto)
+                                Positioned.fill(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.black.withOpacity(0.5),
+                                    ),
+                                    child: const Center(
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               Positioned(
                                 right: 0,
                                 bottom: 0,
                                 child: Container(
                                   width: 32,
                                   height: 32,
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFF00C8A0),
+                                  decoration: BoxDecoration(
+                                    color: _uploadingPhoto 
+                                        ? Colors.grey 
+                                        : const Color(0xFF00C8A0),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(
-                                    Icons.camera_alt,
-                                    color: Colors.white,
-                                    size: 16,
-                                  ),
+                                  child: _uploadingPhoto
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.camera_alt,
+                                          color: Colors.white,
+                                          size: 16,
+                                        ),
                                 ),
                               ),
                             ],
@@ -671,14 +698,41 @@ class _ProfilePageState extends State<ProfilePage> {
     }
     
     // Handle upload photo
-    final url = await _storage.pickAndUploadImage(fromCamera: source == 'camera');
-    if (url != null && mounted) {
-      setState(() {
-        _userFuture = _authService.getUserDoc();
-      });
-      DialogUtils.showSuccessMessage(
+    if (!mounted) return;
+    setState(() => _uploadingPhoto = true);
+    
+    try {
+      final url = await _storage.pickAndUploadImage(fromCamera: source == 'camera');
+      if (!mounted) return;
+      
+      if (url != null) {
+        setState(() {
+          _userFuture = _authService.getUserDoc();
+          _uploadingPhoto = false;
+        });
+        DialogUtils.showSuccessMessage(
+          context: context,
+          message: 'Profile photo updated successfully',
+        );
+      } else {
+        setState(() => _uploadingPhoto = false);
+        // Error message is already shown by storage service, but we can add a generic one if needed
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _uploadingPhoto = false);
+      
+      // Extract error message
+      String errorMessage = 'Failed to upload profile photo';
+      if (e is Exception) {
+        final errorStr = e.toString();
+        // Remove "Exception: " prefix if present
+        errorMessage = errorStr.replaceFirst(RegExp(r'^Exception:\s*'), '');
+      }
+      
+      DialogUtils.showWarningMessage(
         context: context,
-        message: 'Profile photo updated successfully',
+        message: errorMessage,
       );
     }
   }

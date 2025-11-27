@@ -18,8 +18,12 @@ class _AddSlotDialogState extends State<AddSlotDialog> {
   @override
   void initState() {
     super.initState();
-    _startTime = TimeOfDay.now();
-    _endTime = TimeOfDay.now().replacing(hour: TimeOfDay.now().hour + 1);
+    final now = TimeOfDay.now();
+    _startTime = now;
+    // Ensure hour stays within valid range (0-23)
+    // If current hour is 23, wrap around to 0
+    final nextHour = (now.hour + 1) % 24;
+    _endTime = now.replacing(hour: nextHour);
   }
 
   Future<void> _selectStartTime() async {

@@ -509,7 +509,8 @@ class StorageService {
         print('Firebase error code: ${e.code}');
         print('Firebase error message: ${e.message}');
       }
-      return null;
+      // Re-throw the exception so the caller can handle it and show error message to user
+      rethrow;
     }
   }
 
