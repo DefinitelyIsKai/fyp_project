@@ -80,6 +80,10 @@ class HybridMatchingEngine {
   DateTime? _weightsCacheTimestamp;
   static const _weightsCacheExpiryDuration = Duration(minutes: 15);
 
+  // Cache for candidate reliability scores
+  final Map<String, _CachedReliability> _reliabilityCache = {};
+  static const _reliabilityCacheExpiryDuration = Duration(minutes: 30);
+
   /// Fetch tag categories and tags from Firestore with caching
   Future<Map<TagCategory, List<Tag>>> _getTagData() async {
     final now = DateTime.now();
@@ -657,12 +661,23 @@ class HybridMatchingEngine {
     for (final neighbor in annNeighbors) {
       final candidate = neighbor.payload;
       final similarity = neighbor.similarity;
-      final score = await _scoreRecruiterMatch(jobVector, candidate, similarity, weights);
-      debugPrint('Candidate ${candidate.id} - Score: $score, Similarity: $similarity');
-      if (score > 0.05) {
+      var score = await _scoreRecruiterMatch(jobVector, candidate, similarity, weights);
+      
+      // Apply reliability coefficient for stableOptimal strategy
+      if (strategy == MatchingStrategy.stableOptimal) {
+        final reliabilityScore = await _getReliabilityScore(candidate.id);
+        score = score * reliabilityScore;
+        debugPrint('Candidate ${candidate.id} - Base Score: ${score / reliabilityScore}, Reliability: $reliabilityScore, Final Score: $score');
+      } else {
+        debugPrint('Candidate ${candidate.id} - Score: $score, Similarity: $similarity');
+      }
+      
+      // Use different thresholds based on strategy
+      final minScore = strategy == MatchingStrategy.stableOptimal ? 0.20 : 0.05;
+      if (score > minScore) {
         candidateScores[candidate] = score;
       } else {
-        debugPrint('Candidate ${candidate.id} score too low, skipping');
+        debugPrint('Candidate ${candidate.id} score too low (${score.toStringAsFixed(3)} < $minScore), skipping');
       }
     }
 
@@ -1048,6 +1063,130 @@ class HybridMatchingEngine {
 
   // Removed _persistMatches and _persistMatchesForJobseeker methods
   // No longer writing to job_matches collection - using real-time computation instead
+
+  /// Get reliability score for a candidate (with caching)
+  /// Returns a coefficient between 0.8 and 1.2 that adjusts the match score
+  Future<double> _getReliabilityScore(String candidateId) async {
+    // Check cache first
+    final cached = _reliabilityCache[candidateId];
+    if (cached != null &&
+        DateTime.now().difference(cached.timestamp) < _reliabilityCacheExpiryDuration) {
+      return cached.score;
+    }
+
+    // Calculate reliability score
+    final score = await _calculateReliabilityScore(candidateId);
+    
+    // Cache the result
+    _reliabilityCache[candidateId] = _CachedReliability(score, DateTime.now());
+    
+    return score;
+  }
+
+  /// Calculate reliability score based on candidate's history
+  /// Considers: application approval rate, average rating, completion rate
+  /// Returns a coefficient between 0.8 and 1.2
+  Future<double> _calculateReliabilityScore(String candidateId) async {
+    try {
+      // 1. Query application history
+      final applicationsSnapshot = await _firestore
+          .collection('applications')
+          .where('jobseekerId', isEqualTo: candidateId)
+          .get();
+
+      final totalApplications = applicationsSnapshot.docs.length;
+      final approvedApplications = applicationsSnapshot.docs
+          .where((doc) => (doc.data()['status'] as String?) == 'approved')
+          .length;
+      
+      // Calculate approval rate (default to 0.5 if no applications)
+      final approvalRate = totalApplications > 0 
+          ? approvedApplications / totalApplications 
+          : 0.5;
+
+      // 2. Query average rating from reviews collection
+      double ratingScore = 0.8; // Default to 0.8 (neutral)
+      try {
+        final ratingsSnapshot = await _firestore
+            .collection('reviews')
+            .where('employeeId', isEqualTo: candidateId)
+            .where('status', isEqualTo: 'active')
+            .get();
+
+        if (ratingsSnapshot.docs.isNotEmpty) {
+          final ratings = ratingsSnapshot.docs
+              .map((doc) => (doc.data()['rating'] as num?)?.toDouble() ?? 0.0)
+              .where((r) => r > 0)
+              .toList();
+          
+          if (ratings.isNotEmpty) {
+            final avgRating = ratings.reduce((a, b) => a + b) / ratings.length;
+            // Normalize rating (1-5 scale) to 0-1 scale, then map to 0.8-1.2
+            ratingScore = 0.8 + (avgRating / 5.0) * 0.4; // Maps 1.0→0.8, 5.0→1.2
+          }
+        }
+      } catch (e) {
+        debugPrint('Error fetching ratings for candidate $candidateId: $e');
+        // Use default ratingScore
+      }
+
+      // 3. Calculate completion rate (if we have completed posts)
+      double completionRate = 0.8; // Default
+      try {
+        // Get approved applications
+        final approvedAppIds = applicationsSnapshot.docs
+            .where((doc) => (doc.data()['status'] as String?) == 'approved')
+            .map((doc) => doc.data()['postId'] as String?)
+            .where((id) => id != null && id.isNotEmpty)
+            .toList();
+
+        if (approvedAppIds.isNotEmpty) {
+          // Check how many of these posts were completed
+          // Limit to 10 to avoid Firestore 'whereIn' limit
+          final limitedIds = approvedAppIds.take(10).toList();
+          final postsSnapshot = await _firestore
+              .collection('posts')
+              .where(FieldPath.documentId, whereIn: limitedIds)
+              .get();
+
+          final totalApproved = postsSnapshot.docs.length;
+          final completed = postsSnapshot.docs
+              .where((doc) => doc.data()['completedAt'] != null)
+              .length;
+
+          if (totalApproved > 0) {
+            final completionRatio = completed / totalApproved;
+            // Map to 0.8-1.2 range
+            completionRate = 0.8 + completionRatio * 0.4;
+          }
+        }
+      } catch (e) {
+        debugPrint('Error calculating completion rate for candidate $candidateId: $e');
+        // Use default completionRate
+      }
+
+      // 4. Combine factors with weights
+      // Approval rate: 40%, Rating: 40%, Completion rate: 20%
+      final approvalComponent = 0.8 + approvalRate * 0.4; // Maps 0→0.8, 1→1.2
+      final reliabilityScore = (approvalComponent * 0.4) + 
+                                (ratingScore * 0.4) + 
+                                (completionRate * 0.2);
+
+      // Clamp to 0.8-1.2 range
+      return reliabilityScore.clamp(0.8, 1.2);
+    } catch (e) {
+      debugPrint('Error calculating reliability score for candidate $candidateId: $e');
+      // Return neutral score on error
+      return 1.0;
+    }
+  }
+}
+
+/// Cached reliability data structure
+class _CachedReliability {
+  final double score;
+  final DateTime timestamp;
+  _CachedReliability(this.score, this.timestamp);
 }
 
 class _PendingMatch {

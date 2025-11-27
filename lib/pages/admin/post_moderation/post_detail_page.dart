@@ -230,6 +230,34 @@ class _PostDetailPageState extends State<PostDetailPage> {
     return DateFormat('dd MMM yyyy, hh:mm a').format(date);
   }
 
+  String _formatWorkTime() {
+    final start = widget.post.workTimeStart;
+    final end = widget.post.workTimeEnd;
+    if (start != null && end != null) {
+      return '$start - $end';
+    }
+    if (start != null) return 'From $start';
+    if (end != null) return 'Until $end';
+    return 'Not specified';
+  }
+
+  String _formatGenderRequirement() {
+    final gender = widget.post.genderRequirement;
+    if (gender == null || gender.isEmpty) {
+      return 'Not specified';
+    }
+    switch (gender.toLowerCase()) {
+      case 'male':
+        return 'Male';
+      case 'female':
+        return 'Female';
+      case 'any':
+        return 'Any';
+      default:
+        return gender;
+    }
+  }
+
   Widget _buildInfoChip(IconData icon, String text, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -873,6 +901,18 @@ class _PostDetailPageState extends State<PostDetailPage> {
                         Icons.cake,
                       ),
                     ],
+                    const SizedBox(height: 12),
+                    _buildInfoRow(
+                      'Work Time',
+                      _formatWorkTime(),
+                      Icons.access_time,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildInfoRow(
+                      'Gender Requirement',
+                      _formatGenderRequirement(),
+                      Icons.people_outline,
+                    ),
                     if (widget.post.isDraft != null && widget.post.isDraft == true) ...[
                       const SizedBox(height: 12),
                       _buildInfoRow('Draft Status', 'Yes', Icons.edit),

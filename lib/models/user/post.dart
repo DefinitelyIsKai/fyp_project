@@ -29,6 +29,9 @@ class Post {
   DateTime createdAt;
   DateTime? eventStartDate;
   DateTime? eventEndDate;
+  String? workTimeStart; // Format: "HH:mm" (e.g., "09:00")
+  String? workTimeEnd; // Format: "HH:mm" (e.g., "17:00")
+  String? genderRequirement; // Gender requirement: "male", "female", or "any"
   int views;
   int applicants;
 
@@ -56,6 +59,9 @@ class Post {
     DateTime? createdAt,
     this.eventStartDate,
     this.eventEndDate,
+    this.workTimeStart,
+    this.workTimeEnd,
+    this.genderRequirement,
     this.views = 0,
     this.applicants = 0,
   })  : tags = tags ?? <String>[],
@@ -87,6 +93,9 @@ class Post {
       'completedAt': completedAt,
       'eventStartDate': eventStartDate,
       'eventEndDate': eventEndDate,
+      'workTimeStart': workTimeStart,
+      'workTimeEnd': workTimeEnd,
+      'genderRequirement': genderRequirement,
       'createdAt': createdAt,
       'views': views,
       'applicants': applicants,
@@ -130,6 +139,9 @@ class Post {
         eventEndDate: (map['eventEndDate'] is Timestamp)
             ? (map['eventEndDate'] as Timestamp).toDate()
             : (map['eventEndDate'] as DateTime?),
+        workTimeStart: map['workTimeStart'] as String?,
+        workTimeEnd: map['workTimeEnd'] as String?,
+        genderRequirement: map['genderRequirement'] as String?,
         createdAt: (map['createdAt'] is Timestamp)
             ? (map['createdAt'] as Timestamp).toDate()
             : (map['createdAt'] as DateTime?) ?? DateTime.now(),

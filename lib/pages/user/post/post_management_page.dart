@@ -11,6 +11,7 @@ import '../../../models/user/application.dart';
 import '../../../utils/user/dialog_utils.dart';
 import '../../../utils/user/card_decorations.dart';
 import '../../../widgets/user/empty_state.dart';
+import '../../../widgets/user/pagination_dots_widget.dart';
 
 class PostManagementPage extends StatefulWidget {
   const PostManagementPage({super.key});
@@ -230,22 +231,9 @@ class _PostManagementPageState extends State<PostManagementPage> {
             if (_pages.length > 1)
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(
-                    _pages.length,
-                    (index) => Container(
-                      width: 8,
-                      height: 8,
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: index == _currentPage
-                            ? const Color(0xFF00C8A0)
-                            : Colors.grey[300],
-                      ),
-                    ),
-                  ),
+                child: PaginationDotsWidget(
+                  totalPages: _pages.length,
+                  currentPage: _currentPage,
                 ),
               ),
           ],
@@ -273,6 +261,7 @@ class _PostManagementPageState extends State<PostManagementPage> {
     }
     return true;
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -602,7 +591,10 @@ class _PostCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool isActive = !post.isDraft && post.status == PostStatus.active;
     final bool isPending = !post.isDraft && post.status == PostStatus.pending;
+    final bool isCompleted = post.status == PostStatus.completed;
     final bool canMarkCompleted = post.status == PostStatus.active && !post.isDraft;
+    // Hide edit button if post is active or completed
+    final bool canEdit = !isActive && !isCompleted;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -683,16 +675,18 @@ class _PostCard extends StatelessWidget {
                   ),
                   child: const Text('View'),
                 ),
-                OutlinedButton(
-                  onPressed: onEdit,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.black,
-                    side: const BorderSide(color: Colors.black),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                // Hide edit button if post is active or completed
+                if (canEdit)
+                  OutlinedButton(
+                    onPressed: onEdit,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.black,
+                      side: const BorderSide(color: Colors.black),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    ),
+                    child: const Text('Edit'),
                   ),
-                  child: const Text('Edit'),
-                ),
                 OutlinedButton(
                   onPressed: onDelete,
                   style: OutlinedButton.styleFrom(

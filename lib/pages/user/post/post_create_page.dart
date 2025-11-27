@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../models/user/post.dart';
 import '../../../models/user/category.dart';
@@ -41,6 +42,9 @@ class _PostCreatePageState extends State<PostCreatePage> {
   String? _selectedEvent;
   DateTime? _eventStartDate;
   DateTime? _eventEndDate;
+  TimeOfDay? _workTimeStart;
+  TimeOfDay? _workTimeEnd;
+  String? _selectedGender; // "male", "female", or "any"
   final TextEditingController _minAgeController = TextEditingController();
   final TextEditingController _maxAgeController = TextEditingController();
   final TextEditingController _quotaController = TextEditingController();
@@ -71,6 +75,15 @@ class _PostCreatePageState extends State<PostCreatePage> {
   final GlobalKey<FormFieldState<String>> _quotaKey = GlobalKey<FormFieldState<String>>();
   // Track which fields have been focused/clicked
   final Set<TextEditingController> _focusedFields = {};
+  bool _genderFieldTouched = false; // Track if gender field has been interacted with
+  bool _workTimeStartTouched = false; // Track if work time start has been interacted with
+  bool _workTimeEndTouched = false; // Track if work time end has been interacted with
+  
+  // Real-time update related variables
+  StreamSubscription<Post?>? _postStreamSubscription;
+  Post? _latestPostFromFirestore;
+  bool _hasExternalUpdate = false; // Track if there's an external update
+  bool _isUserEditing = false; // Track if user is actively editing
 
   @override
   void initState() {
@@ -106,13 +119,36 @@ class _PostCreatePageState extends State<PostCreatePage> {
       _selectedEvent = p.event.isEmpty ? null : p.event;
       _eventStartDate = p.eventStartDate;
       _eventEndDate = p.eventEndDate;
+      // Parse work time from string format "HH:mm"
+      if (p.workTimeStart != null) {
+        final parts = p.workTimeStart!.split(':');
+        if (parts.length == 2) {
+          _workTimeStart = TimeOfDay(
+            hour: int.tryParse(parts[0]) ?? 9,
+            minute: int.tryParse(parts[1]) ?? 0,
+          );
+        }
+      }
+      if (p.workTimeEnd != null) {
+        final parts = p.workTimeEnd!.split(':');
+        if (parts.length == 2) {
+          _workTimeEnd = TimeOfDay(
+            hour: int.tryParse(parts[0]) ?? 17,
+            minute: int.tryParse(parts[1]) ?? 0,
+          );
+        }
+      }
       _minAgeController.text = p.minAgeRequirement?.toString() ?? '';
       _maxAgeController.text = p.maxAgeRequirement?.toString() ?? '';
       _quotaController.text = p.applicantQuota?.toString() ?? '';
+      _selectedGender = p.genderRequirement;
       _jobType = p.jobType;
       
       // Load existing attachments from Firestore (similar to post_details_page.dart)
       _loadExistingAttachments(p.id);
+      
+      // Start real-time listener for existing posts
+      _startRealtimeListener(p.id);
     }
     
     // Add listeners to update button state when fields change
@@ -145,8 +181,172 @@ class _PostCreatePageState extends State<PostCreatePage> {
   void _onFieldChanged() {
     if (mounted) {
       setState(() {
+        _isUserEditing = true;
         // Trigger rebuild to update button state
       });
+      // Reset editing flag after a delay
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() {
+            _isUserEditing = false;
+          });
+        }
+      });
+    }
+  }
+  
+  /// Start real-time listener for post updates from Firestore
+  void _startRealtimeListener(String postId) {
+    _postStreamSubscription = _service.streamPostById(postId).listen(
+      (Post? updatedPost) {
+        if (!mounted || updatedPost == null) return;
+        
+        // Store the latest post from Firestore
+        _latestPostFromFirestore = updatedPost;
+        
+        // Only update UI if user is not actively editing
+        // This prevents overwriting user's current input
+        if (!_isUserEditing && !_saving) {
+          _syncWithFirestoreData(updatedPost);
+        } else {
+          // Mark that there's an external update available
+          if (mounted) {
+            setState(() {
+              _hasExternalUpdate = true;
+            });
+          }
+        }
+      },
+      onError: (error) {
+        debugPrint('Error in real-time post stream: $error');
+      },
+    );
+  }
+  
+  /// Sync UI with Firestore data (only updates fields user is not editing)
+  void _syncWithFirestoreData(Post updatedPost) {
+    if (!mounted) return;
+    
+    setState(() {
+      // Update title
+      if (_titleController.text != updatedPost.title) {
+        _titleController.text = updatedPost.title;
+      }
+      
+      // Update description
+      if (_descriptionController.text != updatedPost.description) {
+        _descriptionController.text = updatedPost.description;
+      }
+      
+      // Update budget
+      final currentMinBudget = _parseDouble(_budgetMinController.text);
+      if (currentMinBudget != updatedPost.budgetMin) {
+        _budgetMinController.text = (updatedPost.budgetMin ?? '').toString();
+      }
+      final currentMaxBudget = _parseDouble(_budgetMaxController.text);
+      if (currentMaxBudget != updatedPost.budgetMax) {
+        _budgetMaxController.text = (updatedPost.budgetMax ?? '').toString();
+      }
+      
+      // Update location
+      if (_locationController.text != updatedPost.location) {
+        _locationController.text = updatedPost.location;
+        _latitude = updatedPost.latitude;
+        _longitude = updatedPost.longitude;
+      }
+      
+      // Update event type
+      if (_selectedEvent != updatedPost.event && updatedPost.event.isNotEmpty) {
+        _selectedEvent = updatedPost.event;
+      }
+      
+      // Update dates
+      if (_eventStartDate != updatedPost.eventStartDate) {
+        _eventStartDate = updatedPost.eventStartDate;
+      }
+      if (_eventEndDate != updatedPost.eventEndDate) {
+        _eventEndDate = updatedPost.eventEndDate;
+      }
+      
+      // Update work times
+      if (updatedPost.workTimeStart != null) {
+        final parts = updatedPost.workTimeStart!.split(':');
+        if (parts.length == 2) {
+          final newTime = TimeOfDay(
+            hour: int.tryParse(parts[0]) ?? 9,
+            minute: int.tryParse(parts[1]) ?? 0,
+          );
+          if (_workTimeStart != newTime) {
+            _workTimeStart = newTime;
+          }
+        }
+      }
+      if (updatedPost.workTimeEnd != null) {
+        final parts = updatedPost.workTimeEnd!.split(':');
+        if (parts.length == 2) {
+          final newTime = TimeOfDay(
+            hour: int.tryParse(parts[0]) ?? 17,
+            minute: int.tryParse(parts[1]) ?? 0,
+          );
+          if (_workTimeEnd != newTime) {
+            _workTimeEnd = newTime;
+          }
+        }
+      }
+      
+      // Update age requirements
+      final currentMinAge = _parseInt(_minAgeController.text);
+      if (currentMinAge != updatedPost.minAgeRequirement) {
+        _minAgeController.text = updatedPost.minAgeRequirement?.toString() ?? '';
+      }
+      final currentMaxAge = _parseInt(_maxAgeController.text);
+      if (currentMaxAge != updatedPost.maxAgeRequirement) {
+        _maxAgeController.text = updatedPost.maxAgeRequirement?.toString() ?? '';
+      }
+      
+      // Update quota
+      final currentQuota = _parseInt(_quotaController.text);
+      if (currentQuota != updatedPost.applicantQuota) {
+        _quotaController.text = updatedPost.applicantQuota?.toString() ?? '';
+      }
+      
+      // Update gender
+      if (_selectedGender != updatedPost.genderRequirement) {
+        _selectedGender = updatedPost.genderRequirement;
+      }
+      
+      // Update job type
+      if (_jobType != updatedPost.jobType) {
+        _jobType = updatedPost.jobType;
+      }
+      
+      // Update tags
+      if (updatedPost.tags.isNotEmpty) {
+        _mapExistingTagsToCategories(updatedPost.tags);
+      }
+      
+      // Update attachments
+      if (updatedPost.attachments.isNotEmpty && _attachments != updatedPost.attachments) {
+        _attachments.clear();
+        _attachments.addAll(updatedPost.attachments);
+      }
+      
+      _hasExternalUpdate = false;
+    });
+  }
+  
+  /// Refresh UI with latest Firestore data
+  void _refreshFromFirestore() {
+    if (_latestPostFromFirestore != null) {
+      _syncWithFirestoreData(_latestPostFromFirestore!);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('已同步最新数据'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 
@@ -200,6 +400,15 @@ class _PostCreatePageState extends State<PostCreatePage> {
           _categoriesLoading = false;
           if (categories.isEmpty) {
             _categoriesError = 'No event types available. Please contact support.';
+          } else {
+            // Validate that _selectedEvent exists in the loaded categories
+            // If not, reset it to null to avoid DropdownButton assertion error
+            if (_selectedEvent != null && _selectedEvent!.isNotEmpty) {
+              final categoryNames = categories.map((c) => c.name).toList();
+              if (!categoryNames.contains(_selectedEvent)) {
+                _selectedEvent = null;
+              }
+            }
           }
         });
       }
@@ -269,6 +478,9 @@ class _PostCreatePageState extends State<PostCreatePage> {
 
   @override
   void dispose() {
+    // Cancel real-time stream subscription
+    _postStreamSubscription?.cancel();
+    
     _titleController.removeListener(_onFieldChanged);
     _descriptionController.removeListener(_onFieldChanged);
     _locationController.removeListener(_onFieldChanged);
@@ -368,6 +580,25 @@ class _PostCreatePageState extends State<PostCreatePage> {
       return 'Please enter a valid applicant quota (must be greater than 0)';
     }
     
+    // Validate work time (required fields)
+    if (_workTimeStart == null) {
+      return 'Work start time is required';
+    }
+    if (_workTimeEnd == null) {
+      return 'Work end time is required';
+    }
+    // Check if end time is after start time
+    final startMinutes = _workTimeStart!.hour * 60 + _workTimeStart!.minute;
+    final endMinutes = _workTimeEnd!.hour * 60 + _workTimeEnd!.minute;
+    if (endMinutes <= startMinutes) {
+      return 'Work end time must be after start time';
+    }
+    
+    // Validate gender requirement (required field)
+    if (_selectedGender == null || _selectedGender!.isEmpty) {
+      return 'Gender requirement is required';
+    }
+    
     return null; // All validations passed
   }
 
@@ -423,6 +654,16 @@ class _PostCreatePageState extends State<PostCreatePage> {
       return false;
     }
     
+    // Check work time (required fields)
+    if (_workTimeStart == null || _workTimeEnd == null) {
+      return false;
+    }
+    
+    // Check gender requirement (required field)
+    if (_selectedGender == null || _selectedGender!.isEmpty) {
+      return false;
+    }
+    
     return true;
   }
 
@@ -434,18 +675,22 @@ class _PostCreatePageState extends State<PostCreatePage> {
       setState(() {}); // Trigger rebuild to disable buttons
     }
     
-    // For publishing, validate all required fields
-    if (publish) {
-      // Mark all budget and age fields as focused to show errors after validation
-      if (mounted) {
-        setState(() {
-          _focusedFields.add(_budgetMinController);
-          _focusedFields.add(_budgetMaxController);
-          _focusedFields.add(_minAgeController);
-          _focusedFields.add(_maxAgeController);
-          _focusedFields.add(_quotaController);
-        });
-      }
+      // For publishing, validate all required fields
+      if (publish) {
+        // Mark all budget and age fields as focused to show errors after validation
+        // Also mark gender and time fields as touched
+        if (mounted) {
+          setState(() {
+            _focusedFields.add(_budgetMinController);
+            _focusedFields.add(_budgetMaxController);
+            _focusedFields.add(_minAgeController);
+            _focusedFields.add(_maxAgeController);
+            _focusedFields.add(_quotaController);
+            _genderFieldTouched = true;
+            _workTimeStartTouched = true;
+            _workTimeEndTouched = true;
+          });
+        }
       
       // Trigger validation on all FormFields
       _budgetMinKey.currentState?.validate();
@@ -517,6 +762,16 @@ class _PostCreatePageState extends State<PostCreatePage> {
     final maxAge = _parseInt(_maxAgeController.text);
     final quota = _parseInt(_quotaController.text);
     
+    // Convert TimeOfDay to string format "HH:mm"
+    String? workTimeStartStr;
+    String? workTimeEndStr;
+    if (_workTimeStart != null) {
+      workTimeStartStr = '${_workTimeStart!.hour.toString().padLeft(2, '0')}:${_workTimeStart!.minute.toString().padLeft(2, '0')}';
+    }
+    if (_workTimeEnd != null) {
+      workTimeEndStr = '${_workTimeEnd!.hour.toString().padLeft(2, '0')}:${_workTimeEnd!.minute.toString().padLeft(2, '0')}';
+    }
+    
     final Post post = Post(
       id: id,
       ownerId: widget.existing?.ownerId ?? _authService.currentUserId,
@@ -540,6 +795,9 @@ class _PostCreatePageState extends State<PostCreatePage> {
       createdAt: widget.existing?.createdAt,
       eventStartDate: _eventStartDate,
       eventEndDate: _eventEndDate,
+      workTimeStart: workTimeStartStr,
+      workTimeEnd: workTimeEndStr,
+      genderRequirement: _selectedGender,
       views: widget.existing?.views ?? 0,
       applicants: widget.existing?.applicants ?? 0,
     );
@@ -651,6 +909,31 @@ class _PostCreatePageState extends State<PostCreatePage> {
         backgroundColor: Colors.white,
         elevation: 1,
         iconTheme: const IconThemeData(color: Colors.black),
+        actions: [
+          // Show refresh button if there's an external update
+          if (widget.existing != null && _hasExternalUpdate)
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.refresh, color: Colors.black),
+                  onPressed: _refreshFromFirestore,
+                ),
+                Positioned(
+                  right: 6,
+                  top: 6,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+        ],
       ),
       body: SingleChildScrollView(
         controller: _scrollController,
@@ -914,6 +1197,38 @@ class _PostCreatePageState extends State<PostCreatePage> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildTimePickerField(
+                            label: 'Work Start Time*',
+                            time: _workTimeStart,
+                            onTimeSelected: (time) {
+                              setState(() {
+                                _workTimeStart = time;
+                              });
+                              _onFieldChanged();
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildTimePickerField(
+                            label: 'Work End Time*',
+                            time: _workTimeEnd,
+                            onTimeSelected: (time) {
+                              setState(() {
+                                _workTimeEnd = time;
+                              });
+                              _onFieldChanged();
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _buildGenderDropdown(),
                     const SizedBox(height: 16),
                     
                     TagSelectionSection(
@@ -1383,7 +1698,10 @@ class _PostCreatePageState extends State<PostCreatePage> {
                                 ),
                               )
                             : DropdownButton<String>(
-                                value: _selectedEvent,
+                                value: _selectedEvent != null && 
+                                       _categories.any((c) => c.name == _selectedEvent)
+                                    ? _selectedEvent
+                                    : null,
                                 focusNode: _eventFocusNode,
                                 hint: Text(
                                   'Select event',
@@ -1594,6 +1912,227 @@ class _PostCreatePageState extends State<PostCreatePage> {
             ),
           ),
           validator: validator,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGenderDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Gender Requirement*',
+          style: TextStyle(
+            color: Colors.grey[700],
+            fontWeight: FontWeight.w500,
+            fontSize: 14,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: (_selectedGender == null && _genderFieldTouched) ? Colors.red : Colors.grey[400]!,
+              width: 1,
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedGender,
+                hint: Text(
+                  'Select gender requirement',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 16,
+                  ),
+                ),
+                isExpanded: true,
+                icon: Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
+                iconSize: 24,
+                dropdownColor: Colors.white,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 16,
+                ),
+                items: [
+                  DropdownMenuItem<String>(
+                    value: 'any',
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text('Any'),
+                    ),
+                  ),
+                  DropdownMenuItem<String>(
+                    value: 'male',
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text('Male'),
+                    ),
+                  ),
+                  DropdownMenuItem<String>(
+                    value: 'female',
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text('Female'),
+                    ),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedGender = value;
+                    _genderFieldTouched = true;
+                  });
+                  _onFieldChanged();
+                },
+                onTap: () {
+                  if (!_genderFieldTouched) {
+                    setState(() {
+                      _genderFieldTouched = true;
+                    });
+                  }
+                },
+              ),
+            ),
+          ),
+        ),
+        if (_selectedGender == null && _genderFieldTouched) ...[
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: 12),
+            child: Text(
+              'Required',
+              style: const TextStyle(
+                color: Colors.red,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildTimePickerField({
+    required String label,
+    required TimeOfDay? time,
+    required Function(TimeOfDay?) onTimeSelected,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.grey[700],
+            fontWeight: FontWeight.w500,
+            fontSize: 14,
+          ),
+        ),
+        const SizedBox(height: 8),
+        InkWell(
+          onTap: () async {
+            final isStartTime = label.contains('Start');
+            if (isStartTime && !_workTimeStartTouched) {
+              setState(() {
+                _workTimeStartTouched = true;
+              });
+            } else if (!isStartTime && !_workTimeEndTouched) {
+              setState(() {
+                _workTimeEndTouched = true;
+              });
+            }
+            
+            final TimeOfDay? picked = await showTimePicker(
+              context: context,
+              initialTime: time ?? TimeOfDay(hour: 9, minute: 0),
+              builder: (context, child) {
+                return Theme(
+                  data: Theme.of(context).copyWith(
+                    colorScheme: ColorScheme.light(
+                      primary: const Color(0xFF00C8A0),
+                      onPrimary: Colors.white,
+                      onSurface: Colors.black,
+                    ),
+                  ),
+                  child: child!,
+                );
+              },
+            );
+            if (picked != null) {
+              onTimeSelected(picked);
+            }
+          },
+          child: Builder(
+            builder: (context) {
+              final isStartTime = label.contains('Start');
+              final isTouched = isStartTime ? _workTimeStartTouched : _workTimeEndTouched;
+              final showError = time == null && isTouched;
+              
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: showError ? Colors.red : Colors.grey[400]!,
+                    width: 1,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.access_time,
+                  color: showError ? Colors.red : Colors.grey[600],
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    time == null
+                        ? 'time'
+                        : time.format(context),
+                    style: TextStyle(
+                      color: time == null ? Colors.grey[400] : Colors.black,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_drop_down,
+                  color: Colors.grey[600],
+                ),
+              ],
+            ),
+          );
+            },
+          ),
+        ),
+        Builder(
+          builder: (context) {
+            final isStartTime = label.contains('Start');
+            final isTouched = isStartTime ? _workTimeStartTouched : _workTimeEndTouched;
+            if (time == null && isTouched) {
+              return Column(
+                children: [
+                  const SizedBox(height: 4),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12),
+                    child: Text(
+                      'Required',
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
+            return const SizedBox.shrink();
+          },
         ),
       ],
     );

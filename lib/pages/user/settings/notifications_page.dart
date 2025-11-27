@@ -7,6 +7,7 @@ import '../../../models/user/app_notification.dart';
 import '../../../services/user/notification_service.dart';
 import '../../../utils/user/dialog_utils.dart';
 import '../../../widgets/admin/dialogs/user_dialogs/notification_detail_dialog.dart';
+import '../../../widgets/user/pagination_dots_widget.dart';
 
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
@@ -325,22 +326,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
                     if (_pages.length > 1 || _hasMore)
                       Container(
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(
-                            _pages.length + (_hasMore ? 1 : 0),
-                            (index) => Container(
-                              width: 8,
-                              height: 8,
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: index == _currentPage
-                                    ? const Color(0xFF00C8A0)
-                                    : Colors.grey[300],
-                              ),
-                            ),
-                          ),
+                        child: PaginationDotsWidget(
+                          totalPages: _pages.length + (_hasMore ? 1 : 0),
+                          currentPage: _currentPage,
                         ),
                       ),
                   ],
@@ -590,4 +578,5 @@ class _NotificationsPageState extends State<NotificationsPage> {
     if (diff.inDays < 7) return '${diff.inDays}d ago';
     return DateFormat('MMM d, h:mm a').format(timestamp);
   }
+
 }
