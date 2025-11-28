@@ -93,6 +93,14 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
     }
   }
 
+  Future<void> _refreshData() async {
+    await Future.wait([
+      _loadAttachments(),
+      _checkUserRoleAndIncrementView(),
+      _loadOwnerName(),
+    ]);
+  }
+
   Future<void> _loadOwnerName() async {
     try {
       final ownerDoc = await FirebaseFirestore.instance
@@ -294,7 +302,11 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
               ),
             )
           : null,
-      body: SingleChildScrollView(
+      body: RefreshIndicator(
+        onRefresh: _refreshData,
+        color: const Color(0xFF00C8A0),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -654,6 +666,7 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
             
             const SizedBox(height: 20),
           ],
+        ),
         ),
       ),
     );

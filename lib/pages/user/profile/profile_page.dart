@@ -53,9 +53,13 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: FutureBuilder(
-        future: _userFuture,
-        builder: (context, snapshot) {
+      body: AbsorbPointer(
+        absorbing: _uploadingPhoto,
+        child: Stack(
+          children: [
+            FutureBuilder(
+              future: _userFuture,
+              builder: (context, snapshot) {
           final isLoading = snapshot.connectionState == ConnectionState.waiting;
           
           if (snapshot.hasError) {
@@ -78,7 +82,16 @@ class _ProfilePageState extends State<ProfilePage> {
           final String? base64Image = (imageData?['base64'] as String?);
           final Uint8List? imageBytes = _decodeBase64(base64Image);
 
-          return CustomScrollView(
+          return RefreshIndicator(
+            onRefresh: () async {
+              setState(() {
+                _userFuture = _authService.getUserDoc();
+              });
+              await _userFuture;
+            },
+            color: const Color(0xFF00C8A0),
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               // Header Section
               SliverAppBar(
@@ -127,7 +140,14 @@ class _ProfilePageState extends State<ProfilePage> {
                           activeTrackColor: Colors.white.withOpacity(0.5),
                           inactiveThumbColor: Colors.white,
                           inactiveTrackColor: Colors.white.withOpacity(0.3),
-                          onChanged: (val) async {
+                          onChanged: _uploadingPhoto ? null : (val) async {
+                            if (_uploadingPhoto) {
+                              DialogUtils.showInfoMessage(
+                                context: context,
+                                message: 'Please wait for photo upload to complete.',
+                              );
+                              return;
+                            }
                             try {
                               await _authService.updateUserProfile({
                                 'role': val ? 'recruiter' : 'jobseeker',
@@ -279,12 +299,19 @@ class _ProfilePageState extends State<ProfilePage> {
                         SizedBox(
                           width: double.infinity,
                           child: OutlinedButton.icon(
-                            onPressed: isSuspended
+                            onPressed: (_uploadingPhoto || isSuspended)
                                 ? () {
-                                    DialogUtils.showWarningMessage(
-                                      context: context,
-                                      message: 'Your account has been suspended. You can only access your profile page.',
-                                    );
+                                    if (_uploadingPhoto) {
+                                      DialogUtils.showInfoMessage(
+                                        context: context,
+                                        message: 'Please wait for photo upload to complete.',
+                                      );
+                                    } else {
+                                      DialogUtils.showWarningMessage(
+                                        context: context,
+                                        message: 'Your account has been suspended. You can only access your profile page.',
+                                      );
+                                    }
                                   }
                                 : () async {
                                     final changed = await Navigator.push(
@@ -342,12 +369,19 @@ class _ProfilePageState extends State<ProfilePage> {
                           icon: Icons.settings_outlined,
                           title: 'Settings',
                           subtitle: 'App preferences and configurations',
-                          onTap: isSuspended
+                          onTap: (_uploadingPhoto || isSuspended)
                               ? () {
-                                  DialogUtils.showWarningMessage(
-                                    context: context,
-                                    message: 'Your account has been suspended. You can only access your profile page.',
-                                  );
+                                  if (_uploadingPhoto) {
+                                    DialogUtils.showInfoMessage(
+                                      context: context,
+                                      message: 'Please wait for photo upload to complete.',
+                                    );
+                                  } else {
+                                    DialogUtils.showWarningMessage(
+                                      context: context,
+                                      message: 'Your account has been suspended. You can only access your profile page.',
+                                    );
+                                  }
                                 }
                               : () {
                                   Navigator.push(
@@ -362,12 +396,19 @@ class _ProfilePageState extends State<ProfilePage> {
                           title: 'Notifications',
                           subtitle: 'Manage your alerts and messages',
                           badge: _buildNotificationBadge(),
-                          onTap: isSuspended
+                          onTap: (_uploadingPhoto || isSuspended)
                               ? () {
-                                  DialogUtils.showWarningMessage(
-                                    context: context,
-                                    message: 'Your account has been suspended. You can only access your profile page.',
-                                  );
+                                  if (_uploadingPhoto) {
+                                    DialogUtils.showInfoMessage(
+                                      context: context,
+                                      message: 'Please wait for photo upload to complete.',
+                                    );
+                                  } else {
+                                    DialogUtils.showWarningMessage(
+                                      context: context,
+                                      message: 'Your account has been suspended. You can only access your profile page.',
+                                    );
+                                  }
                                 }
                               : () {
                                   Navigator.push(
@@ -381,12 +422,19 @@ class _ProfilePageState extends State<ProfilePage> {
                           icon: Icons.help_outline,
                           title: 'Help & Support',
                           subtitle: 'Get help and contact support',
-                          onTap: isSuspended
+                          onTap: (_uploadingPhoto || isSuspended)
                               ? () {
-                                  DialogUtils.showWarningMessage(
-                                    context: context,
-                                    message: 'Your account has been suspended. You can only access your profile page.',
-                                  );
+                                  if (_uploadingPhoto) {
+                                    DialogUtils.showInfoMessage(
+                                      context: context,
+                                      message: 'Please wait for photo upload to complete.',
+                                    );
+                                  } else {
+                                    DialogUtils.showWarningMessage(
+                                      context: context,
+                                      message: 'Your account has been suspended. You can only access your profile page.',
+                                    );
+                                  }
                                 }
                               : () {
                                   Navigator.push(
@@ -405,7 +453,14 @@ class _ProfilePageState extends State<ProfilePage> {
                   Container(
                     margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
                     child: ElevatedButton(
-                      onPressed: () => _handleLogout(context),
+                      onPressed: _uploadingPhoto
+                          ? () {
+                              DialogUtils.showInfoMessage(
+                                context: context,
+                                message: 'Please wait for photo upload to complete.',
+                              );
+                            }
+                          : () => _handleLogout(context),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,
                         foregroundColor: Colors.red,
@@ -435,8 +490,51 @@ class _ProfilePageState extends State<ProfilePage> {
                 ]),
               ),
             ],
+            ),
           );
         },
+      ),
+            // Loading overlay when uploading photo
+            if (_uploadingPhoto)
+              Container(
+                color: Colors.black.withOpacity(0.3),
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(
+                          color: Color(0xFF00C8A0),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Uploading photo...',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Please wait',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

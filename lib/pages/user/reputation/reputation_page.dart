@@ -30,7 +30,15 @@ class ReputationPage extends StatelessWidget {
         builder: (context, userSnap) {
           final userId = userSnap.data?.id;
           final role = (userSnap.data?.data()?['role'] as String?)?.toLowerCase() ?? 'jobseeker';
-          return SingleChildScrollView(
+          return RefreshIndicator(
+            onRefresh: () async {
+              // Refresh by re-fetching user document
+              await auth.getUserDoc();
+              await Future.delayed(const Duration(milliseconds: 100));
+            },
+            color: const Color(0xFF00C8A0),
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
             child: Column(
               children: [
                 // Header Section
@@ -339,6 +347,7 @@ class ReputationPage extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
             ),
           );
         },

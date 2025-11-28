@@ -513,8 +513,17 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
           }
           return false; // Allow the notification to continue bubbling
         },
+        child: RefreshIndicator(
+          onRefresh: () async {
+            setState(() {
+              // Force refresh by updating state
+            });
+            await Future.delayed(const Duration(milliseconds: 100));
+          },
+          color: const Color(0xFF00C8A0),
         child: CustomScrollView(
           controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
           SliverToBoxAdapter(
             child: Column(
@@ -1005,6 +1014,7 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
           ),
         ],
         ),
+        ),
       ),
     );
   }
@@ -1290,8 +1300,8 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
               ),
             ),
           ),
-      ],
-    );
+        ],
+      );
       },
     );
   }

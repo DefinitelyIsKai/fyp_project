@@ -46,7 +46,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   bool _loading = true;
   bool _saving = false;
   bool _uploadingResume = false;
-  String? _selectedGender; // "male", "female", or "any"
+  String? _selectedGender; // "male", "female"
 
   @override
   void initState() {
@@ -791,13 +791,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       child: Text('Female'),
                     ),
                   ),
-                  DropdownMenuItem<String>(
-                    value: 'any',
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Text('Any'),
-                    ),
-                  ),
+          
                 ],
                 onChanged: (value) {
                   setState(() {

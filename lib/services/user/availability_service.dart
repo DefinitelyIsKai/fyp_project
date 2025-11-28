@@ -1,14 +1,20 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 import '../../models/user/availability_slot.dart';
 import '../../models/user/booking_request.dart';
 import 'auth_service.dart';
 import 'notification_service.dart';
+import 'email_service.dart';
+import 'post_service.dart';
 
 class AvailabilityService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AuthService _authService = AuthService();
   final NotificationService _notificationService = NotificationService();
+  final EmailService _emailService = EmailService();
+  final PostService _postService = PostService();
 
   // Get availability slots for recruiter
   Stream<List<AvailabilitySlot>> streamAvailabilitySlots({
@@ -84,8 +90,6 @@ class AvailabilityService {
     required DateTime date,
     required String startTime,
     required String endTime,
-    bool isRecurring = false,
-    String? recurringPattern,
   }) async {
     final userId = _authService.currentUserId;
 
@@ -97,8 +101,6 @@ class AvailabilityService {
       endTime: endTime,
       isAvailable: true,
       createdAt: DateTime.now(),
-      isRecurring: isRecurring,
-      recurringPattern: recurringPattern,
     );
 
     final docRef = await _firestore
@@ -109,6 +111,19 @@ class AvailabilityService {
 
   // Toggle availability slot
   Future<void> toggleAvailabilitySlot(String slotId, bool isAvailable) async {
+    // Check if slot is booked - cannot toggle if booked
+    final slotDoc = await _firestore.collection('availability_slots').doc(slotId).get();
+    if (!slotDoc.exists) {
+      throw Exception('Slot not found');
+    }
+    
+    final slotData = slotDoc.data()!;
+    final bookedBy = slotData['bookedBy'] as String?;
+    
+    if (bookedBy != null && bookedBy.isNotEmpty) {
+      throw Exception('Cannot toggle availability for a booked slot. The slot is currently booked by a jobseeker.');
+    }
+    
     await _firestore.collection('availability_slots').doc(slotId).update({
       'isAvailable': isAvailable,
     });
@@ -161,6 +176,7 @@ class AvailabilityService {
       bookedBy: bookedBy,
       requestingJobseekerIds: requestingJobseekerIds,
       slotTimeDisplay: slotTimeDisplay,
+      slot: slot, // Pass slot for email notification
     ).catchError((e) {
       // Log error but don't fail the deletion
       debugPrint('Error sending slot deletion notifications: $e');
@@ -173,6 +189,7 @@ class AvailabilityService {
     String? bookedBy,
     required List<String> requestingJobseekerIds,
     required String slotTimeDisplay,
+    AvailabilitySlot? slot, // Add slot parameter to get matchId and date
   }) async {
     final recruiterName = await _getUserName(recruiterId);
     final hasBookedJobseeker = bookedBy != null && bookedBy.isNotEmpty;
@@ -187,13 +204,26 @@ class AvailabilityService {
       );
     }
 
-    // Notify jobseeker who has booked the slot
+    // Notify jobseeker who has booked the slot (in-app notification + email)
     if (bookedBy != null && bookedBy.isNotEmpty) {
       await _notificationService.notifySlotDeletedToBookedJobseeker(
         jobseekerId: bookedBy,
         recruiterName: recruiterName,
         slotTimeDisplay: slotTimeDisplay,
       );
+
+      // Send email notification to booked jobseeker
+      if (slot != null) {
+        _sendBookingCancellationEmail(
+          jobseekerId: bookedBy,
+          recruiterId: recruiterId,
+          recruiterName: recruiterName,
+          slot: slot,
+        ).catchError((e) {
+          // Log error but don't fail the notification
+          debugPrint('Error sending booking cancellation email: $e');
+        });
+      }
     }
 
     // Notify recruiter about the deletion
@@ -233,10 +263,12 @@ class AvailabilityService {
   }
 
   // Get available slots for multiple recruiters (for jobseekers with approved matches)
+  // Also includes booked slots if jobseekerId is provided
   Stream<List<AvailabilitySlot>> streamAvailableSlotsForRecruiters(
     Set<String> recruiterIds, {
     DateTime? startDate,
     DateTime? endDate,
+    String? jobseekerId, // Optional: if provided, also include slots booked by this jobseeker
   }) async* {
     if (recruiterIds.isEmpty) {
       yield* Stream.value([]);
@@ -248,49 +280,105 @@ class AvailabilityService {
     final start = startDate ?? now;
     final end = endDate ?? DateTime(now.year, now.month + 1, 0);
 
-    // Query only by isAvailable to avoid composite index requirement
-    // Filter by date and recruiterId in memory instead
-    yield* _firestore
-        .collection('availability_slots')
-        .where('isAvailable', isEqualTo: true)
-        .snapshots()
-        .map((snapshot) {
-          final allSlots = snapshot.docs.map((doc) {
-            try {
-              return AvailabilitySlot.fromFirestore(doc);
-            } catch (e) {
-              debugPrint('AvailabilityService: Error parsing slot ${doc.id}: $e');
-              return null;
-            }
-          }).whereType<AvailabilitySlot>().toList();
-          
-          final slots = allSlots.where((slot) {
-            // Filter by recruiterId
-            if (!recruiterIds.contains(slot.recruiterId)) {
-              return false;
-            }
-            // Filter by date range
-            final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
-            final startDateOnly = DateTime(start.year, start.month, start.day);
-            final endDateOnly = DateTime(end.year, end.month, end.day);
-            
-            if (slotDateOnly.isBefore(startDateOnly)) {
-              return false;
-            }
-            if (slotDateOnly.isAfter(endDateOnly)) {
-              return false;
-            }
-            return true;
-          }).toList();
-          
-          // Sort by date first, then by time
-          slots.sort((a, b) {
-            final dateCompare = a.date.compareTo(b.date);
-            if (dateCompare != 0) return dateCompare;
-            return a.startTime.compareTo(b.startTime);
+    // Query available slots (isAvailable == true)
+    // Also query booked slots if jobseekerId is provided
+    if (jobseekerId != null && jobseekerId.isNotEmpty) {
+      // Combine available slots and booked slots streams
+      final availableSlotsStream = _firestore
+          .collection('availability_slots')
+          .where('isAvailable', isEqualTo: true)
+          .snapshots();
+      
+      final bookedSlotsStream = _firestore
+          .collection('availability_slots')
+          .where('bookedBy', isEqualTo: jobseekerId)
+          .snapshots();
+      
+      // Use a controller to combine both streams
+      StreamController<List<AvailabilitySlot>>? controller;
+      StreamSubscription? availableSub;
+      StreamSubscription? bookedSub;
+      
+      List<AvailabilitySlot>? latestAvailableSlots;
+      List<AvailabilitySlot>? latestBookedSlots;
+      
+      controller = StreamController<List<AvailabilitySlot>>(
+        onListen: () {
+          availableSub = availableSlotsStream.listen((availableSnapshot) {
+            latestAvailableSlots = availableSnapshot.docs.map((doc) {
+              try {
+                return AvailabilitySlot.fromFirestore(doc);
+              } catch (e) {
+                debugPrint('AvailabilityService: Error parsing slot ${doc.id}: $e');
+                return null;
+              }
+            }).whereType<AvailabilitySlot>().toList();
+            _emitCombinedSlots(controller, latestAvailableSlots, latestBookedSlots, recruiterIds, start, end);
           });
-          return slots;
-        });
+          
+          bookedSub = bookedSlotsStream.listen((bookedSnapshot) {
+            latestBookedSlots = bookedSnapshot.docs.map((doc) {
+              try {
+                return AvailabilitySlot.fromFirestore(doc);
+              } catch (e) {
+                debugPrint('AvailabilityService: Error parsing booked slot ${doc.id}: $e');
+                return null;
+              }
+            }).whereType<AvailabilitySlot>().toList();
+            _emitCombinedSlots(controller, latestAvailableSlots, latestBookedSlots, recruiterIds, start, end);
+          });
+        },
+        onCancel: () {
+          availableSub?.cancel();
+          bookedSub?.cancel();
+        },
+      );
+      
+      yield* controller.stream;
+    } else {
+      // Only query available slots (original behavior)
+      yield* _firestore
+          .collection('availability_slots')
+          .where('isAvailable', isEqualTo: true)
+          .snapshots()
+          .map((snapshot) {
+            final allSlots = snapshot.docs.map((doc) {
+              try {
+                return AvailabilitySlot.fromFirestore(doc);
+              } catch (e) {
+                debugPrint('AvailabilityService: Error parsing slot ${doc.id}: $e');
+                return null;
+              }
+            }).whereType<AvailabilitySlot>().toList();
+            
+            final slots = allSlots.where((slot) {
+              // Filter by recruiterId
+              if (!recruiterIds.contains(slot.recruiterId)) {
+                return false;
+              }
+              // Filter by date range
+              final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
+              final startDateOnly = DateTime(start.year, start.month, start.day);
+              final endDateOnly = DateTime(end.year, end.month, end.day);
+              
+              if (slotDateOnly.isBefore(startDateOnly)) {
+                return false;
+              }
+              if (slotDateOnly.isAfter(endDateOnly)) {
+                return false;
+              }
+              return true;
+            }).toList();
+            
+            // Sort by date first, then by time
+            slots.sort((a, b) {
+              final dateCompare = a.date.compareTo(b.date);
+              if (dateCompare != 0) return dateCompare;
+              return a.startTime.compareTo(b.startTime);
+            });
+            return slots;
+          });
+    }
   }
 
   // Get dates with available slots for calendar display
@@ -362,7 +450,7 @@ class AvailabilityService {
       final userDoc = await _firestore.collection('users').doc(userId).get();
       if (userDoc.exists) {
         final data = userDoc.data();
-        return data?['professionalProfile'] as String? ??
+        return 
                data?['fullName'] as String? ?? 
                'Unknown';
       }
@@ -595,7 +683,6 @@ class AvailabilityService {
 
     // Get slot details for notification
     final slot = AvailabilitySlot.fromFirestore(slotDoc);
-    final slotTimeDisplay = _formatSlotTimeDisplay(slot);
 
     // Update booking request status
     await _firestore.collection('booking_requests').doc(requestId).update({
@@ -627,30 +714,209 @@ class AvailabilityService {
     }
     await batch.commit();
 
-    // Send notification to jobseeker asynchronously (don't block on this)
+    // Send notification and email to jobseeker asynchronously (don't block on this)
     _sendBookingApprovalNotification(
       jobseekerId: request.jobseekerId,
       recruiterId: request.recruiterId,
-      slotTimeDisplay: slotTimeDisplay,
+      slot: slot,
+      matchId: request.matchId,
     ).catchError((e) {
       // Log error but don't fail the approval
-      debugPrint('Error sending booking approval notification: $e');
+      debugPrint('Error sending booking approval notification/email: $e');
     });
   }
 
-  // Helper method to send booking approval notification
+  // Helper method to send booking cancellation email
+  Future<void> _sendBookingCancellationEmail({
+    required String jobseekerId,
+    required String recruiterId,
+    required String recruiterName,
+    required AvailabilitySlot slot,
+  }) async {
+    try {
+      // Get jobseeker email and name
+      final jobseekerEmail = await _getUserEmail(jobseekerId);
+      final jobseekerName = await _getUserName(jobseekerId);
+      
+      // Get job title from application/post
+      String jobTitle = 'the job position';
+      if (slot.matchId != null && slot.matchId!.isNotEmpty) {
+        try {
+          // Get application to find postId
+          final applicationDoc = await _firestore.collection('applications').doc(slot.matchId).get();
+          if (applicationDoc.exists) {
+            final appData = applicationDoc.data();
+            final postId = appData?['postId'] as String?;
+            if (postId != null) {
+              final post = await _postService.getById(postId);
+              if (post != null) {
+                jobTitle = post.title;
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('Error getting job title for cancellation email: $e');
+        }
+      }
+
+      if (jobseekerEmail != null && jobseekerEmail.isNotEmpty) {
+        // Format slot date and time
+        final slotDate = DateFormat('MMMM d, yyyy').format(slot.date);
+        final slotTime = slot.timeDisplay;
+
+        await _emailService.sendBookingCancellationEmail(
+          recipientEmail: jobseekerEmail,
+          recipientName: jobseekerName,
+          recruiterName: recruiterName,
+          slotDate: slotDate,
+          slotTime: slotTime,
+          jobTitle: jobTitle,
+        );
+      } else {
+        debugPrint('Jobseeker email not found, skipping cancellation email notification');
+      }
+    } catch (e) {
+      // Log error but don't fail the notification
+      debugPrint('Error sending booking cancellation email: $e');
+    }
+  }
+
+  // Helper method to send booking approval notification and email
   Future<void> _sendBookingApprovalNotification({
     required String jobseekerId,
     required String recruiterId,
-    required String slotTimeDisplay,
+    required AvailabilitySlot slot,
+    required String matchId,
   }) async {
     final recruiterName = await _getUserName(recruiterId);
+    final slotTimeDisplay = _formatSlotTimeDisplay(slot);
     
+    // Send in-app notification
     await _notificationService.notifyBookingRequestApproved(
       jobseekerId: jobseekerId,
       recruiterName: recruiterName,
       slotTimeDisplay: slotTimeDisplay,
     );
+
+    // Send email notification via SMTP
+    try {
+      // Get jobseeker email and name
+      final jobseekerEmail = await _getUserEmail(jobseekerId);
+      final jobseekerName = await _getUserName(jobseekerId);
+      
+      // Get job title from application/post
+      String jobTitle = 'the job position';
+      try {
+        // Get application to find postId
+        final applicationDoc = await _firestore.collection('applications').doc(matchId).get();
+        if (applicationDoc.exists) {
+          final appData = applicationDoc.data();
+          final postId = appData?['postId'] as String?;
+          if (postId != null) {
+            final post = await _postService.getById(postId);
+            if (post != null) {
+              jobTitle = post.title;
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Error getting job title for email: $e');
+      }
+
+      if (jobseekerEmail != null && jobseekerEmail.isNotEmpty) {
+        // Format slot date and time
+        final slotDate = DateFormat('MMMM d, yyyy').format(slot.date);
+        final slotTime = slotTimeDisplay;
+
+        await _emailService.sendBookingApprovalEmail(
+          recipientEmail: jobseekerEmail,
+          recipientName: jobseekerName,
+          recruiterName: recruiterName,
+          slotDate: slotDate,
+          slotTime: slotTime,
+          jobTitle: jobTitle,
+        );
+      } else {
+        debugPrint('Jobseeker email not found, skipping email notification');
+      }
+    } catch (e) {
+      // Log error but don't fail the notification
+      debugPrint('Error sending booking approval email: $e');
+    }
+  }
+
+  // Helper method to combine and filter slots
+  void _emitCombinedSlots(
+    StreamController<List<AvailabilitySlot>>? controller,
+    List<AvailabilitySlot>? availableSlots,
+    List<AvailabilitySlot>? bookedSlots,
+    Set<String> recruiterIds,
+    DateTime start,
+    DateTime end,
+  ) {
+    if (controller == null || (!controller.isClosed && controller.hasListener)) {
+      final allSlots = <AvailabilitySlot>[];
+      
+      // Add available slots
+      if (availableSlots != null) {
+        allSlots.addAll(availableSlots);
+      }
+      
+      // Add booked slots (avoid duplicates)
+      if (bookedSlots != null) {
+        final availableSlotIds = allSlots.map((s) => s.id).toSet();
+        for (final bookedSlot in bookedSlots) {
+          if (!availableSlotIds.contains(bookedSlot.id)) {
+            allSlots.add(bookedSlot);
+          }
+        }
+      }
+      
+      // Filter by recruiterId and date range
+      final slots = allSlots.where((slot) {
+        // Filter by recruiterId
+        if (!recruiterIds.contains(slot.recruiterId)) {
+          return false;
+        }
+        // Filter by date range
+        final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
+        final startDateOnly = DateTime(start.year, start.month, start.day);
+        final endDateOnly = DateTime(end.year, end.month, end.day);
+        
+        if (slotDateOnly.isBefore(startDateOnly)) {
+          return false;
+        }
+        if (slotDateOnly.isAfter(endDateOnly)) {
+          return false;
+        }
+        return true;
+      }).toList();
+      
+      // Sort by date first, then by time
+      slots.sort((a, b) {
+        final dateCompare = a.date.compareTo(b.date);
+        if (dateCompare != 0) return dateCompare;
+        return a.startTime.compareTo(b.startTime);
+      });
+      
+      if (controller != null && !controller.isClosed) {
+        controller.add(slots);
+      }
+    }
+  }
+
+  // Helper method to get user email
+  Future<String?> _getUserEmail(String userId) async {
+    try {
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      if (userDoc.exists) {
+        final data = userDoc.data();
+        return data?['email'] as String?;
+      }
+    } catch (e) {
+      debugPrint('Error getting user email: $e');
+    }
+    return null;
   }
 
   // Reject booking request

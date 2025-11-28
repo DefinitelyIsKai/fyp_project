@@ -11,6 +11,7 @@ import '../../../models/user/post.dart';
 import '../../../widgets/user/monthly_calendar.dart';
 import '../../../widgets/user/legend_item.dart';
 import '../../../widgets/user/jobseeker_slots_list.dart';
+import '../../../widgets/user/loading_indicator.dart';
 
 class JobseekerBookingPage extends StatefulWidget {
   const JobseekerBookingPage({super.key});
@@ -32,20 +33,58 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
   Map<String, Post> _postCache = {}; // Cache for post data
   Map<String, String> _recruiterNameCache = {}; // Cache for recruiter names
   int _refreshKey = 0; // Key to force refresh of FutureBuilder
+  bool _isLoadingSlots = false; // Loading state when date is selected
+  
+  // Cache for FutureBuilder futures to prevent infinite rebuilds
+  Future<Post?>? _cachedPostFuture;
+  String? _cachedPostId;
+  Future<Set<DateTime>>? _cachedBookedDatesFuture;
+  String? _cachedBookedDatesKey;
+  Future<Set<String>>? _cachedPendingSlotsFuture;
+  String? _cachedPendingSlotsKey;
 
   void _onMonthChanged(DateTime newMonth) {
     setState(() {
       _currentMonth = newMonth;
+      // Clear cached futures when month changes
+      _cachedBookedDatesFuture = null;
+      _cachedBookedDatesKey = null;
     });
   }
 
   void _onDateSelected(DateTime date) {
     setState(() {
       _selectedDate = date;
+      _isLoadingSlots = true; // Start loading when date changes
     });
   }
 
   void _onDateTapped(DateTime date) => _onDateSelected(date);
+  
+  Future<void> _refreshData() async {
+    setState(() {
+      _refreshKey++;
+      // Clear cached futures to force refresh
+      _cachedPostFuture = null;
+      _cachedPostId = null;
+      _cachedBookedDatesFuture = null;
+      _cachedBookedDatesKey = null;
+      _cachedPendingSlotsFuture = null;
+      _cachedPendingSlotsKey = null;
+    });
+    await Future.delayed(const Duration(milliseconds: 100));
+  }
+  
+  void _onSlotsLoaded() {
+    // Called when slots finish loading
+    // JobseekerSlotsList already handles preventing duplicate callbacks,
+    // so we can simply clear the loading state here
+    if (mounted && _isLoadingSlots) {
+      setState(() {
+        _isLoadingSlots = false;
+      });
+    }
+  }
 
   // Helper function to normalize dates for comparison (removes time component)
   static DateTime _normalizeDate(DateTime date) {
@@ -63,6 +102,65 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
       start: DateTime(month.year, month.month, 1),
       end: DateTime(month.year, month.month + 1, 0),
     );
+  }
+
+  // Helper to get cached or create Post future
+  Future<Post?> _getPostFuture(String? postId) {
+    if (postId == null) {
+      _cachedPostFuture = null;
+      _cachedPostId = null;
+      return Future<Post?>.value(null);
+    }
+    
+    if (_cachedPostFuture != null && _cachedPostId == postId) {
+      return _cachedPostFuture!;
+    }
+    
+    _cachedPostId = postId;
+    _cachedPostFuture = _postService.getById(postId);
+    return _cachedPostFuture!;
+  }
+
+  // Helper to get cached or create booked dates future
+  Future<Set<DateTime>> _getBookedDatesFuture(
+    String userId,
+    DateTime startDate,
+    DateTime endDate,
+    String? applicationId,
+  ) {
+    final key = '${userId}_${startDate.toIso8601String()}_${endDate.toIso8601String()}_${applicationId ?? 'all'}_$_refreshKey';
+    
+    if (_cachedBookedDatesFuture != null && _cachedBookedDatesKey == key) {
+      return _cachedBookedDatesFuture!;
+    }
+    
+    _cachedBookedDatesKey = key;
+    _cachedBookedDatesFuture = _availabilityService.getBookedDatesForJobseeker(
+      userId,
+      startDate: startDate,
+      endDate: endDate,
+      matchId: applicationId,
+    );
+    return _cachedBookedDatesFuture!;
+  }
+
+  // Helper to get cached or create pending slots future
+  Future<Set<String>> _getPendingSlotsFuture(
+    String userId,
+    String? applicationId,
+  ) {
+    final key = '${userId}_${applicationId ?? 'all'}';
+    
+    if (_cachedPendingSlotsFuture != null && _cachedPendingSlotsKey == key) {
+      return _cachedPendingSlotsFuture!;
+    }
+    
+    _cachedPendingSlotsKey = key;
+    _cachedPendingSlotsFuture = _availabilityService.getRequestedSlotIdsForJobseeker(
+      userId,
+      matchId: applicationId,
+    );
+    return _cachedPendingSlotsFuture!;
   }
 
   // Helper to process slots and prepare calendar data
@@ -118,6 +216,13 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
         onPopInvoked: (didPop) {
           if (!didPop) {
             // Handle back button - navigate back to recruiter list
+            // Clear cached futures when navigating back
+            _cachedPostFuture = null;
+            _cachedPostId = null;
+            _cachedBookedDatesFuture = null;
+            _cachedBookedDatesKey = null;
+            _cachedPendingSlotsFuture = null;
+            _cachedPendingSlotsKey = null;
             setState(() {
               _selectedRecruiterId = null;
             });
@@ -133,6 +238,13 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
       onPopInvoked: (didPop) {
         if (!didPop) {
           // Handle back button - navigate back to application list
+          // Clear cached futures when navigating back
+          _cachedPostFuture = null;
+          _cachedPostId = null;
+          _cachedBookedDatesFuture = null;
+          _cachedBookedDatesKey = null;
+          _cachedPendingSlotsFuture = null;
+          _cachedPendingSlotsKey = null;
           setState(() {
             _selectedApplication = null;
           });
@@ -238,8 +350,12 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
 
           // Scrollable Content
           Expanded(
-            child: SingleChildScrollView(
-              child: Column(
+            child: RefreshIndicator(
+              onRefresh: _refreshData,
+              color: const Color(0xFF00C8A0),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
                 children: [
                   // Month Navigation
                   Container(
@@ -314,11 +430,13 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                     padding: const EdgeInsets.all(16),
                     color: Colors.white,
                     child: StreamBuilder<List<AvailabilitySlot>>(
+                      key: ValueKey('calendar_stream_${_selectedRecruiterId}_${_currentMonth.year}_${_currentMonth.month}'),
                       stream: _availabilityService
                           .streamAvailableSlotsForRecruiters(
                             {_selectedRecruiterId!},
                             startDate: _getMonthRange(_currentMonth).start,
                             endDate: _getMonthRange(_currentMonth).end,
+                            jobseekerId: _authService.currentUserId, // Pass jobseekerId to include booked slots
                           ),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState ==
@@ -349,10 +467,9 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                             : slots;
                         
                         // Filter slots by post event date range if application is selected
+                        final postFuture = _getPostFuture(_selectedApplication?.postId);
                         return FutureBuilder<Post?>(
-                          future: _selectedApplication != null
-                              ? _postService.getById(_selectedApplication!.postId)
-                              : Future<Post?>.value(null),
+                          future: postFuture,
                           builder: (context, postSnapshot) {
                             final post = postSnapshot.data;
                             
@@ -377,24 +494,27 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                             
                             final processed = _processSlots(dateFilteredSlots);
 
-                            // Get booked dates for this jobseeker and specific application
+                            // Get booked dates for this jobseeker and specific application (cached)
+                            final monthRange = _getMonthRange(_currentMonth);
+                            final bookedDatesFuture = _getBookedDatesFuture(
+                              userId,
+                              monthRange.start,
+                              monthRange.end,
+                              applicationId,
+                            );
+                            
                             return FutureBuilder<Set<DateTime>>(
                               key: ValueKey('booked_dates_jobseeker_${applicationId ?? 'all'}_$_refreshKey'),
-                              future: _availabilityService
-                                  .getBookedDatesForJobseeker(
-                                    userId,
-                                    startDate: _getMonthRange(_currentMonth).start,
-                                    endDate: _getMonthRange(_currentMonth).end,
-                                    matchId: applicationId, // Filter by selected application
-                                  ),
+                              future: bookedDatesFuture,
                               builder: (context, bookedSnapshot) {
-                                // Get pending dates for jobseeker for this specific application
+                                // Get pending dates for jobseeker for this specific application (cached)
+                                final pendingSlotsFuture = _getPendingSlotsFuture(
+                                  userId,
+                                  applicationId,
+                                );
+                                
                                 return FutureBuilder<Set<String>>(
-                                  future: _availabilityService
-                                      .getRequestedSlotIdsForJobseeker(
-                                        userId,
-                                        matchId: applicationId, // Filter by selected application
-                                      ),
+                                  future: pendingSlotsFuture,
                                   builder: (context, pendingSnapshot) {
                                     final pendingData = _preparePendingDates(
                                       dateFilteredSlots,
@@ -432,27 +552,47 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                       Padding(
                         padding: const EdgeInsets.all(16),
                         child: Text(
-                          'Available Slots - ${DateFormat('MMMM d, yyyy').format(_selectedDate)}',
+                          'Time Slots - ${DateFormat('MMMM d, yyyy').format(_selectedDate)}',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
-                      JobseekerSlotsList(
-                        selectedDate: _selectedDate,
-                        selectedRecruiterId: _selectedRecruiterId,
-                        selectedApplication: _selectedApplication,
-                        availabilityService: _availabilityService,
-                        authService: _authService,
-                        applicationService: _applicationService,
-                        postService: _postService,
-                        onBooked: () {
-                          // Force refresh of booked dates and calendar
-                          setState(() {
-                            _refreshKey++;
-                          });
-                        },
+                      // Show loading indicator overlay when date is clicked and slots are loading
+                      Stack(
+                        children: [
+                          JobseekerSlotsList(
+                            key: ValueKey('slots_${_selectedDate.toIso8601String()}'),
+                            selectedDate: _selectedDate,
+                            selectedRecruiterId: _selectedRecruiterId,
+                            selectedApplication: _selectedApplication,
+                            availabilityService: _availabilityService,
+                            authService: _authService,
+                            applicationService: _applicationService,
+                            postService: _postService,
+                            onBooked: () {
+                              // Force refresh of booked dates and calendar
+                              setState(() {
+                                _refreshKey++;
+                                // Clear cached futures to force refresh
+                                _cachedBookedDatesFuture = null;
+                                _cachedBookedDatesKey = null;
+                                _cachedPendingSlotsFuture = null;
+                                _cachedPendingSlotsKey = null;
+                              });
+                            },
+                            onSlotsLoaded: _onSlotsLoaded,
+                          ),
+                          // Loading overlay
+                          if (_isLoadingSlots)
+                            Container(
+                              color: Colors.white.withOpacity(0.8),
+                              child: const Center(
+                                child: LoadingIndicator.standard(),
+                              ),
+                            ),
+                        ],
                       ),
                       const SizedBox(height: 16),
                     ],
@@ -461,9 +601,11 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
               ),
             ),
           ),
-        ],
-      ),
-    );
+          ),
+          ],
+        ),
+      );
+    
   }
 
   Widget _buildRecruiterList() {

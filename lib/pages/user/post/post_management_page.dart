@@ -46,6 +46,22 @@ class _PostManagementPageState extends State<PostManagementPage> {
     super.dispose();
   }
 
+  Future<void> _refreshData() async {
+    setState(() {
+      _isInitialLoad = true;
+      _lastPosts = null;
+      _pages.clear();
+    });
+    await Future.delayed(const Duration(milliseconds: 100));
+  }
+
+  Future<void> _refreshApplications() async {
+    // Trigger auto-reject check to ensure data is up to date
+    _applicationService.checkAndAutoRejectApplications();
+    // Small delay to allow the check to complete
+    await Future.delayed(const Duration(milliseconds: 200));
+  }
+
   Future<void> _createNewPost() async {
     final bool? created = await Navigator.push<bool>(
       context,
@@ -164,10 +180,13 @@ class _PostManagementPageState extends State<PostManagementPage> {
           );
         }
 
-        return Column(
-          children: [
-            Expanded(
-              child: PageView.builder(
+        return RefreshIndicator(
+          onRefresh: _refreshData,
+          color: const Color(0xFF00C8A0),
+          child: Column(
+            children: [
+              Expanded(
+                child: PageView.builder(
                 controller: _pageController,
                 itemCount: _pages.length,
                 onPageChanged: (index) {
@@ -178,6 +197,7 @@ class _PostManagementPageState extends State<PostManagementPage> {
                 itemBuilder: (context, pageIndex) {
                   final pagePosts = _pages[pageIndex];
                   return ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
                     children: [
                       const SizedBox(height: 8),
                       for (final post in pagePosts)
@@ -237,6 +257,7 @@ class _PostManagementPageState extends State<PostManagementPage> {
                 ),
               ),
           ],
+          ),
         );
       },
     );
@@ -317,37 +338,51 @@ class _PostManagementPageState extends State<PostManagementPage> {
                   }
 
                   if (applications.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.work_outline, size: 80, color: Colors.grey[400]),
-                          const SizedBox(height: 20),
-                          Text(
-                            'No applications yet',
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.grey[600],
-                              fontWeight: FontWeight.w500,
+                    return RefreshIndicator(
+                      onRefresh: _refreshApplications,
+                      color: const Color(0xFF00C8A0),
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        child: SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.7,
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.work_outline, size: 80, color: Colors.grey[400]),
+                                const SizedBox(height: 20),
+                                Text(
+                                  'No applications yet',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    color: Colors.grey[600],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Apply to posts to see them here',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[500],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Apply to posts to see them here',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     );
                   }
 
-                  return ListView.builder(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: applications.length,
-                    itemBuilder: (context, index) {
+                  return RefreshIndicator(
+                    onRefresh: _refreshApplications,
+                    color: const Color(0xFF00C8A0),
+                    child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      itemCount: applications.length,
+                      itemBuilder: (context, index) {
                       final app = applications[index];
                       return StreamBuilder<Post?>(
                         stream: _service.streamPostById(app.postId),
@@ -461,6 +496,7 @@ class _PostManagementPageState extends State<PostManagementPage> {
                         },
                       );
                     },
+                    ),
                   );
                 },
               );

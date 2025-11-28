@@ -44,6 +44,13 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
 
   void _onDateTapped(DateTime date) => _onDateSelected(date);
 
+  Future<void> _refreshData() async {
+    setState(() {
+      // Force refresh by updating state
+    });
+    await Future.delayed(const Duration(milliseconds: 100));
+  }
+
   // Helper function to normalize dates for comparison (removes time component)
   static DateTime _normalizeDate(DateTime date) {
     return DateTime(date.year, date.month, date.day);
@@ -191,8 +198,12 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
 
         // Scrollable Content
         Expanded(
-          child: SingleChildScrollView(
-            child: Column(
+          child: RefreshIndicator(
+            onRefresh: _refreshData,
+            color: const Color(0xFF00C8A0),
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
               children: [
                 // Month Navigation
                 Container(
@@ -420,12 +431,24 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
                                     slot: slot,
                                     isRecruiter: true,
                                     hasPendingRequest: hasPendingRequest,
-                                    onToggle: (isAvailable) {
-                                      _availabilityService
-                                          .toggleAvailabilitySlot(
-                                            slot.id,
-                                            isAvailable,
+                                    onToggle: (isAvailable) async {
+                                      try {
+                                        await _availabilityService
+                                            .toggleAvailabilitySlot(
+                                              slot.id,
+                                              isAvailable,
+                                            );
+                                      } catch (e) {
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text(e.toString().replaceFirst('Exception: ', '')),
+                                              backgroundColor: Colors.red,
+                                              duration: const Duration(seconds: 3),
+                                            ),
                                           );
+                                        }
+                                      }
                                     },
                                     onDelete: () async {
                                       await _availabilityService
@@ -450,6 +473,7 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
             ),
           ),
         ),
+        ),
       ],
     );
   }
@@ -464,7 +488,6 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
             date: date,
             startTime: startTime,
             endTime: endTime,
-            isRecurring: false,
           );
           // Calendar updates automatically via StreamBuilder
         },

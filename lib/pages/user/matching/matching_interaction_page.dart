@@ -131,6 +131,13 @@ class _MatchesTabState extends State<_MatchesTab> {
   bool _recomputing = false;
   MatchingStrategy _selectedStrategy = MatchingStrategy.embeddingsAnn;
 
+  Future<void> _refreshData() async {
+    setState(() {
+      // Force refresh by updating state
+    });
+    await Future.delayed(const Duration(milliseconds: 100));
+  }
+
   Future<void> _handleRecompute() async {
     if (_recomputing) return;
     setState(() => _recomputing = true);
@@ -389,16 +396,21 @@ class _MatchesTabState extends State<_MatchesTab> {
                         ),
                       ),
                     )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: matches.length,
-                      itemBuilder: (context, index) {
-                        final match = matches[index];
-                        return _ComputedMatchCard(
-                          match: match,
-                          formatTimeAgo: DateUtilsHelper.DateUtils.formatTimeAgoShort,
-                        );
-                      },
+                  : RefreshIndicator(
+                      onRefresh: _refreshData,
+                      color: const Color(0xFF00C8A0),
+                      child: ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(16),
+                        itemCount: matches.length,
+                        itemBuilder: (context, index) {
+                          final match = matches[index];
+                          return _ComputedMatchCard(
+                            match: match,
+                            formatTimeAgo: DateUtilsHelper.DateUtils.formatTimeAgoShort,
+                          );
+                        },
+                      ),
                     ),
             ),
           ],
@@ -474,16 +486,21 @@ class _MatchesTabState extends State<_MatchesTab> {
           );
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: activePosts.length,
-          itemBuilder: (context, index) {
-            final post = activePosts[index];
-            return _RecruiterPostCard(
-              post: post,
-              onTap: () => _showApplicantMatches(context, post),
-            );
-          },
+        return RefreshIndicator(
+          onRefresh: _refreshData,
+          color: const Color(0xFF00C8A0),
+          child: ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            itemCount: activePosts.length,
+            itemBuilder: (context, index) {
+              final post = activePosts[index];
+              return _RecruiterPostCard(
+                post: post,
+                onTap: () => _showApplicantMatches(context, post),
+              );
+            },
+          ),
         );
       },
     );

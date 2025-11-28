@@ -171,32 +171,41 @@ class _SearchDiscoveryJobseekerPageState
   }
 
   Widget _buildListView() {
-    return StreamBuilder<List<Post>>(
+    return RefreshIndicator(
+      onRefresh: refreshData,
+      color: const Color(0xFF00C8A0),
+      child: StreamBuilder<List<Post>>(
       stream: getPostsStream(),
       initialData: lastPosts, // Use last known posts as initial data
       builder: (context, snapshot) {
         // Handle errors first
         if (snapshot.hasError) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
-                const SizedBox(height: 16),
-                const Text(
-                  'Unable to load posts',
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: SizedBox(
+              height: MediaQuery.of(context).size.height * 0.7,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Unable to load posts',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Please try again later',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Please try again later',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                ),
-              ],
+              ),
             ),
           );
         }
@@ -211,8 +220,14 @@ class _SearchDiscoveryJobseekerPageState
             snapshot.connectionState == ConnectionState.waiting &&
             !snapshot.hasData &&
             lastPosts == null) {
-          return Center(
-            child: CircularProgressIndicator(color: const Color(0xFF00C8A0)),
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: SizedBox(
+              height: MediaQuery.of(context).size.height * 0.7,
+              child: Center(
+                child: CircularProgressIndicator(color: const Color(0xFF00C8A0)),
+              ),
+            ),
           );
         }
         
@@ -267,33 +282,39 @@ class _SearchDiscoveryJobseekerPageState
         if (nearbyPosts.isEmpty) {
           // Update pages even if empty to clear previous state
           updatePages(nearbyPosts);
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.search_off, size: 80, color: Colors.grey[400]),
-                const SizedBox(height: 20),
-                const Text(
-                  'No jobs found',
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: SizedBox(
+              height: MediaQuery.of(context).size.height * 0.7,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.search_off, size: 80, color: Colors.grey[400]),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'No jobs found',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (userLocation != null && searchRadius != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'within ${searchRadius!.toStringAsFixed(0)} km',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    Text(
+                      'Try adjusting your search criteria',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                    ),
+                  ],
                 ),
-                if (userLocation != null && searchRadius != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'within ${searchRadius!.toStringAsFixed(0)} km',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                Text(
-                  'Try adjusting your search criteria',
-                  style: TextStyle(color: Colors.grey[500], fontSize: 13),
-                ),
-              ],
+              ),
             ),
           );
         }
@@ -306,8 +327,14 @@ class _SearchDiscoveryJobseekerPageState
         updatePages(nearbyPosts);
 
         if (computedPages.isEmpty) {
-          return Center(
-            child: CircularProgressIndicator(color: const Color(0xFF00C8A0)),
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: SizedBox(
+              height: MediaQuery.of(context).size.height * 0.7,
+              child: Center(
+                child: CircularProgressIndicator(color: const Color(0xFF00C8A0)),
+              ),
+            ),
           );
         }
 
@@ -322,22 +349,27 @@ class _SearchDiscoveryJobseekerPageState
                 },
                 itemBuilder: (context, pageIndex) {
                   final pagePosts = computedPages[pageIndex];
-                  return ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: pagePosts.length,
-                    itemBuilder: (context, index) {
-                      final post = pagePosts[index];
-                      double? distance;
-                      if (userLocation != null &&
-                          post.latitude != null &&
-                          post.longitude != null) {
-                        distance = calculateDistance(
-                          userLocation!,
-                          LatLng(post.latitude!, post.longitude!),
-                        );
-                      }
-                      return buildPostCard(post, distance);
-                    },
+                  return RefreshIndicator(
+                    onRefresh: refreshData,
+                    color: const Color(0xFF00C8A0),
+                    child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16),
+                      itemCount: pagePosts.length,
+                      itemBuilder: (context, index) {
+                        final post = pagePosts[index];
+                        double? distance;
+                        if (userLocation != null &&
+                            post.latitude != null &&
+                            post.longitude != null) {
+                          distance = calculateDistance(
+                            userLocation!,
+                            LatLng(post.latitude!, post.longitude!),
+                          );
+                        }
+                        return buildPostCard(post, distance);
+                      },
+                    ),
                   );
                 },
               ),
@@ -353,6 +385,7 @@ class _SearchDiscoveryJobseekerPageState
           ],
         );
       },
+      ),
     );
   }
 

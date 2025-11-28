@@ -284,7 +284,7 @@ class StorageService {
     }
   }
 
-  // 🔹 Convert image to Base64 and store in Firestore
+  //Convert image to Base64 and store in Firestore
   Future<String?> pickAndUploadImage({required bool fromCamera}) async {
     try {
       final bool useImagePicker = kIsWeb ||

@@ -114,7 +114,16 @@ class _CompletedPostsRatingPageState extends State<CompletedPostsRatingPage> {
             );
           }
 
-          return ListView.builder(
+          return RefreshIndicator(
+            onRefresh: () async {
+              setState(() {
+                // Force refresh by updating state
+              });
+              await Future.delayed(const Duration(milliseconds: 100));
+            },
+            color: const Color(0xFF00C8A0),
+            child: ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(vertical: 8),
             itemCount: completedPosts.length,
             itemBuilder: (context, index) {
@@ -128,6 +137,7 @@ class _CompletedPostsRatingPageState extends State<CompletedPostsRatingPage> {
                 hasRatingCache: _hasRatingCache,
               );
             },
+            ),
           );
         },
       ),

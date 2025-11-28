@@ -10,7 +10,7 @@ import '../../models/user/application.dart';
 import '../../models/user/post.dart';
 import '../../utils/user/dialog_utils.dart';
 
-class JobseekerSlotsList extends StatelessWidget {
+class JobseekerSlotsList extends StatefulWidget {
   final DateTime selectedDate;
   final String? selectedRecruiterId;
   final Application? selectedApplication;
@@ -19,6 +19,7 @@ class JobseekerSlotsList extends StatelessWidget {
   final ApplicationService applicationService;
   final PostService postService;
   final VoidCallback onBooked;
+  final VoidCallback? onSlotsLoaded; // Callback when slots finish loading
 
   const JobseekerSlotsList({
     super.key,
@@ -30,13 +31,22 @@ class JobseekerSlotsList extends StatelessWidget {
     required this.applicationService,
     required this.postService,
     required this.onBooked,
+    this.onSlotsLoaded,
   });
+
+  @override
+  State<JobseekerSlotsList> createState() => _JobseekerSlotsListState();
+}
+
+class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
+  bool _hasNotifiedLoaded = false; // Track if we've already notified parent
+  DateTime? _lastNotifiedDate; // Track the date we last notified for
 
   @override
   Widget build(BuildContext context) {
     // Get approved applications
     return FutureBuilder<List<Application>>(
-      future: applicationService.streamMyApplications().first,
+      future: widget.applicationService.streamMyApplications().first,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -53,11 +63,11 @@ class JobseekerSlotsList extends StatelessWidget {
 
         // If a specific recruiter is selected, verify they have an approved application
         Set<String> approvedRecruiterIds;
-        Application? applicationToUse = selectedApplication;
-        if (selectedRecruiterId != null) {
+        Application? applicationToUse = widget.selectedApplication;
+        if (widget.selectedRecruiterId != null) {
           // Verify the selected recruiter has an approved application
-          if (approvedRecruiterIdsSet.contains(selectedRecruiterId!)) {
-            approvedRecruiterIds = {selectedRecruiterId!};
+          if (approvedRecruiterIdsSet.contains(widget.selectedRecruiterId!)) {
+            approvedRecruiterIds = {widget.selectedRecruiterId!};
           } else {
             // Selected recruiter doesn't have an approved application
             approvedRecruiterIds = {};
@@ -94,26 +104,56 @@ class JobseekerSlotsList extends StatelessWidget {
         }
 
         final startOfDay = DateTime(
-          selectedDate.year,
-          selectedDate.month,
-          selectedDate.day,
+          widget.selectedDate.year,
+          widget.selectedDate.month,
+          widget.selectedDate.day,
         );
         final endOfDay = DateTime(
-          selectedDate.year,
-          selectedDate.month,
-          selectedDate.day,
+          widget.selectedDate.year,
+          widget.selectedDate.month,
+          widget.selectedDate.day,
           23,
           59,
           59,
         );
 
+        final jobseekerId = widget.authService.currentUserId;
+        
         return StreamBuilder<List<AvailabilitySlot>>(
-          stream: availabilityService.streamAvailableSlotsForRecruiters(
+          stream: widget.availabilityService.streamAvailableSlotsForRecruiters(
             approvedRecruiterIds,
             startDate: startOfDay,
             endDate: endOfDay,
+            jobseekerId: jobseekerId, // Include booked slots for this jobseeker
           ),
           builder: (context, snapshot) {
+            // Notify parent that slots have loaded (only once per date change)
+            // This prevents infinite callbacks when StreamBuilder continuously emits data
+            if (snapshot.connectionState == ConnectionState.active) {
+              // Only call callback once when we first get data for this date
+              if ((snapshot.hasData || snapshot.hasError) && !_hasNotifiedLoaded) {
+                final currentDate = DateTime(
+                  widget.selectedDate.year,
+                  widget.selectedDate.month,
+                  widget.selectedDate.day,
+                );
+                
+                // Only notify if this is a new date or we haven't notified yet
+                if (_lastNotifiedDate == null || 
+                    _lastNotifiedDate!.year != currentDate.year ||
+                    _lastNotifiedDate!.month != currentDate.month ||
+                    _lastNotifiedDate!.day != currentDate.day) {
+                  _hasNotifiedLoaded = true;
+                  _lastNotifiedDate = currentDate;
+                  
+                  // Use WidgetsBinding to ensure callback is called after build
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    widget.onSlotsLoaded?.call();
+                  });
+                }
+              }
+            }
+            
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
@@ -139,9 +179,9 @@ class JobseekerSlotsList extends StatelessWidget {
             }
 
             // If a specific recruiter is selected, show only their slots
-            if (selectedRecruiterId != null) {
+            if (widget.selectedRecruiterId != null) {
               var recruiterSlots = slots
-                  .where((slot) => slot.recruiterId == selectedRecruiterId!)
+                  .where((slot) => slot.recruiterId == widget.selectedRecruiterId!)
                   .toList();
               
               // Sort slots by start time
@@ -151,7 +191,7 @@ class JobseekerSlotsList extends StatelessWidget {
               if (applicationToUse == null && recruiterSlots.isNotEmpty && approvedApplications.isNotEmpty) {
                 try {
                   final approvedApp = approvedApplications.firstWhere(
-                    (app) => app.recruiterId == selectedRecruiterId!,
+                    (app) => app.recruiterId == widget.selectedRecruiterId!,
                   );
                   applicationToUse = approvedApp;
                 } catch (e) {
@@ -179,10 +219,21 @@ class JobseekerSlotsList extends StatelessWidget {
                 );
               }
 
+              // Check for requested slots and post status
+              final jobseekerId = widget.authService.currentUserId;
+              final application = applicationToUse!; // We know it's not null because of the if check
+              final applicationId = application.id; // Get application ID for filtering
+
               // Check which slots should be unavailable (after a booked slot)
+              // Note: Only mark slots as unavailable if they are AFTER a slot booked by someone else
+              // Slots booked by the current jobseeker should still be visible
               final unavailableSlots = <String>{};
               for (int i = 0; i < recruiterSlots.length; i++) {
-                if (recruiterSlots[i].bookedBy != null) {
+                final slot = recruiterSlots[i];
+                // Only mark subsequent slots as unavailable if this slot is booked by someone else
+                // (not by the current jobseeker for this application)
+                if (slot.bookedBy != null && 
+                    !(slot.bookedBy == jobseekerId && slot.matchId == applicationId)) {
                   // Mark all subsequent slots as unavailable
                   for (int j = i + 1; j < recruiterSlots.length; j++) {
                     unavailableSlots.add(recruiterSlots[j].id);
@@ -190,19 +241,14 @@ class JobseekerSlotsList extends StatelessWidget {
                   break; // Only the first booked slot matters
                 }
               }
-
-              // Check for requested slots and post status
-              final jobseekerId = authService.currentUserId;
-              final application = applicationToUse!; // We know it's not null because of the if check
-              final applicationId = application.id; // Get application ID for filtering
               return FutureBuilder<Map<String, dynamic>>(
                 future: Future.wait([
-                  availabilityService.getRequestedSlotIdsForJobseeker(
+                  widget.availabilityService.getRequestedSlotIdsForJobseeker(
                     jobseekerId,
                     matchId: applicationId, // Filter by selected application
                   ),
-                  _checkPostStatus(applicationId), // Check if post is completed
-                  postService.getById(application.postId), // Get post to check event date range
+                  _checkPostStatus(applicationId, widget.postService), // Check if post is completed
+                  widget.postService.getById(application.postId), // Get post to check event date range
                 ]).then((results) => {
                   'requestedSlotIds': results[0] as Set<String>,
                   'isPostCompleted': results[1] as bool,
@@ -231,12 +277,13 @@ class JobseekerSlotsList extends StatelessWidget {
                     }
                     
                     // Then apply existing filters: show available slots or booked/requested slots for this application
+                    // Show booked slots first (even if isAvailable is false, if booked by this jobseeker for this application)
+                    if (slot.bookedBy != null && slot.matchId == applicationId) {
+                      return true; // Always show booked slots for this application
+                    }
+                    // Show available slots (not booked yet)
                     if (slot.isAvailable && slot.bookedBy == null) {
                       return true; // Show all available slots
-                    }
-                    // Show booked slots only if they match this application
-                    if (slot.bookedBy != null) {
-                      return slot.matchId == applicationId;
                     }
                     // Show requested slots (they're already filtered by matchId in the service)
                     return true;
@@ -336,8 +383,42 @@ class JobseekerSlotsList extends StatelessWidget {
                                         ),
                                       ),
                                     ),
-                                    // Request button
-                                    if (isRequested)
+                                    // Request button or status
+                                    if (isBooked)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 8,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green[50],
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: Colors.green[300]!,
+                                            width: 1.5,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.check_circle,
+                                              size: 16,
+                                              color: Colors.green[700],
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              'Booked',
+                                              style: TextStyle(
+                                                color: Colors.green[800],
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    else if (isRequested)
                                       Container(
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 16,
@@ -458,17 +539,17 @@ class JobseekerSlotsList extends StatelessWidget {
             }
 
              // Check for requested slots and post status
-             final jobseekerId = authService.currentUserId;
+             final jobseekerId = widget.authService.currentUserId;
              // Get application ID from selectedApplication if available
-             final applicationId = selectedApplication?.id;
+             final applicationId = widget.selectedApplication?.id;
              return FutureBuilder<Map<String, dynamic>>(
                future: Future.wait([
-                 availabilityService.getRequestedSlotIdsForJobseeker(
+                 widget.availabilityService.getRequestedSlotIdsForJobseeker(
                    jobseekerId,
                    matchId: applicationId, // Filter by selected application
                  ),
-                 applicationId != null ? _checkPostStatus(applicationId) : Future.value(false),
-                 selectedApplication != null ? postService.getById(selectedApplication!.postId) : Future<Post?>.value(null),
+                 applicationId != null ? _checkPostStatus(applicationId, widget.postService) : Future.value(false),
+                 widget.selectedApplication != null ? widget.postService.getById(widget.selectedApplication!.postId) : Future<Post?>.value(null),
                ]).then((results) => {
                  'requestedSlotIds': results[0] as Set<String>,
                  'isPostCompleted': results[1] as bool,
@@ -489,8 +570,8 @@ class JobseekerSlotsList extends StatelessWidget {
 
                      // Use selectedApplication if it matches this recruiter, otherwise skip
                      Application? application;
-                     if (selectedApplication != null && selectedApplication!.recruiterId == recruiterId) {
-                       application = selectedApplication;
+                     if (widget.selectedApplication != null && widget.selectedApplication!.recruiterId == recruiterId) {
+                       application = widget.selectedApplication;
                      } else {
                        // No application available for this recruiter, skip
                        return const SizedBox.shrink();
@@ -538,12 +619,13 @@ class JobseekerSlotsList extends StatelessWidget {
                          children: dateFilteredSlots
                              .where((slot) {
                                // Filter slots: show available slots or booked/requested slots for this application
+                               // Show booked slots first (even if isAvailable is false, if booked by this jobseeker for this application)
+                               if (slot.bookedBy != null && slot.matchId == matchApplicationId) {
+                                 return true; // Always show booked slots for this application
+                               }
+                               // Show available slots (not booked yet)
                                if (slot.isAvailable && slot.bookedBy == null) {
                                  return true; // Show all available slots
-                               }
-                               // Show booked slots only if they match this application
-                               if (slot.bookedBy != null) {
-                                 return slot.matchId == matchApplicationId;
                                }
                                // Show requested slots (they're already filtered by matchId in the service)
                                return true;
@@ -638,8 +720,42 @@ class JobseekerSlotsList extends StatelessWidget {
                                           ),
                                         ),
                                       ),
-                                      // Request button
-                                      if (isRequested)
+                                      // Request button or status
+                                      if (isBooked)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 8,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.green[50],
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: Colors.green[300]!,
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.check_circle,
+                                                size: 16,
+                                                color: Colors.green[700],
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                'Booked',
+                                                style: TextStyle(
+                                                  color: Colors.green[800],
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        )
+                                      else if (isRequested)
                                         Container(
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 16,
@@ -708,7 +824,7 @@ class JobseekerSlotsList extends StatelessWidget {
   }
 
   // Check if the post associated with matchId is completed
-  Future<bool> _checkPostStatus(String matchId) async {
+  Future<bool> _checkPostStatus(String matchId, PostService postService) async {
     try {
       final firestore = FirebaseFirestore.instance;
       String? postId;
@@ -736,46 +852,25 @@ class JobseekerSlotsList extends StatelessWidget {
       AvailabilitySlot slot,
       Application application,
       ) async {
-    final confirmed = await showDialog<bool>(
+    // Load job title first
+    final jobTitle = await _loadJobTitle(application.postId, widget.postService);
+    
+    final confirmed = await DialogUtils.showConfirmationDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.white,
-        title: const Text('Request Booking'),
-        content: FutureBuilder<String>(
-          future: _loadJobTitle(application.postId),
-          builder: (context, snapshot) {
-            final jobTitle = snapshot.data ?? 'this job';
-            return Text(
-              'Send booking request for interview slot on ${DateFormat('MMMM d, yyyy').format(slot.date)} '
-                  'at ${slot.timeDisplay} for $jobTitle?\n\n'
-                  'The recruiter will review and approve your request.',
-            );
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.black),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00C8A0),
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Send Request'),
-          ),
-        ],
-      ),
+      title: 'Request Booking',
+      message: 'Send booking request for interview slot on ${DateFormat('MMMM d, yyyy').format(slot.date)} '
+          'at ${slot.timeDisplay} for $jobTitle?\n\n'
+          'The recruiter will review and approve your request.',
+      icon: Icons.event_available,
+      confirmText: 'Send Request',
+      cancelText: 'Cancel',
+      isDestructive: false,
     );
 
     if (confirmed == true) {
       try {
-        final jobseekerId = authService.currentUserId;
-        await availabilityService.createBookingRequest(
+        final jobseekerId = widget.authService.currentUserId;
+        await widget.availabilityService.createBookingRequest(
           slotId: slot.id,
           matchId: application.id,
           jobseekerId: jobseekerId,
@@ -787,7 +882,7 @@ class JobseekerSlotsList extends StatelessWidget {
             context: context,
             message: 'Booking request sent successfully! Waiting for recruiter approval.',
           );
-          onBooked();
+                widget.onBooked();
         }
       } catch (e) {
         if (context.mounted) {
@@ -818,7 +913,7 @@ class JobseekerSlotsList extends StatelessWidget {
   }
 
   /// Load job title from post
-  Future<String> _loadJobTitle(String postId) async {
+  Future<String> _loadJobTitle(String postId, PostService postService) async {
     try {
       final post = await postService.getById(postId);
       return post?.title ?? 'this job';

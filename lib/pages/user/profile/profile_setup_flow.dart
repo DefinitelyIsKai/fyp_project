@@ -38,6 +38,7 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
   final _locationController = TextEditingController();
   double? _latitude;
   double? _longitude;
+  String? _selectedGender; // "male", "female"
 
   // Step 3
   final _profProfileCtrl = TextEditingController();
@@ -155,6 +156,7 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
         'professionalSummary': _summaryCtrl.text.trim().isEmpty ? null : _summaryCtrl.text.trim(),
         'workExperience': _workExperienceCtrl.text.trim(),
         'age': ageValue,
+        'gender': _selectedGender,
         if (_resumeAttachment != null) 'resume': _resumeAttachment!.toMap() else 'resume': FieldValue.delete(),
         'role': role,
         'acceptedTerms': _acceptedTerms,
@@ -358,6 +360,17 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
                             ],
                             validator: (v) => InputValidators.age(v, errorMessage: 'Age must be 18 or above'),
                           ),
+                          const SizedBox(height: 20),
+                          Text(
+                            'Gender',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          _buildGenderDropdown(),
                         ],
                       ),
                     ),
@@ -531,6 +544,63 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
               ),
             )
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGenderDropdown() {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: Colors.grey[300]!,
+          width: 1,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        color: Colors.grey[50],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            value: _selectedGender,
+            hint: Text(
+              'Select gender',
+              style: TextStyle(
+                color: Colors.grey[500],
+                fontSize: 16,
+              ),
+            ),
+            isExpanded: true,
+            icon: Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
+            iconSize: 24,
+            dropdownColor: Colors.white,
+            style: const TextStyle(
+              color: Colors.black,
+              fontSize: 16,
+            ),
+            items: [
+              DropdownMenuItem<String>(
+                value: 'male',
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text('Male'),
+                ),
+              ),
+              DropdownMenuItem<String>(
+                value: 'female',
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text('Female'),
+                ),
+              ),
+            ],
+            onChanged: (value) {
+              setState(() {
+                _selectedGender = value;
+              });
+            },
+          ),
         ),
       ),
     );

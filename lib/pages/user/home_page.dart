@@ -147,8 +147,16 @@ class _HomePageState extends State<HomePage> {
           canPop: false, // Prevent default back navigation
           onPopInvokedWithResult: (didPop, result) {
             if (!didPop) {
-              // Show logout confirmation dialog when trying to go back or swipe
-              _showLogoutDialog(context);
+              // Check if we're on the MatchingInteractionPage (index 2) which contains booking page
+              // If so, the booking page's PopScope will handle internal navigation
+              // Only show logout dialog if we're not on a page with internal navigation
+              final isOnMatchingPage = _selectedIndex == 2;
+              
+              if (!isOnMatchingPage) {
+                // Show logout confirmation dialog when trying to go back or swipe
+                _showLogoutDialog(context);
+              }
+              // If on matching page, let the booking page handle its own navigation
             }
           },
           child: Scaffold(
@@ -312,6 +320,11 @@ class _HomeTabState extends State<_HomeTab> {
     _loadProfile();
     //GPS fecthing
     _resolveDeviceLocation();
+    // Auto-complete expired posts when home page loads
+    _postService.autoCompleteExpiredPosts().catchError((error) {
+      debugPrint('Error auto-completing expired posts: $error');
+      return 0; // Return 0 on error
+    });
   }
 
   Future<void> _loadProfile() async {
@@ -468,10 +481,25 @@ class _HomeTabState extends State<_HomeTab> {
           ? 'Your posted jobs'
           : 'Most viewed opportunities right now';
 
+  Future<void> _refreshData() async {
+    await Future.wait([
+      _loadProfile(),
+      _resolveDeviceLocation(),
+      _postService.autoCompleteExpiredPosts().catchError((error) {
+        debugPrint('Error auto-completing expired posts: $error');
+        return 0;
+      }),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Padding(
+    return RefreshIndicator(
+      onRefresh: _refreshData,
+      color: const Color(0xFF00C8A0),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1117,6 +1145,7 @@ class _HomeTabState extends State<_HomeTab> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
