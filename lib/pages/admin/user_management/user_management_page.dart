@@ -150,12 +150,12 @@ class UserManagementPage extends StatelessWidget {
     final userRole = currentAdmin?.role.toLowerCase() ?? '';
     final userPermissions = currentAdmin?.permissions ?? [];
     
-    // Check if user can access role management (all admins can view, but only those with role_management permission can modify)
-    final canAccessRoleManagement = userRole == 'manager' || 
-                                    userRole == 'hr' || 
-                                    userRole == 'staff' ||
-                                    userPermissions.contains('role_management') ||
-                                    userPermissions.contains('all');
+    // Check if user can access role management (staff cannot access role management)
+    final canAccessRoleManagement = userRole != 'staff' &&
+                                    (userRole == 'manager' || 
+                                     userRole == 'hr' ||
+                                     userPermissions.contains('role_management') ||
+                                     userPermissions.contains('all'));
 
     final cards = <Widget>[
       _ManagementCard(

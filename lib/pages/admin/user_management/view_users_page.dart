@@ -1,12 +1,24 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:fyp_project/models/admin/user_model.dart';
 import 'package:fyp_project/models/admin/role_model.dart';
 import 'package:fyp_project/services/admin/user_service.dart';
 import 'package:fyp_project/services/admin/auth_service.dart';
 import 'package:fyp_project/services/admin/role_service.dart';
+import 'package:fyp_project/services/admin/profile_pic_service.dart';
+import 'package:fyp_project/services/admin/admin_user_service.dart';
+import 'package:fyp_project/models/admin/add_admin_form_model.dart';
 import 'package:fyp_project/pages/admin/user_management/user_detail_page.dart';
+import 'package:fyp_project/widgets/user/location_autocomplete_field.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
+import 'package:fyp_project/utils/admin/phone_number_formatter.dart';
+import 'package:fyp_project/widgets/admin/dialogs/user_dialogs/warning_dialog.dart';
+import 'package:fyp_project/widgets/admin/dialogs/user_dialogs/suspend_dialog.dart';
+import 'package:fyp_project/widgets/admin/dialogs/user_dialogs/delete_dialog.dart';
+import 'package:fyp_project/widgets/admin/dialogs/user_dialogs/image_preview_dialog.dart';
 
 class ViewUsersPage extends StatefulWidget {
   const ViewUsersPage({super.key});
@@ -150,14 +162,60 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     return currentRole == 'manager' || currentRole == 'hr';
   }
 
+  bool _isHR() {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentRole = authService.currentAdmin?.role.toLowerCase() ?? '';
+    return currentRole == 'hr';
+  }
+
+  bool _isStaff() {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentRole = authService.currentAdmin?.role.toLowerCase() ?? '';
+    return currentRole == 'staff';
+  }
+
+  bool _canPerformActionsOnUser(UserModel user) {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentAdmin = authService.currentAdmin;
+    
+    // Cannot perform actions on yourself (view only)
+    if (currentAdmin != null && currentAdmin.id == user.id) {
+      return false;
+    }
+    
+    final userRole = user.role.toLowerCase();
+    
+    // If current user is HR and target user is Manager, cannot perform actions (only view)
+    if (_isHR()) {
+      if (userRole == 'manager') {
+        return false;
+      }
+    }
+    
+    // If current user is Staff, can only perform actions on Jobseeker and Recruiter
+    // Other roles (Manager, HR, Staff, etc.) are view only
+    if (_isStaff()) {
+      // Only allow actions on Jobseeker and Recruiter
+      if (userRole == 'jobseeker' || userRole == 'recruiter') {
+        return true;
+      }
+      // All other roles are view only
+      return false;
+    }
+    
+    // Manager can perform actions on all users (except themselves)
+    return true;
+  }
+
   Widget _buildActionButtons(UserModel user) {
     final isDeleted = user.status == 'Inactive' && !user.isActive;
+    final canPerformActions = _canPerformActionsOnUser(user);
     
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          // View Profile Button
+          // View Profile Button (always available)
           ElevatedButton.icon(
             onPressed: () async {
               final result = await Navigator.push(
@@ -186,64 +244,90 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
             ),
           ),
-          const SizedBox(width: 6),
-
-          // If user is deleted, show only Activate button
-          if (isDeleted) ...[
-            ElevatedButton.icon(
-              onPressed: () async {
-                await _reactivateUser(user);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green[50],
-                foregroundColor: Colors.green[700],
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              ),
-              icon: const Icon(Icons.check_circle, size: 16),
-              label: const Text(
-                'Activate',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
-              ),
-            ),
-          ] else ...[
-            // Warning Button
-            ElevatedButton.icon(
-              onPressed: () {
-                if (user.isSuspended) {
-                  _unsuspendUser(user);
-                } else {
-                  _showWarningDialog(user);
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: user.isSuspended ? Colors.green[50] : Colors.orange[50],
-                foregroundColor: user.isSuspended ? Colors.green[700] : Colors.orange[700],
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              ),
-              icon: Icon(
-                user.isSuspended ? Icons.check_circle : Icons.warning_amber,
-                size: 16,
-              ),
-              label: Text(
-                user.isSuspended ? 'Activate' : 'Warning',
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
-              ),
-            ),
+          
+          // Only show action buttons if canPerformActions is true
+          if (canPerformActions) ...[
             const SizedBox(width: 6),
 
-            // Direct Suspend Button (only show if not suspended)
-            if (!user.isSuspended) ...[
+            // If user is deleted, show only Activate button
+            if (isDeleted) ...[
+              ElevatedButton.icon(
+                onPressed: () async {
+                  await _reactivateUser(user);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green[50],
+                  foregroundColor: Colors.green[700],
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                ),
+                icon: const Icon(Icons.check_circle, size: 16),
+                label: const Text(
+                  'Activate',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ] else ...[
+              // Warning Button
               ElevatedButton.icon(
                 onPressed: () {
-                  _showSuspendDialog(user);
+                  if (user.isSuspended) {
+                    _unsuspendUser(user);
+                  } else {
+                    _showWarningDialog(user);
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: user.isSuspended ? Colors.green[50] : Colors.orange[50],
+                  foregroundColor: user.isSuspended ? Colors.green[700] : Colors.orange[700],
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                ),
+                icon: Icon(
+                  user.isSuspended ? Icons.check_circle : Icons.warning_amber,
+                  size: 16,
+                ),
+                label: Text(
+                  user.isSuspended ? 'Activate' : 'Warning',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                ),
+              ),
+              const SizedBox(width: 6),
+
+              // Direct Suspend Button (only show if not suspended)
+              if (!user.isSuspended) ...[
+                ElevatedButton.icon(
+                  onPressed: () {
+                    _showSuspendDialog(user);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red[50],
+                    foregroundColor: Colors.red[700],
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  ),
+                  icon: const Icon(Icons.block, size: 16),
+                  label: const Text(
+                    'Suspend',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                  ),
+                ),
+                const SizedBox(width: 6),
+              ],
+
+              // Delete Button
+              ElevatedButton.icon(
+                onPressed: () {
+                  _showDeleteDialog(user);
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red[50],
@@ -254,35 +338,13 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 ),
-                icon: const Icon(Icons.block, size: 16),
+                icon: const Icon(Icons.delete, size: 16),
                 label: const Text(
-                  'Suspend',
+                  'Delete',
                   style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
                 ),
               ),
-              const SizedBox(width: 6),
             ],
-
-            // Delete Button
-            ElevatedButton.icon(
-              onPressed: () {
-                _showDeleteDialog(user);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red[50],
-                foregroundColor: Colors.red[700],
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              ),
-              icon: const Icon(Icons.delete, size: 16),
-              label: const Text(
-                'Delete',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
-              ),
-            ),
           ],
         ],
       ),
@@ -290,186 +352,12 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   }
 
   Future<void> _showWarningDialog(UserModel user) async {
-    final violationController = TextEditingController();
-
-    // Get current strike count
-    final currentStrikes = await _userService.getStrikeCount(user.id);
-    final strikesRemaining = 3 - currentStrikes;
-
-    // Use a variable that persists across rebuilds
-    bool isLoading = false;
-
-    await showDialog(
+    await WarningDialog.show(
       context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            title: const Row(
-              children: [
-                Icon(Icons.warning_amber, color: Colors.orange),
-                SizedBox(width: 8),
-                Text('Handle User Warning'),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Issue a warning to ${user.fullName}.',
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.orange[200]!),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline, color: Colors.orange[700], size: 16),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Current strikes: $currentStrikes/3\n${strikesRemaining > 0 ? '$strikesRemaining more strike${strikesRemaining == 1 ? '' : 's'} until automatic suspension' : 'Account will be suspended automatically'}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.orange[700],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Violation Reason *',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: violationController,
-                    maxLines: 3,
-                    enabled: !isLoading,
-                    decoration: const InputDecoration(
-                      hintText: 'Explain the violation (this will be sent to the user)...',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.all(12),
-                    ),
-                    textInputAction: TextInputAction.done,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'The user will receive a warning notification. After 3 strikes, their account will be automatically suspended.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                  if (isLoading) ...[
-                    const SizedBox(height: 16),
-                    const Center(
-                      child: Column(
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 12),
-                          Text(
-                            'Issuing warning...',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: isLoading ? null : () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: isLoading
-                    ? null
-                    : () async {
-                        final violationReason = violationController.text.trim();
-
-                        if (violationReason.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Please provide a violation reason'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                          return;
-                        }
-
-                        // Set loading state and trigger rebuild
-                        // Update loading state and rebuild
-                        isLoading = true;
-                        setDialogState(() {});
-
-                        try {
-                          // Issue warning
-                          final result = await _userService.issueWarning(
-                            userId: user.id,
-                            violationReason: violationReason,
-                          );
-
-                          if (context.mounted) {
-                            Navigator.pop(context);
-
-                            if (result['success'] == true) {
-                              final strikeCount = result['strikeCount'];
-                              final wasSuspended = result['wasSuspended'];
-                              final userName = result['userName'];
-
-                              if (wasSuspended) {
-                                _showSnackBar('$userName has reached 3 strikes and has been automatically suspended');
-                              } else {
-                                _showSnackBar('Warning issued to $userName (Strike $strikeCount/3)');
-                              }
-                            } else {
-                              _showSnackBar('Failed to issue warning: ${result['error']}', isError: true);
-                            }
-
-                            _loadData();
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            Navigator.pop(context);
-                            _showSnackBar('Failed to process action: $e', isError: true);
-                          }
-                        }
-                      },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                ),
-                child: isLoading
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : const Text('Issue Warning'),
-              ),
-            ],
-          );
-        },
-      ),
+      user: user,
+      userService: _userService,
+      onShowSnackBar: (message, {bool isError = false}) => _showSnackBar(message, isError: isError),
+      onLoadData: _loadData,
     );
   }
 
@@ -518,409 +406,24 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   }
 
   Future<void> _showSuspendDialog(UserModel user) async {
-    final reasonController = TextEditingController();
-    final durationController = TextEditingController(text: '30'); // Default 30 days
-
-    bool isLoading = false;
-    String? reasonError;
-    String? durationError;
-
-    await showDialog(
+    await SuspendDialog.show(
       context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.block, color: Colors.red),
-            SizedBox(width: 8),
-            Text('Suspend User Account'),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'You are about to suspend ${user.fullName}\'s account immediately.',
-                style: const TextStyle(fontSize: 14),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red[200]!),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.warning_amber, color: Colors.red[700], size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'This will suspend the user immediately without waiting for 3 warnings.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.red[700],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Suspension Reason *',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: reasonController,
-                maxLines: 3,
-                enabled: !isLoading,
-                onChanged: (value) {
-                  if (reasonError != null) {
-                    setDialogState(() => reasonError = null);
-                  }
-                },
-                decoration: InputDecoration(
-                  hintText: 'Explain why this account is being suspended...',
-                  border: OutlineInputBorder(
-                    borderSide: BorderSide(
-                      color: reasonError != null ? Colors.red : Colors.grey,
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(
-                      color: reasonError != null ? Colors.red : Colors.grey,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(
-                      color: reasonError != null ? Colors.red : Colors.blue,
-                      width: 2,
-                    ),
-                  ),
-                  errorBorder: const OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.red, width: 2),
-                  ),
-                  focusedErrorBorder: const OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.red, width: 2),
-                  ),
-                  errorText: reasonError,
-                  contentPadding: const EdgeInsets.all(12),
-                  prefixIcon: Icon(
-                    Icons.description_outlined,
-                    color: reasonError != null ? Colors.red : Colors.grey,
-                  ),
-                  fillColor: reasonError != null ? Colors.red[50] : null,
-                  filled: reasonError != null,
-                ),
-                textInputAction: TextInputAction.done,
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Suspension Duration (Days) *',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: durationController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: false),
-                enabled: !isLoading,
-                onChanged: (value) {
-                  if (durationError != null) {
-                    setDialogState(() => durationError = null);
-                  }
-                },
-                decoration: InputDecoration(
-                  hintText: 'Enter number of days (e.g., 30)',
-                  border: OutlineInputBorder(
-                    borderSide: BorderSide(
-                      color: durationError != null ? Colors.red : Colors.grey,
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(
-                      color: durationError != null ? Colors.red : Colors.grey,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(
-                      color: durationError != null ? Colors.red : Colors.blue,
-                      width: 2,
-                    ),
-                  ),
-                  errorBorder: const OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.red, width: 2),
-                  ),
-                  focusedErrorBorder: const OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.red, width: 2),
-                  ),
-                  errorText: durationError,
-                  contentPadding: const EdgeInsets.all(12),
-                  prefixIcon: Icon(
-                    Icons.calendar_today,
-                    size: 20,
-                    color: durationError != null ? Colors.red : Colors.grey,
-                  ),
-                  fillColor: durationError != null ? Colors.red[50] : null,
-                  filled: durationError != null,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Enter a number greater than 0',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-              if (isLoading) ...[
-                const SizedBox(height: 16),
-                const Center(
-                  child: Column(
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 12),
-                      Text(
-                        'Suspending user...',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: isLoading ? null : () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: isLoading
-                ? null
-                : () async {
-                    final suspensionReason = reasonController.text.trim();
-                    final durationText = durationController.text.trim();
-
-                    // Reset errors
-                    reasonError = null;
-                    durationError = null;
-
-                    // Validate reason
-                    if (suspensionReason.isEmpty) {
-                      setDialogState(() {
-                        reasonError = 'Please provide a suspension reason';
-                      });
-                      return;
-                    }
-
-                    // Validate duration - cannot be empty
-                    if (durationText.isEmpty) {
-                      setDialogState(() {
-                        durationError = 'Please enter suspension duration';
-                      });
-                      return;
-                    }
-
-                    int? durationDays = int.tryParse(durationText);
-                    if (durationDays == null || durationDays <= 0) {
-                      setDialogState(() {
-                        durationError = 'Must be greater than 0';
-                      });
-                      return;
-                    }
-
-                    isLoading = true;
-                    setDialogState(() {});
-
-                    try {
-                      await _userService.suspendUser(
-                        user.id,
-                        violationReason: suspensionReason,
-                        durationDays: durationDays,
-                      );
-
-                      if (context.mounted) {
-                        Navigator.pop(context);
-
-                        _showSnackBar('${user.fullName}\'s account has been suspended for $durationDays day${durationDays == 1 ? '' : 's'}');
-
-                        _loadData();
-                      }
-                    } catch (e) {
-                      if (context.mounted) {
-                        Navigator.pop(context);
-                        _showSnackBar('Failed to suspend user: $e', isError: true);
-                      }
-                    }
-                  },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: isLoading
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : const Text('Suspend Account'),
-          ),
-        ],
-      ),
-      ),
+      user: user,
+      userService: _userService,
+      onShowSnackBar: (message, {bool isError = false}) => _showSnackBar(message, isError: isError),
+      onLoadData: _loadData,
     );
   }
 
 
+
   Future<void> _showDeleteDialog(UserModel user) async {
-    final reasonController = TextEditingController();
-
-    bool isLoading = false;
-
-    await showDialog(
+    await DeleteDialog.show(
       context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.delete_forever, color: Colors.red),
-            SizedBox(width: 8),
-            Text('Delete User Account'),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'You are about to permanently delete ${user.fullName}\'s account.',
-                style: const TextStyle(fontSize: 14),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'This action cannot be undone and will permanently remove all user data.',
-                style: TextStyle(fontSize: 12, color: Colors.red),
-              ),
-              const SizedBox(height: 16),
-
-              const Text(
-                'Deletion Reason *',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: reasonController,
-                maxLines: 2,
-                enabled: !isLoading,
-                decoration: const InputDecoration(
-                  hintText: 'Explain why this account is being deleted...',
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.all(12),
-                ),
-              ),
-              if (isLoading) ...[
-                const SizedBox(height: 16),
-                const Center(
-                  child: Column(
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 12),
-                      Text(
-                        'Deleting user...',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: isLoading ? null : () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: isLoading
-                ? null
-                : () async {
-                    final deletionReason = reasonController.text.trim();
-
-                    if (deletionReason.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Please provide a deletion reason'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                      return;
-                    }
-
-                    isLoading = true;
-                    setDialogState(() {});
-
-                    try {
-                      final result = await _userService.deleteUserWithNotification(
-                        userId: user.id,
-                        deletionReason: deletionReason,
-                      );
-
-                      if (context.mounted) {
-                        Navigator.pop(context);
-
-                        if (result['success'] == true) {
-                          final userName = result['userName'];
-                          _showSnackBar('$userName\'s account has been deleted');
-                        } else {
-                          _showSnackBar('Failed to delete user: ${result['error']}', isError: true);
-                        }
-
-                        _loadData();
-                      }
-                    } catch (e) {
-                      if (context.mounted) {
-                        Navigator.pop(context);
-                        _showSnackBar('Failed to delete user: $e', isError: true);
-                      }
-                    }
-                  },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: isLoading
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : const Text('Delete Account'),
-          ),
-        ],
-      ),
-      ),
+      user: user,
+      userService: _userService,
+      onShowSnackBar: (message, {bool isError = false}) => _showSnackBar(message, isError: isError),
+      onLoadData: _loadData,
     );
   }
 
@@ -1322,447 +825,1338 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     );
   }
 
+  // Cache for decoded images to avoid re-decoding on every rebuild
+  final Map<String, Uint8List> _imageCache = {};
+
+  void _showImagePreview(String base64String) {
+    ImagePreviewDialog.show(
+      context: context,
+      base64String: base64String,
+      imageCache: _imageCache,
+    );
+  }
+
+  Future<Map<String, String>?> _pickImageBase64() async {
+    try {
+      final source = await showModalBottomSheet<String>(
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (context) => Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 16),
+                const Text(
+                  'Select Profile Photo',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.photo_camera, color: Colors.blue),
+                  ),
+                  title: const Text('Take a photo'),
+                  onTap: () => Navigator.pop(context, 'camera'),
+                ),
+                ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.photo_library, color: Colors.blue),
+                  ),
+                  title: const Text('Choose from gallery'),
+                  onTap: () => Navigator.pop(context, 'gallery'),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      if (source == null) return null;
+
+      final profilePicService = ProfilePicService();
+      return await profilePicService.pickImageBase64(fromCamera: source == 'camera');
+    } catch (e) {
+      if (context.mounted) {
+        // Show user-friendly error notification
+        final errorMessage = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    errorMessage,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red[700],
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: Colors.white,
+              onPressed: () {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              },
+            ),
+          ),
+        );
+      }
+      return null;
+    }
+  }
+
   void _showAddAdminDialog() {
+    // Save the page context before showing dialog
+    final pageContext = context;
+    
     final nameController = TextEditingController();
     final emailController = TextEditingController();
     final passwordController = TextEditingController();
     final confirmPasswordController = TextEditingController();
+    final locationController = TextEditingController();
+    final ageController = TextEditingController();
+    final phoneNumberController = TextEditingController();
     final currentPasswordController = TextEditingController();
+    
+    // Store state outside StatefulBuilder to persist across rebuilds
     String selectedRole = _adminRoles.isNotEmpty ? _adminRoles.first.name : 'staff';
+    String? selectedGender;
     bool obscurePassword = true;
     bool obscureConfirmPassword = true;
     bool obscureCurrentPassword = true;
+    
+    // Use ValueNotifier for image state to persist across rebuilds
+    final selectedImageBase64Notifier = ValueNotifier<String?>(null);
+    final selectedImageFileTypeNotifier = ValueNotifier<String?>(null);
+    final isPickingImageNotifier = ValueNotifier<bool>(false);
+    final isImageUploadedNotifier = ValueNotifier<bool>(false);
+    
+    // Page controller for two-step process
+    final pageController = PageController(initialPage: 0);
+    final currentPageNotifier = ValueNotifier<int>(0);
+    
+    String? nameError;
+    String? emailError;
+    String? passwordError;
+    String? confirmPasswordError;
+    String? ageError;
+    String? phoneNumberError;
 
-    showDialog(
-      context: context,
-      barrierDismissible: true,
+    showModalBottomSheet(
+      context: pageContext,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      isDismissible: true,
+      enableDrag: true,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+        builder: (context, setDialogState) => Container(
+          height: MediaQuery.of(context).size.height * 0.9,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
-          title: Container(
-            padding: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: Colors.grey[300]!),
+          child: Column(
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryDark,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ValueListenableBuilder<int>(
+                        valueListenable: currentPageNotifier,
+                        builder: (context, currentPage, _) => Text(
+                          currentPage == 0 ? 'Step 1: Upload Profile Photo' : 'Step 2: Admin Information',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Page View
+              Expanded(
+                child: PageView(
+                  controller: pageController,
+                  physics: const NeverScrollableScrollPhysics(), // Disable swipe
+                  onPageChanged: (index) {
+                    currentPageNotifier.value = index;
+                  },
+                  children: [
+                    // Step 1: Image Upload
+                    _buildImageUploadStep(
+                      context,
+                      selectedImageBase64Notifier,
+                      selectedImageFileTypeNotifier,
+                      isPickingImageNotifier,
+                      isImageUploadedNotifier,
+                      () {
+                        pageController.nextPage(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                        );
+                      },
+                    ),
+                    // Step 2: Information Form
+                    _buildInformationStep(
+                      context,
+                      setDialogState,
+                      nameController,
+                      emailController,
+                      passwordController,
+                      confirmPasswordController,
+                      locationController,
+                      ageController,
+                      phoneNumberController,
+                      currentPasswordController,
+                      selectedRole,
+                      selectedGender,
+                      obscurePassword,
+                      obscureConfirmPassword,
+                      obscureCurrentPassword,
+                      nameError,
+                      emailError,
+                      passwordError,
+                      confirmPasswordError,
+                      ageError,
+                      phoneNumberError,
+                      selectedImageBase64Notifier,
+                      selectedImageFileTypeNotifier,
+                      (role) => selectedRole = role,
+                      (gender) => selectedGender = gender,
+                      (obscure) => obscurePassword = obscure,
+                      (obscure) => obscureConfirmPassword = obscure,
+                      (obscure) => obscureCurrentPassword = obscure,
+                      (errors) {
+                        nameError = errors['name'];
+                        emailError = errors['email'];
+                        passwordError = errors['password'];
+                        confirmPasswordError = errors['confirmPassword'];
+                        ageError = errors['age'];
+                        phoneNumberError = errors['phoneNumber'];
+                      },
+                      () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Step 1: Image Upload Page
+  Widget _buildImageUploadStep(
+    BuildContext context,
+    ValueNotifier<String?> selectedImageBase64Notifier,
+    ValueNotifier<String?> selectedImageFileTypeNotifier,
+    ValueNotifier<bool> isPickingImageNotifier,
+    ValueNotifier<bool> isImageUploadedNotifier,
+    VoidCallback onNext,
+  ) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(height: 40),
+          const Text(
+            'Upload Profile Photo',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Please upload or take a photo for the admin profile',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[600],
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 40),
+          // Image Upload Area
+          ValueListenableBuilder<String?>(
+            valueListenable: selectedImageBase64Notifier,
+            builder: (context, selectedImageBase64, _) => ValueListenableBuilder<bool>(
+              valueListenable: isPickingImageNotifier,
+              builder: (context, isPickingImage, _) => GestureDetector(
+                onTap: isPickingImage ? null : () async {
+                  isPickingImageNotifier.value = true;
+                  try {
+                    final imageData = await _pickImageBase64();
+                    if (imageData != null && imageData['base64'] != null) {
+                      final cleanBase64 = imageData['base64']!.trim().replaceAll(RegExp(r'\s+'), '');
+                      selectedImageBase64Notifier.value = cleanBase64;
+                      selectedImageFileTypeNotifier.value = imageData['fileType'];
+                      isImageUploadedNotifier.value = true;
+                      isPickingImageNotifier.value = false;
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Row(
+                              children: [
+                                Icon(Icons.check_circle, color: Colors.white, size: 20),
+                                SizedBox(width: 12),
+                                Expanded(
+                                  child: Text('Image uploaded successfully!'),
+                                ),
+                              ],
+                            ),
+                            backgroundColor: Colors.green,
+                            behavior: SnackBarBehavior.floating,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    } else {
+                      isPickingImageNotifier.value = false;
+                      isImageUploadedNotifier.value = false;
+                    }
+                  } catch (e) {
+                    isPickingImageNotifier.value = false;
+                    isImageUploadedNotifier.value = false;
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Row(
+                            children: [
+                              const Icon(Icons.error_outline, color: Colors.white, size: 20),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(e.toString().replaceFirst('Exception: ', '')),
+                              ),
+                            ],
+                          ),
+                          backgroundColor: Colors.red,
+                          behavior: SnackBarBehavior.floating,
+                          duration: const Duration(seconds: 4),
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: Container(
+                  width: 200,
+                  height: 200,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: selectedImageBase64 != null ? Colors.green : Colors.grey[300]!,
+                      width: 3,
+                    ),
+                    color: selectedImageBase64 != null ? Colors.green[50] : Colors.grey[50],
+                  ),
+                  child: isPickingImage
+                      ? const Center(
+                          child: CircularProgressIndicator(),
+                        )
+                      : selectedImageBase64 != null
+                          ? ClipOval(
+                              child: _buildPreviewImage(selectedImageBase64),
+                            )
+                          : Icon(
+                              Icons.add_photo_alternate,
+                              color: Colors.grey[400],
+                              size: 64,
+                            ),
+                ),
               ),
             ),
-            child: const Row(
+          ),
+          const SizedBox(height: 24),
+          // Preview and Remove buttons
+          ValueListenableBuilder<String?>(
+            valueListenable: selectedImageBase64Notifier,
+            builder: (context, selectedImageBase64, _) {
+              if (selectedImageBase64 != null) {
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () => _showImagePreview(selectedImageBase64),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue[50],
+                        foregroundColor: Colors.blue[700],
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      icon: const Icon(Icons.preview, size: 20),
+                      label: const Text(
+                        'Preview',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        selectedImageBase64Notifier.value = null;
+                        selectedImageFileTypeNotifier.value = null;
+                        isImageUploadedNotifier.value = false;
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red[50],
+                        foregroundColor: Colors.red[700],
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      icon: const Icon(Icons.delete_outline, size: 20),
+                      label: const Text(
+                        'Remove',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+          const SizedBox(height: 60),
+          // Next Button
+          ValueListenableBuilder<bool>(
+            valueListenable: isImageUploadedNotifier,
+            builder: (context, isUploaded, _) => SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: isUploaded ? onNext : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryDark,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
+                child: const Text(
+                  'Next',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Helper method to build preview image
+  Widget _buildPreviewImage(String base64String) {
+    try {
+      final cleanBase64 = base64String.trim().replaceAll(RegExp(r'\s+'), '');
+      Uint8List bytes = _imageCache[cleanBase64] ?? base64Decode(cleanBase64);
+      if (!_imageCache.containsKey(cleanBase64)) {
+        _imageCache[cleanBase64] = bytes;
+      }
+      return Image.memory(
+        bytes,
+        fit: BoxFit.cover,
+        width: 200,
+        height: 200,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            width: 200,
+            height: 200,
+            color: Colors.grey[100],
+            child: Icon(Icons.broken_image, color: Colors.red[300], size: 40),
+          );
+        },
+      );
+    } catch (e) {
+      return Container(
+        width: 200,
+        height: 200,
+        color: Colors.grey[100],
+        child: Icon(Icons.broken_image, color: Colors.red[300], size: 40),
+      );
+    }
+  }
+
+  // Step 2: Information Form Page
+  Widget _buildInformationStep(
+    BuildContext context,
+    StateSetter setDialogState,
+    TextEditingController nameController,
+    TextEditingController emailController,
+    TextEditingController passwordController,
+    TextEditingController confirmPasswordController,
+    TextEditingController locationController,
+    TextEditingController ageController,
+    TextEditingController phoneNumberController,
+    TextEditingController currentPasswordController,
+    String selectedRole,
+    String? selectedGender,
+    bool obscurePassword,
+    bool obscureConfirmPassword,
+    bool obscureCurrentPassword,
+    String? nameError,
+    String? emailError,
+    String? passwordError,
+    String? confirmPasswordError,
+    String? ageError,
+    String? phoneNumberError,
+    ValueNotifier<String?> selectedImageBase64Notifier,
+    ValueNotifier<String?> selectedImageFileTypeNotifier,
+    Function(String) onRoleChanged,
+    Function(String?) onGenderChanged,
+    Function(bool) onObscurePasswordChanged,
+    Function(bool) onObscureConfirmPasswordChanged,
+    Function(bool) onObscureCurrentPasswordChanged,
+    Function(Map<String, String?>) onErrorsChanged,
+    VoidCallback onCancel,
+  ) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Container: All Information
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey[300]!),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.person_add, color: Colors.blue, size: 28),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Add New Admin User',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                Row(
+                  children: [
+                    Icon(Icons.account_circle_outlined, color: Colors.blue[700], size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Admin Information',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.blue[700],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                
+                // Full Name Field
+                TextField(
+                  controller: nameController,
+                  onChanged: (value) {
+                    if (nameError != null) {
+                      setDialogState(() => nameError = null);
+                    }
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Full Name *',
+                    hintText: 'Enter full name',
+                    errorText: nameError,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: nameError != null ? Colors.red : Colors.grey),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: nameError != null ? Colors.red : Colors.grey),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: nameError != null ? Colors.red : Colors.blue, width: 2),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.red, width: 2),
+                    ),
+                    focusedErrorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.red, width: 2),
+                    ),
+                    prefixIcon: Icon(Icons.person_outline, color: nameError != null ? Colors.red : Colors.grey),
+                    filled: true,
+                    fillColor: nameError != null ? Colors.red[50] : Colors.grey[50],
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
+                  ),
+                  textCapitalization: TextCapitalization.words,
+                ),
+                const SizedBox(height: 16),
+                
+                // Email Field
+                TextField(
+                  controller: emailController,
+                  onChanged: (value) {
+                    if (emailError != null) {
+                      setDialogState(() => emailError = null);
+                    }
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Email Address *',
+                    hintText: 'example@email.com',
+                    errorText: emailError,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: emailError != null ? Colors.red : Colors.grey),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: emailError != null ? Colors.red : Colors.grey),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: emailError != null ? Colors.red : Colors.blue, width: 2),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.red, width: 2),
+                    ),
+                    focusedErrorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.red, width: 2),
+                    ),
+                    prefixIcon: Icon(Icons.email_outlined, color: emailError != null ? Colors.red : Colors.grey),
+                    filled: true,
+                    fillColor: emailError != null ? Colors.red[50] : Colors.grey[50],
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  textCapitalization: TextCapitalization.none,
+                ),
+                const SizedBox(height: 16),
+                
+                // Password Field
+                TextField(
+                  controller: passwordController,
+                  onChanged: (value) {
+                    if (passwordError != null) {
+                      setDialogState(() => passwordError = null);
+                    }
+                    if (confirmPasswordError != null && value == confirmPasswordController.text) {
+                      setDialogState(() => confirmPasswordError = null);
+                    }
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Password *',
+                    hintText: 'Minimum 6 characters',
+                    errorText: passwordError,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: passwordError != null ? Colors.red : Colors.grey),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: passwordError != null ? Colors.red : Colors.grey),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: passwordError != null ? Colors.red : Colors.blue, width: 2),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.red, width: 2),
+                    ),
+                    focusedErrorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.red, width: 2),
+                    ),
+                    prefixIcon: Icon(Icons.lock_outline, color: passwordError != null ? Colors.red : Colors.grey),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                        color: passwordError != null ? Colors.red : Colors.grey[600],
+                      ),
+                      onPressed: () {
+                        setDialogState(() {
+                          obscurePassword = !obscurePassword;
+                          onObscurePasswordChanged(obscurePassword);
+                        });
+                      },
+                    ),
+                    filled: true,
+                    fillColor: passwordError != null ? Colors.red[50] : Colors.grey[50],
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
+                  ),
+                  obscureText: obscurePassword,
+                ),
+                const SizedBox(height: 16),
+                
+                // Confirm Password Field
+                TextField(
+                  controller: confirmPasswordController,
+                  onChanged: (value) {
+                    if (confirmPasswordError != null && value == passwordController.text) {
+                      setDialogState(() => confirmPasswordError = null);
+                    }
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Confirm Password *',
+                    hintText: 'Re-enter password',
+                    errorText: confirmPasswordError,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: confirmPasswordError != null ? Colors.red : Colors.grey),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: confirmPasswordError != null ? Colors.red : Colors.grey),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: confirmPasswordError != null ? Colors.red : Colors.blue, width: 2),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.red, width: 2),
+                    ),
+                    focusedErrorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.red, width: 2),
+                    ),
+                    prefixIcon: Icon(Icons.lock_outline, color: confirmPasswordError != null ? Colors.red : Colors.grey),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        obscureConfirmPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                        color: confirmPasswordError != null ? Colors.red : Colors.grey[600],
+                      ),
+                      onPressed: () {
+                        setDialogState(() {
+                          obscureConfirmPassword = !obscureConfirmPassword;
+                          onObscureConfirmPasswordChanged(obscureConfirmPassword);
+                        });
+                      },
+                    ),
+                    filled: true,
+                    fillColor: confirmPasswordError != null ? Colors.red[50] : Colors.grey[50],
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
+                  ),
+                  obscureText: obscureConfirmPassword,
+                ),
+                const SizedBox(height: 16),
+                
+                // Location Field
+                LocationAutocompleteField(
+                  controller: locationController,
+                  label: 'Location (Optional)',
+                  hintText: 'Search location... (e.g., Kuala Lumpur)',
+                  restrictToCountry: 'my',
+                  onLocationSelected: (description, latitude, longitude) {
+                    if (latitude != null && longitude != null) {
+                      print('Selected location: $description');
+                      print('Coordinates: $latitude, $longitude');
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                
+                // Age Field
+                TextField(
+                  controller: ageController,
+                  onChanged: (value) {
+                    if (ageError != null) {
+                      setDialogState(() => ageError = null);
+                    }
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Age (Optional)',
+                    hintText: 'Enter age (18-80)',
+                    errorText: ageError,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: ageError != null ? Colors.red : Colors.grey),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: ageError != null ? Colors.red : Colors.grey),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: ageError != null ? Colors.red : Colors.blue, width: 2),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.red, width: 2),
+                    ),
+                    focusedErrorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.red, width: 2),
+                    ),
+                    prefixIcon: Icon(Icons.cake_outlined, color: ageError != null ? Colors.red : Colors.grey),
+                    filled: true,
+                    fillColor: ageError != null ? Colors.red[50] : Colors.grey[50],
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 16),
+                
+                // Phone Number Field
+                TextField(
+                  controller: phoneNumberController,
+                  onChanged: (value) {
+                    if (phoneNumberError != null) {
+                      final digitsOnly = value.replaceAll(RegExp(r'[^\d]'), '');
+                      if (digitsOnly.length == 10) {
+                        setDialogState(() => phoneNumberError = null);
+                      }
+                    }
+                  },
+                  inputFormatters: [
+                    PhoneNumberFormatter(),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: 'Phone Number (Optional)',
+                    hintText: 'XXX-XXX XXXX',
+                    errorText: phoneNumberError,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: phoneNumberError != null ? Colors.red : Colors.grey),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: phoneNumberError != null ? Colors.red : Colors.grey),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: phoneNumberError != null ? Colors.red : Colors.blue, width: 2),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.red, width: 2),
+                    ),
+                    focusedErrorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.red, width: 2),
+                    ),
+                    prefixIcon: Icon(Icons.phone_outlined, color: phoneNumberError != null ? Colors.red : Colors.grey),
+                    filled: true,
+                    fillColor: phoneNumberError != null ? Colors.red[50] : Colors.grey[50],
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
+                  ),
+                  keyboardType: TextInputType.phone,
+                  maxLength: 13,
+                ),
+                const SizedBox(height: 16),
+                
+                // Gender Field
+                const Text(
+                  'Gender (Optional)',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey[300]!),
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.grey[50],
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String?>(
+                      value: selectedGender,
+                      isExpanded: true,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      icon: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                      hint: const Text(
+                        'Select gender',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Not specified'),
+                        ),
+                        const DropdownMenuItem<String>(
+                          value: 'Male',
+                          child: Text('Male'),
+                        ),
+                        const DropdownMenuItem<String>(
+                          value: 'Female',
+                          child: Text('Female'),
+                        ),
+                        const DropdownMenuItem<String>(
+                          value: 'Other',
+                          child: Text('Other'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setDialogState(() {
+                          onGenderChanged(value);
+                        });
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                // Role Field
+                const Text(
+                  'Role *',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey[300]!),
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.grey[50],
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: selectedRole,
+                      isExpanded: true,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      icon: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                      items: _adminRoles.map((role) {
+                        return DropdownMenuItem(
+                          value: role.name,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _getRoleDisplayName(role.name),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              if (role.description.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  role.description,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setDialogState(() {
+                            onRoleChanged(value);
+                          });
+                        }
+                      },
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          content: SingleChildScrollView(
-            child: SizedBox(
-              width: double.maxFinite,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Full Name Field
-                  TextField(
-                    controller: nameController,
-                    decoration: InputDecoration(
-                      labelText: 'Full Name',
-                      hintText: 'Enter full name',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      prefixIcon: const Icon(Icons.person_outline),
-                      filled: true,
-                      fillColor: Colors.grey[50],
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 16,
-                      ),
-                    ),
-                    textCapitalization: TextCapitalization.words,
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Email Field
-                  TextField(
-                    controller: emailController,
-                    decoration: InputDecoration(
-                      labelText: 'Email Address',
-                      hintText: 'example@email.com',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      prefixIcon: const Icon(Icons.email_outlined),
-                      filled: true,
-                      fillColor: Colors.grey[50],
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 16,
+          const SizedBox(height: 24),
+          
+          // Current Password Field (to stay logged in)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.orange[50],
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.orange[200]!),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.lock_outline, color: Colors.orange[700], size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Current Password (Optional)',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.orange[700],
                       ),
                     ),
-                    keyboardType: TextInputType.emailAddress,
-                    textCapitalization: TextCapitalization.none,
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Enter your current password to stay logged in after creating the new admin. If left empty, you will need to log in again.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.orange[900],
+                    height: 1.4,
                   ),
-                  const SizedBox(height: 16),
-                  
-                  // Password Field
-                  TextField(
-                    controller: passwordController,
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      hintText: 'Minimum 6 characters',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                          color: Colors.grey[600],
-                        ),
-                        onPressed: () {
-                          setDialogState(() => obscurePassword = !obscurePassword);
-                        },
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey[50],
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 16,
-                      ),
-                    ),
-                    obscureText: obscurePassword,
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Confirm Password Field
-                  TextField(
-                    controller: confirmPasswordController,
-                    decoration: InputDecoration(
-                      labelText: 'Confirm Password',
-                      hintText: 'Re-enter password',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          obscureConfirmPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                          color: Colors.grey[600],
-                        ),
-                        onPressed: () {
-                          setDialogState(() => obscureConfirmPassword = !obscureConfirmPassword);
-                        },
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey[50],
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 16,
-                      ),
-                    ),
-                    obscureText: obscureConfirmPassword,
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Current User Password Field (to restore session)
-                  TextField(
-                    controller: currentPasswordController,
-                    decoration: InputDecoration(
-                      labelText: 'Your Password',
-                      hintText: 'Enter your current password to stay logged in',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          obscureCurrentPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                          color: Colors.grey[600],
-                        ),
-                        onPressed: () {
-                          setDialogState(() => obscureCurrentPassword = !obscureCurrentPassword);
-                        },
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey[50],
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 16,
-                      ),
-                    ),
-                    obscureText: obscureCurrentPassword,
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Role Field
-                  const Text(
-                    'Role',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey[300]!),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: currentPasswordController,
+                  decoration: InputDecoration(
+                    labelText: 'Your Current Password',
+                    hintText: 'Enter your password to stay logged in',
+                    border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      color: Colors.grey[50],
+                      borderSide: BorderSide(color: Colors.grey[300]!),
                     ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: selectedRole,
-                        isExpanded: true,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        icon: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
-                        items: _adminRoles.map((role) {
-                          return DropdownMenuItem(
-                            value: role.name,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  _getRoleDisplayName(role.name),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                                if (role.description.isNotEmpty) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    role.description,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[600],
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setDialogState(() => selectedRole = value);
-                          }
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Info Box
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.blue[50],
+                    enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.blue[200]!),
+                      borderSide: BorderSide(color: Colors.grey[300]!),
                     ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'The new admin will be able to log in immediately with the provided credentials. Enter your current password to stay logged in after creating the new admin.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.blue[900],
-                              height: 1.4,
-                            ),
-                          ),
-                        ),
-                      ],
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.orange[700]!, width: 2),
+                    ),
+                    prefixIcon: Icon(Icons.lock_outline, color: Colors.orange[700]),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        obscureCurrentPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                        color: Colors.grey[600],
+                      ),
+                      onPressed: () {
+                        setDialogState(() {
+                          obscureCurrentPassword = !obscureCurrentPassword;
+                          onObscureCurrentPasswordChanged(obscureCurrentPassword);
+                        });
+                      },
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
                     ),
                   ),
-                ],
-              ),
+                  obscureText: obscureCurrentPassword,
+                ),
+              ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+          const SizedBox(height: 24),
+          
+          // Info Box
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue[50],
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.blue[200]!),
             ),
-            ElevatedButton.icon(
-              onPressed: () async {
-                final name = nameController.text.trim();
-                final email = emailController.text.trim();
-                final password = passwordController.text;
-                final confirmPassword = confirmPasswordController.text.trim();
-
-                // Validation
-                if (name.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please enter a name'),
-                      backgroundColor: Colors.red,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'The new admin will be able to log in immediately with the provided credentials.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.blue[900],
+                      height: 1.4,
                     ),
-                  );
-                  return;
-                }
-
-                if (email.isEmpty || !email.contains('@')) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please enter a valid email address'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-
-                if (password.isEmpty || password.length < 6) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Password must be at least 6 characters'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-
-                if (password != confirmPassword) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Passwords do not match'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-
-                // Validate that the role exists and has permissions before creating
-                // This prevents creating users with roles that don't exist
-                try {
-                  final roleService = RoleService();
-                  final roleModel = await roleService.getRoleByName(selectedRole.toLowerCase());
-                  if (roleModel == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Error: Role "$selectedRole" not found. Please select a valid role.'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                    return;
-                  }
-                  
-                  if (roleModel.permissions.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Error: Role "$selectedRole" has no permissions assigned. Please assign permissions to this role first.'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                    return;
-                  }
-                } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error validating role: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-                
-                Navigator.pop(context);
-                await _createAdminUser(name, email, password, selectedRole, currentPasswordController.text);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryDark,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
-                elevation: 2,
-              ),
-              icon: const Icon(Icons.person_add, size: 18),
-              label: const Text(
-                'Create Admin',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          
+          // Footer with Actions
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onCancel,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    final name = nameController.text.trim();
+                    final email = emailController.text.trim();
+                    final password = passwordController.text;
+                    final confirmPassword = confirmPasswordController.text.trim();
+
+                    // Reset all errors
+                    String? nameErr;
+                    String? emailErr;
+                    String? passwordErr;
+                    String? confirmPasswordErr;
+                    String? ageErr;
+                    String? phoneNumberErr;
+                    bool hasError = false;
+
+                    // Validation
+                    if (name.isEmpty) {
+                      nameErr = 'Please enter a name';
+                      hasError = true;
+                    }
+
+                    if (email.isEmpty || !email.contains('@')) {
+                      emailErr = 'Please enter a valid email address';
+                      hasError = true;
+                    }
+
+                    if (password.isEmpty || password.length < 6) {
+                      passwordErr = 'Password must be at least 6 characters';
+                      hasError = true;
+                    }
+
+                    if (password != confirmPassword) {
+                      confirmPasswordErr = 'Passwords do not match';
+                      hasError = true;
+                    }
+
+                    // Age validation (18-80)
+                    final ageText = ageController.text.trim();
+                    if (ageText.isNotEmpty) {
+                      final age = int.tryParse(ageText);
+                      if (age == null) {
+                        ageErr = 'Please enter a valid age';
+                        hasError = true;
+                      } else if (age < 18 || age > 80) {
+                        ageErr = 'Age must be between 18 and 80';
+                        hasError = true;
+                      }
+                    }
+
+                    // Phone number validation (XXX-XXX XXXX format)
+                    final phoneText = phoneNumberController.text.trim();
+                    if (phoneText.isNotEmpty) {
+                      final digitsOnly = phoneText.replaceAll(RegExp(r'[^\d]'), '');
+                      if (digitsOnly.length != 10) {
+                        phoneNumberErr = 'Phone number must be 10 digits (XXX-XXX XXXX)';
+                        hasError = true;
+                      }
+                    }
+
+                    // Update error states
+                    setDialogState(() {
+                      onErrorsChanged({
+                        'name': nameErr,
+                        'email': emailErr,
+                        'password': passwordErr,
+                        'confirmPassword': confirmPasswordErr,
+                        'age': ageErr,
+                        'phoneNumber': phoneNumberErr,
+                      });
+                    });
+
+                    if (hasError) {
+                      return;
+                    }
+
+                    // Validate role
+                    try {
+                      final roleService = RoleService();
+                      final roleModel = await roleService.getRoleByName(selectedRole.toLowerCase());
+                      if (roleModel == null) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error: Role "$selectedRole" not found. Please select a valid role.'),
+                              backgroundColor: Colors.red,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                        return;
+                      }
+                      
+                      if (roleModel.permissions.isEmpty) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error: Role "$selectedRole" has no permissions assigned. Please assign permissions to this role first.'),
+                              backgroundColor: Colors.red,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                        return;
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error validating role: $e'),
+                            backgroundColor: Colors.red,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                      return;
+                    }
+                    
+                    // Use AdminUserService to create admin
+                    final adminUserService = AdminUserService();
+                    final form = AddAdminFormModel(
+                      name: name,
+                      email: email,
+                      password: password,
+                      confirmPassword: confirmPassword,
+                      role: selectedRole,
+                      location: locationController.text.trim().isEmpty ? null : locationController.text.trim(),
+                      age: ageController.text.trim().isEmpty ? null : int.tryParse(ageController.text.trim()),
+                      phoneNumber: phoneNumberController.text.trim().isEmpty ? null : phoneNumberController.text.trim(),
+                      gender: selectedGender,
+                      currentPassword: currentPasswordController.text.trim().isEmpty ? null : currentPasswordController.text.trim(),
+                      imageBase64: selectedImageBase64Notifier.value,
+                      imageFileType: selectedImageFileTypeNotifier.value,
+                    );
+                    
+                    // Close the add admin dialog first
+                    Navigator.pop(context);
+                    
+                    // Wait a moment for dialog to close
+                    await Future.delayed(const Duration(milliseconds: 100));
+                    
+                    // Create admin (this will show its own loading indicator)
+                    // Use the page's context (saved at the beginning of _showAddAdminDialog)
+                    final result = await adminUserService.createAdminUser(context, form);
+                    
+                    if (result.success) {
+                      // Success - show success message and keep logged in
+                      _showSnackBar(result.message ?? 'Admin user "$name" created successfully');
+                      await Future.delayed(const Duration(milliseconds: 300));
+                      if (mounted) {
+                        _loadData();
+                      }
+                    } else {
+                      // Failed - show error message
+                      _showSnackBar(result.error ?? 'Failed to create admin user.', isError: true);
+                      
+                      // If password was wrong, navigate to login after showing error
+                      if (result.requiresReauth && mounted) {
+                        await Future.delayed(const Duration(milliseconds: 2000));
+                        if (mounted) {
+                          Navigator.of(context).pushNamedAndRemoveUntil(
+                            '/login',
+                            (route) => false,
+                          );
+                        }
+                      }
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryDark,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  icon: const Icon(Icons.person_add, size: 20),
+                  label: const Text(
+                    'Complete',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  Future<void> _createAdminUser(String name, String email, String password, String role, String currentPassword) async {
-    try {
-      final authService = Provider.of<AuthService>(context, listen: false);
-      
-      // Show loading indicator
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-
-      final result = await authService.register(name, email, password, role: role, originalUserPassword: currentPassword.isNotEmpty ? currentPassword : null);
-
-      if (!mounted) return;
-      
-      Navigator.pop(context); // Close loading dialog
-
-      if (result.success) {
-        // If re-authentication is required, navigate immediately to prevent crashes
-        if (result.requiresReauth) {
-          if (!mounted) return;
-          
-          // Show message first
-          _showSnackBar(result.message ?? 'Admin user "$name" created successfully. Please log in again.');
-          
-          // Wait a moment for the message to show, then navigate
-          await Future.delayed(const Duration(milliseconds: 500));
-          
-          if (!mounted) return;
-          
-          // Navigate immediately to prevent any Firestore listeners from causing crashes
-          Navigator.of(context).pushNamedAndRemoveUntil(
-            '/login',
-            (route) => false,
-          );
-        } else {
-          // Session was restored successfully - refresh data
-          _showSnackBar(result.message ?? 'Admin user "$name" created successfully');
-          // Wait a moment before reloading to ensure session is fully restored
-          await Future.delayed(const Duration(milliseconds: 300));
-          if (mounted) {
-            _loadData();
-          }
-        }
-      } else {
-        _showSnackBar(result.error ?? 'Failed to create admin user.', isError: true);
-      }
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context); // Close loading dialog if still open
-      _showSnackBar('Error creating admin user: $e', isError: true);
-    }
-  }
 }

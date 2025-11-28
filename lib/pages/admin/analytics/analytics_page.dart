@@ -6,6 +6,9 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 
 class AnalyticsPage extends StatefulWidget {
@@ -526,6 +529,367 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     }
   }
 
+  Future<void> _sharePDF() async {
+    if (_analytics == null || _allTimeAnalytics == null) return;
+
+    try {
+      final pdf = pw.Document();
+      final analytics = _analytics!;
+      final allTime = _allTimeAnalytics!;
+
+      // Calculate credit topup statistics
+      final processedLogs = _creditLogs.where((log) => log['status'] == 'processed').toList();
+      final totalTopupAmount = processedLogs.fold<double>(0.0, (sum, log) => sum + (log['amount'] as double));
+      final totalTopupCredits = processedLogs.fold<int>(0, (sum, log) => sum + (log['credits'] as int));
+      final avgTopupAmount = processedLogs.isNotEmpty ? totalTopupAmount / processedLogs.length : 0.0;
+      final avgTopupCredits = processedLogs.isNotEmpty ? totalTopupCredits / processedLogs.length : 0.0;
+      final maxTopupAmount = processedLogs.isNotEmpty 
+          ? processedLogs.map((log) => log['amount'] as double).reduce((a, b) => a > b ? a : b)
+          : 0.0;
+      final minTopupAmount = processedLogs.isNotEmpty 
+          ? processedLogs.map((log) => log['amount'] as double).reduce((a, b) => a < b ? a : b)
+          : 0.0;
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(40),
+          build: (pw.Context context) {
+            return [
+              // Header
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'Platform Analytics Report',
+                    style: pw.TextStyle(
+                      fontSize: 20,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.blue700,
+                    ),
+                  ),
+                  pw.Text(
+                    DateFormat('dd MMM yyyy HH:mm').format(DateTime.now()),
+                    style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 15),
+
+              // Date Range
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                  borderRadius: pw.BorderRadius.circular(6),
+                ),
+                child: pw.Row(
+                  children: [
+                    pw.Text(
+                      'Period: ',
+                      style: pw.TextStyle(
+                        fontSize: 12,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.Text(
+                      '${_formatDate(_startDate)} - ${_formatDate(_endDate)}',
+                      style: pw.TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+
+              // Overview Statistics
+              pw.Text(
+                'Overview Statistics',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey400,
+                  width: 0.5,
+                ),
+                cellAlignment: pw.Alignment.centerLeft,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                headerStyle: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                cellStyle: pw.TextStyle(fontSize: 9),
+                rowDecoration: pw.BoxDecoration(
+                  border: pw.Border(
+                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  ),
+                ),
+                headers: ['Metric', 'All Time', 'Selected Period'],
+                data: [
+                  ['Total Users', allTime.totalUsers.toString(), analytics.totalUsers.toString()],
+                  ['Active Users', allTime.activeUsers.toString(), analytics.activeUsers.toString()],
+                  ['Inactive Users', allTime.inactiveUsers.toString(), analytics.inactiveUsers.toString()],
+                  ['New Registrations', allTime.newRegistrations.toString(), analytics.newRegistrations.toString()],
+                  ['Total Job Posts', allTime.totalJobPosts.toString(), analytics.totalJobPosts.toString()],
+                  ['Total Applications', allTime.totalApplications.toString(), analytics.totalApplications.toString()],
+                  ['Total Reports', allTime.totalReports.toString(), analytics.totalReports.toString()],
+                  ['Engagement Rate', '${_capEngagementRate(allTime.engagementRate).toStringAsFixed(1)}%', '${_capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%'],
+                ],
+              ),
+              pw.SizedBox(height: 20),
+
+              // User Engagement
+              pw.Text(
+                'User Engagement',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey400,
+                  width: 0.5,
+                ),
+                cellAlignment: pw.Alignment.centerLeft,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                headerStyle: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                cellStyle: pw.TextStyle(fontSize: 9),
+                rowDecoration: pw.BoxDecoration(
+                  border: pw.Border(
+                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  ),
+                ),
+                headers: ['Metric', 'All Time', 'Selected Period'],
+                data: [
+                  ['Engagement Rate', '${_capEngagementRate(allTime.engagementRate).toStringAsFixed(1)}%', '${_capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%'],
+                  ['Job Applications', allTime.totalApplications.toString(), analytics.totalApplications.toString()],
+                  ['Messages Sent', allTime.totalMessages.toString(), analytics.totalMessages.toString()],
+                ],
+              ),
+              pw.SizedBox(height: 20),
+
+              // Content & Moderation Statistics
+              pw.Text(
+                'Content & Moderation Statistics',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey400,
+                  width: 0.5,
+                ),
+                cellAlignment: pw.Alignment.centerLeft,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                headerStyle: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                cellStyle: pw.TextStyle(fontSize: 9),
+                rowDecoration: pw.BoxDecoration(
+                  border: pw.Border(
+                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  ),
+                ),
+                headers: ['Metric', 'All Time', 'Selected Period'],
+                data: [
+                  ['Total Job Posts', allTime.totalJobPosts.toString(), analytics.totalJobPosts.toString()],
+                  ['Pending Posts', allTime.pendingJobPosts.toString(), analytics.pendingJobPosts.toString()],
+                  ['Approved Posts', allTime.approvedJobPosts.toString(), analytics.approvedJobPosts.toString()],
+                  ['Rejected Posts', allTime.rejectedJobPosts.toString(), analytics.rejectedJobPosts.toString()],
+                  ['Total Reports', allTime.totalReports.toString(), analytics.totalReports.toString()],
+                  ['Pending Reports', allTime.pendingReports.toString(), analytics.pendingReports.toString()],
+                  ['Resolved Reports', allTime.resolvedReports.toString(), analytics.resolvedReports.toString()],
+                  ['Dismissed Reports', allTime.dismissedReports.toString(), analytics.dismissedReports.toString()],
+                ],
+              ),
+              pw.SizedBox(height: 20),
+
+              // Credit & Billing
+              pw.Text(
+                'Credit & Billing',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey400,
+                  width: 0.5,
+                ),
+                cellAlignment: pw.Alignment.centerLeft,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                headerStyle: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                cellStyle: pw.TextStyle(fontSize: 9),
+                rowDecoration: pw.BoxDecoration(
+                  border: pw.Border(
+                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  ),
+                ),
+                headers: ['Metric', 'All Time', 'Selected Period'],
+                data: [
+                  ['Total Credits Used', allTime.totalCreditsUsed.toString(), analytics.totalCreditsUsed.toString()],
+                  ['Active Subscriptions', allTime.activeSubscriptions.toString(), analytics.activeSubscriptions.toString()],
+                  ['Revenue', 'RM ${allTime.revenue.toStringAsFixed(2)}', 'RM ${analytics.revenue.toStringAsFixed(2)}'],
+                  ['Credit Purchases', allTime.creditPurchases.toString(), analytics.creditPurchases.toString()],
+                ],
+              ),
+              pw.SizedBox(height: 20),
+
+              // Credit Topup Statistics
+              if (processedLogs.isNotEmpty) ...[
+                pw.Text(
+                  'Credit Topup Statistics',
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+                pw.TableHelper.fromTextArray(
+                  context: context,
+                  border: pw.TableBorder.all(
+                    color: PdfColors.grey400,
+                    width: 0.5,
+                  ),
+                  cellAlignment: pw.Alignment.centerLeft,
+                  headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                  headerStyle: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                  cellStyle: pw.TextStyle(fontSize: 9),
+                  rowDecoration: pw.BoxDecoration(
+                    border: pw.Border(
+                      bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                    ),
+                  ),
+                  headers: ['Metric', 'Value'],
+                  data: [
+                    ['Total Topup Amount', 'RM ${totalTopupAmount.toStringAsFixed(2)}'],
+                    ['Total Credits', totalTopupCredits.toString()],
+                    ['Average Amount', 'RM ${avgTopupAmount.toStringAsFixed(2)}'],
+                    ['Average Credits', avgTopupCredits.toStringAsFixed(0)],
+                    ['Max Topup', 'RM ${maxTopupAmount.toStringAsFixed(2)}'],
+                    ['Min Topup', 'RM ${minTopupAmount.toStringAsFixed(2)}'],
+                    ['Total Transactions', '${processedLogs.length} processed'],
+                  ],
+                ),
+                pw.SizedBox(height: 20),
+              ],
+
+              // Growth Rates
+              pw.Text(
+                'Growth Rates',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey400,
+                  width: 0.5,
+                ),
+                cellAlignment: pw.Alignment.centerLeft,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                headerStyle: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                cellStyle: pw.TextStyle(fontSize: 9),
+                rowDecoration: pw.BoxDecoration(
+                  border: pw.Border(
+                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  ),
+                ),
+                headers: ['Metric', 'Growth Rate'],
+                data: [
+                  ['User Growth', _formatGrowthRateForPDF(analytics.userGrowthRate, 'userGrowth', analytics)],
+                  ['Active User Growth', _formatGrowthRateForPDF(analytics.activeUserGrowth, 'activeUserGrowth', analytics)],
+                  ['Registration Growth', _formatGrowthRateForPDF(analytics.registrationGrowth, 'registrationGrowth', analytics)],
+                  ['Engagement Growth', _formatGrowthRateForPDF(analytics.engagementGrowth, 'engagementGrowth', analytics)],
+                  ['Message Growth', _formatGrowthRateForPDF(analytics.messageGrowth, 'messageGrowth', analytics)],
+                  ['Application Growth', _formatGrowthRateForPDF(analytics.applicationGrowth, 'applicationGrowth', analytics)],
+                  ['Report Growth', _formatGrowthRateForPDF(analytics.reportGrowth, 'reportGrowth', analytics)],
+                  ['Job Post Growth', _formatGrowthRateForPDF(analytics.jobPostGrowth, 'jobPostGrowth', analytics)],
+                ],
+              ),
+            ];
+          },
+        ),
+      );
+
+      // Save PDF to temporary file and share
+      final bytes = await pdf.save();
+      final directory = await getTemporaryDirectory();
+      final fileName = 'Platform_Analytics_Report_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
+      final filePath = '${directory.path}/$fileName';
+      final file = File(filePath);
+      await file.writeAsBytes(bytes);
+
+      // Share the file
+      try {
+        await Share.shareXFiles(
+          [XFile(filePath)],
+          text: 'Platform Analytics Report',
+          subject: 'Platform Analytics Report - ${_formatDate(_startDate)} to ${_formatDate(_endDate)}',
+        );
+
+        // Clean up temporary file after a delay
+        Future.delayed(const Duration(seconds: 5), () async {
+          try {
+            if (await file.exists()) {
+              await file.delete();
+            }
+          } catch (e) {
+            // Ignore cleanup errors
+          }
+        });
+      } catch (shareError) {
+        // Handle MissingPluginException specifically
+        if (shareError.toString().contains('MissingPluginException') || 
+            shareError.toString().contains('missing plugin')) {
+          if (mounted) {
+            _showSnackBar('分享功能需要重新构建应用。请运行: flutter clean && flutter pub get && flutter run', isError: true);
+          }
+        } else {
+          rethrow;
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        String errorMessage = '分享 PDF 时出错: ${e.toString()}';
+        if (e.toString().contains('MissingPluginException') || 
+            e.toString().contains('missing plugin')) {
+          errorMessage = '分享插件未正确加载。请重新构建应用 (flutter clean && flutter pub get && flutter run)';
+        }
+        _showSnackBar(errorMessage, isError: true);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -548,12 +912,18 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             onPressed: _loadAnalytics,
             tooltip: 'Refresh',
           ),
-          if (_analytics != null)
+          if (_analytics != null) ...[
+            IconButton(
+              icon: const Icon(Icons.share),
+              onPressed: _sharePDF,
+              tooltip: 'Share PDF',
+            ),
             IconButton(
               icon: const Icon(Icons.picture_as_pdf),
               onPressed: _generatePDFReport,
               tooltip: 'Generate PDF Report',
             ),
+          ],
         ],
       ),
       body: Column(

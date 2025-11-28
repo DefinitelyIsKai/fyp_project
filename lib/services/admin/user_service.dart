@@ -2,6 +2,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fyp_project/models/admin/user_model.dart';
+import 'package:fyp_project/models/admin/admin_model.dart';
+import 'package:fyp_project/services/admin/auth_service.dart';
 
 class UserService {
   UserService()
@@ -806,5 +808,166 @@ class UserService {
     } catch (e) {
       print('Error sending deletion notification: $e');
     }
+  }
+
+  /// Update user information (excluding email and role)
+  Future<Map<String, dynamic>> updateUserInfo({
+    required String userId,
+    String? fullName,
+    String? phoneNumber,
+    String? location,
+    String? professionalSummary,
+    String? professionalProfile,
+    String? workExperience,
+    String? seeking,
+  }) async {
+    try {
+      final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
+      
+      // Get user data for logging
+      final userDoc = await _usersRef.doc(userId).get();
+      final userData = userDoc.data();
+      if (userData == null) {
+        throw Exception('User not found');
+      }
+
+      final userName = userData['fullName'] ?? 'User';
+      
+      // Build update map with only provided fields
+      Map<String, dynamic> updateData = {};
+      if (fullName != null) updateData['fullName'] = fullName;
+      if (phoneNumber != null) updateData['phoneNumber'] = phoneNumber;
+      if (location != null) updateData['location'] = location;
+      if (professionalSummary != null) updateData['professionalSummary'] = professionalSummary;
+      if (professionalProfile != null) updateData['professionalProfile'] = professionalProfile;
+      if (workExperience != null) updateData['workExperience'] = workExperience;
+      if (seeking != null) updateData['seeking'] = seeking;
+      
+      // Add updated timestamp
+      updateData['updatedAt'] = FieldValue.serverTimestamp();
+      updateData['lastUpdatedBy'] = currentAdminId;
+
+      // Update user document
+      await _usersRef.doc(userId).update(updateData);
+
+      // Create log entry
+      try {
+        await _logsRef.add({
+          'actionType': 'user_info_updated',
+          'userId': userId,
+          'userName': userName,
+          'updatedFields': updateData.keys.toList(),
+          'createdAt': FieldValue.serverTimestamp(),
+          'createdBy': currentAdminId,
+        });
+      } catch (logError) {
+        print('Error creating update log entry: $logError');
+        // Don't fail the operation if logging fails
+      }
+
+      return {
+        'success': true,
+        'userName': userName,
+      };
+    } catch (e) {
+      print('Error updating user info: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  /// Create a new admin user
+  /// This method delegates to AuthService.register to handle the actual user creation
+  Future<RegisterResult> createAdminUser({
+    required AuthService authService,
+    required String name,
+    required String email,
+    required String password,
+    required String role,
+    String? location,
+    int? age,
+    String? phoneNumber,
+    String? imageBase64,
+    String? imageFileType,
+    String? originalUserPassword,
+  }) async {
+    return await authService.register(
+      name,
+      email,
+      password,
+      role: role,
+      originalUserPassword: originalUserPassword,
+      location: location?.isEmpty == true ? null : location,
+      age: age,
+      phoneNumber: phoneNumber?.isEmpty == true ? null : phoneNumber,
+      imageBase64: imageBase64,
+      imageFileType: imageFileType,
+    );
+  }
+
+  /// Get display name for a role (converts snake_case to Title Case)
+  static String getRoleDisplayName(String role) {
+    return role.replaceAll('_', ' ').split(' ').map((word) {
+      if (word.isEmpty) return word;
+      return word[0].toUpperCase() + word.substring(1).toLowerCase();
+    }).join(' ');
+  }
+
+  /// Format date as "Jan 1, 2024"
+  static String formatDate(DateTime date) {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
+  /// Check if current admin can add new admin users
+  bool canAddAdmin(AdminModel? currentAdmin) {
+    if (currentAdmin == null) return false;
+    final currentRole = currentAdmin.role.toLowerCase();
+    return currentRole == 'manager' || currentRole == 'hr';
+  }
+
+  /// Check if current admin is HR
+  bool isHR(AdminModel? currentAdmin) {
+    if (currentAdmin == null) return false;
+    return currentAdmin.role.toLowerCase() == 'hr';
+  }
+
+  /// Check if current admin is Staff
+  bool isStaff(AdminModel? currentAdmin) {
+    if (currentAdmin == null) return false;
+    return currentAdmin.role.toLowerCase() == 'staff';
+  }
+
+  /// Check if current admin can perform actions on a user
+  bool canPerformActionsOnUser(AdminModel? currentAdmin, UserModel user) {
+    // Cannot perform actions on yourself (view only)
+    if (currentAdmin != null && currentAdmin.id == user.id) {
+      return false;
+    }
+    
+    final userRole = user.role.toLowerCase();
+    
+    // If current user is HR and target user is Manager, cannot perform actions (only view)
+    if (isHR(currentAdmin)) {
+      if (userRole == 'manager') {
+        return false;
+      }
+    }
+    
+    // If current user is Staff, can only perform actions on Jobseeker and Recruiter
+    // Other roles (Manager, HR, Staff, etc.) are view only
+    if (isStaff(currentAdmin)) {
+      // Only allow actions on Jobseeker and Recruiter
+      if (userRole == 'jobseeker' || userRole == 'recruiter') {
+        return true;
+      }
+      // All other roles are view only
+      return false;
+    }
+    
+    // Manager can perform actions on all users (except themselves)
+    return true;
   }
 }

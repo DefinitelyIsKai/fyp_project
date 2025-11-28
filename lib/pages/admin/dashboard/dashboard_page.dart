@@ -2,10 +2,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fyp_project/pages/admin/post_moderation/post_moderation_page.dart';
+import 'package:fyp_project/pages/admin/post_moderation/approve_reject_posts_page.dart';
 import 'package:fyp_project/pages/admin/user_management/user_management_page.dart';
+import 'package:fyp_project/pages/admin/user_management/view_users_page.dart';
 import 'package:fyp_project/pages/admin/monitoring/monitoring_page.dart';
 import 'package:fyp_project/pages/admin/system_config/system_config_page.dart';
 import 'package:fyp_project/pages/admin/message_oversight/message_oversight_main_page.dart';
+import 'package:fyp_project/pages/admin/message_oversight/flagged_content_page.dart';
 import 'package:fyp_project/pages/admin/analytics/analytics_page.dart';
 import 'package:fyp_project/services/admin/auth_service.dart';
 import 'package:fyp_project/services/admin/dashboard_service.dart';
@@ -50,6 +53,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'staff': [
       'Post Moderation',
       'User Management',
+      'Analytics & Reporting',
     ],
   };
 
@@ -61,27 +65,34 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   void _setupRealtimeUpdates() {
-    // Listen to real-time updates for unresolved reports
-    _reportsSubscription = _dashboardService.streamUnresolvedReportsCount().listen(
-      (count) {
-        if (mounted) {
-          setState(() {
-            _unresolvedReports = count;
-          });
-        }
-      },
-      onError: (error) {
-        // Handle permission errors gracefully
-        debugPrint('Error listening to reports stream: $error');
-        if (mounted) {
-          setState(() {
-            _unresolvedReports = 0; // Set to 0 on error
-          });
-        }
-        _reportsSubscription?.cancel();
-        _reportsSubscription = null;
-      },
-    );
+    // Check if current user is staff - staff cannot see unresolved reports
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentRole = authService.currentAdmin?.role.toLowerCase() ?? '';
+    final isStaff = currentRole == 'staff';
+    
+    // Only listen to real-time updates for unresolved reports if not staff
+    if (!isStaff) {
+      _reportsSubscription = _dashboardService.streamUnresolvedReportsCount().listen(
+        (count) {
+          if (mounted) {
+            setState(() {
+              _unresolvedReports = count;
+            });
+          }
+        },
+        onError: (error) {
+          // Handle permission errors gracefully
+          debugPrint('Error listening to reports stream: $error');
+          if (mounted) {
+            setState(() {
+              _unresolvedReports = 0; // Set to 0 on error
+            });
+          }
+          _reportsSubscription?.cancel();
+          _reportsSubscription = null;
+        },
+      );
+    }
 
     // Listen to real-time updates for pending posts
     _pendingPostsSubscription = _dashboardService.streamPendingPostsCount().listen(
@@ -131,7 +142,15 @@ class _DashboardPageState extends State<DashboardPage> {
       // Pending posts are now handled by real-time stream
       final users = await _dashboardService.getActiveUsersCount();
       // Unresolved reports are also handled by real-time stream, but load initial value
-      final unresolvedReports = await _dashboardService.getUnresolvedReportsCount();
+      // Staff cannot see unresolved reports
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final currentRole = authService.currentAdmin?.role.toLowerCase() ?? '';
+      final isStaff = currentRole == 'staff';
+      
+      int unresolvedReports = 0;
+      if (!isStaff) {
+        unresolvedReports = await _dashboardService.getUnresolvedReportsCount();
+      }
 
       if (mounted) {
         setState(() {
@@ -293,8 +312,12 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildStatsSection() {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentRole = authService.currentAdmin?.role.toLowerCase() ?? '';
+    final isStaff = currentRole == 'staff';
+    
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       child: Row(
         children: [
           Expanded(
@@ -303,32 +326,59 @@ class _DashboardPageState extends State<DashboardPage> {
               builder: (context, snapshot) {
                 final pendingCount = snapshot.data ?? 0;
                 return _StatCard(
-                  title: 'Pending Posts',
+                  title: 'Pending',
                   value: pendingCount.toString(),
                   color: const Color(0xFFFF9800), 
                   icon: Icons.article,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ApproveRejectPostsPage(),
+                      ),
+                    );
+                  },
                 );
               },
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: _StatCard(
               title: 'Active Users',
               value: _activeUsers.toString(),
               color: const Color(0xFF4CAF50), 
               icon: Icons.people,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ViewUsersPage(),
+                  ),
+                );
+              },
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _StatCard(
-              title: 'Unresolved Reports',
-              value: _unresolvedReports.toString(),
-              color: const Color(0xFFE53935), 
-              icon: Icons.flag,
+          // Hide Unresolved Reports card for staff role
+          if (!isStaff) ...[
+            const SizedBox(width: 10),
+            Expanded(
+              child: _StatCard(
+                title: 'Reports',
+                value: _unresolvedReports.toString(),
+                color: const Color(0xFFE53935), 
+                icon: Icons.flag,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const FlaggedContentPage(),
+                    ),
+                  );
+                },
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -717,41 +767,80 @@ class _StatCard extends StatelessWidget {
   final String value;
   final Color color;
   final IconData icon;
+  final VoidCallback? onTap;
 
   const _StatCard({
     required this.title,
     required this.value,
     required this.color,
     required this.icon,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return SizedBox(
+      height: 90,
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(icon, size: 20, color: color),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(icon, size: 18, color: color),
+                    ),
+                    Text(
+                      value,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
-                Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (onTap != null) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.arrow_forward_ios,
+                        size: 10,
+                        color: Colors.grey[400],
+                      ),
+                    ],
+                  ],
+                ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(title, style: TextStyle(fontSize: 14, color: Colors.grey[600], fontWeight: FontWeight.w500)),
-          ],
+          ),
         ),
       ),
     );
