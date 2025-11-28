@@ -348,43 +348,72 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                               }).toList()
                             : slots;
                         
-                        final processed = _processSlots(filteredSlots);
+                        // Filter slots by post event date range if application is selected
+                        return FutureBuilder<Post?>(
+                          future: _selectedApplication != null
+                              ? _postService.getById(_selectedApplication!.postId)
+                              : Future<Post?>.value(null),
+                          builder: (context, postSnapshot) {
+                            final post = postSnapshot.data;
+                            
+                            // Filter slots by post event end date (allow booking before event starts)
+                            final dateFilteredSlots = filteredSlots.where((slot) {
+                              // Check if slot date is before or on event end date
+                              if (post != null && post.eventEndDate != null) {
+                                final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
+                                final eventEndDateOnly = DateTime(
+                                  post.eventEndDate!.year,
+                                  post.eventEndDate!.month,
+                                  post.eventEndDate!.day,
+                                );
+                                
+                                // Only check if slot date is after event end date
+                                if (slotDateOnly.isAfter(eventEndDateOnly)) {
+                                  return false; // Slot is after event end date
+                                }
+                              }
+                              return true; // If no event end date, show all slots
+                            }).toList();
+                            
+                            final processed = _processSlots(dateFilteredSlots);
 
-                        // Get booked dates for this jobseeker and specific application
-                        return FutureBuilder<Set<DateTime>>(
-                          key: ValueKey('booked_dates_jobseeker_${applicationId ?? 'all'}_$_refreshKey'),
-                          future: _availabilityService
-                              .getBookedDatesForJobseeker(
-                                userId,
-                                startDate: _getMonthRange(_currentMonth).start,
-                                endDate: _getMonthRange(_currentMonth).end,
-                                matchId: applicationId, // Filter by selected application
-                              ),
-                          builder: (context, bookedSnapshot) {
-                            // Get pending dates for jobseeker for this specific application
-                            return FutureBuilder<Set<String>>(
+                            // Get booked dates for this jobseeker and specific application
+                            return FutureBuilder<Set<DateTime>>(
+                              key: ValueKey('booked_dates_jobseeker_${applicationId ?? 'all'}_$_refreshKey'),
                               future: _availabilityService
-                                  .getRequestedSlotIdsForJobseeker(
+                                  .getBookedDatesForJobseeker(
                                     userId,
+                                    startDate: _getMonthRange(_currentMonth).start,
+                                    endDate: _getMonthRange(_currentMonth).end,
                                     matchId: applicationId, // Filter by selected application
                                   ),
-                              builder: (context, pendingSnapshot) {
-                                final pendingData = _preparePendingDates(
-                                  filteredSlots,
-                                  pendingSnapshot.data ?? {},
-                                  processed.availableDates,
-                                );
+                              builder: (context, bookedSnapshot) {
+                                // Get pending dates for jobseeker for this specific application
+                                return FutureBuilder<Set<String>>(
+                                  future: _availabilityService
+                                      .getRequestedSlotIdsForJobseeker(
+                                        userId,
+                                        matchId: applicationId, // Filter by selected application
+                                      ),
+                                  builder: (context, pendingSnapshot) {
+                                    final pendingData = _preparePendingDates(
+                                      dateFilteredSlots,
+                                      pendingSnapshot.data ?? {},
+                                      processed.availableDates,
+                                    );
 
-                                return MonthlyCalendar(
-                                  currentMonth: _currentMonth,
-                                  selectedDate: _selectedDate,
-                                  availableDates: pendingData
-                                      .availableDatesExcludingPending,
-                                  bookedDates: bookedSnapshot.data ?? {},
-                                  addedSlotDates: const {},
-                                  pendingDates: pendingData.pendingDates,
-                                  onDateSelected: _onDateSelected,
-                                  onDateTapped: _onDateTapped,
+                                    return MonthlyCalendar(
+                                      currentMonth: _currentMonth,
+                                      selectedDate: _selectedDate,
+                                      availableDates: pendingData
+                                          .availableDatesExcludingPending,
+                                      bookedDates: bookedSnapshot.data ?? {},
+                                      addedSlotDates: const {},
+                                      pendingDates: pendingData.pendingDates,
+                                      onDateSelected: _onDateSelected,
+                                      onDateTapped: _onDateTapped,
+                                    );
+                                  },
                                 );
                               },
                             );
