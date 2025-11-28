@@ -202,30 +202,50 @@ class JobseekerSlotsList extends StatelessWidget {
                     matchId: applicationId, // Filter by selected application
                   ),
                   _checkPostStatus(applicationId), // Check if post is completed
+                  postService.getById(application.postId), // Get post to check event date range
                 ]).then((results) => {
                   'requestedSlotIds': results[0] as Set<String>,
                   'isPostCompleted': results[1] as bool,
+                  'post': results[2] as Post?,
                 }),
                 builder: (context, dataSnapshot) {
                   final requestedSlotIds = (dataSnapshot.data?['requestedSlotIds'] as Set<String>?) ?? {};
                   final isPostCompleted = (dataSnapshot.data?['isPostCompleted'] as bool?) ?? false;
+                  final post = dataSnapshot.data?['post'] as Post?;
+
+                  // Filter slots by post event end date (allow booking before event starts)
+                  final filteredSlots = recruiterSlots.where((slot) {
+                    // Check if slot date is before or on event end date
+                    if (post != null && post.eventEndDate != null) {
+                      final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
+                      final eventEndDateOnly = DateTime(
+                        post.eventEndDate!.year,
+                        post.eventEndDate!.month,
+                        post.eventEndDate!.day,
+                      );
+                      
+                      // Only check if slot date is after event end date
+                      if (slotDateOnly.isAfter(eventEndDateOnly)) {
+                        return false; // Slot is after event end date
+                      }
+                    }
+                    
+                    // Then apply existing filters: show available slots or booked/requested slots for this application
+                    if (slot.isAvailable && slot.bookedBy == null) {
+                      return true; // Show all available slots
+                    }
+                    // Show booked slots only if they match this application
+                    if (slot.bookedBy != null) {
+                      return slot.matchId == applicationId;
+                    }
+                    // Show requested slots (they're already filtered by matchId in the service)
+                    return true;
+                  }).toList();
 
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Column(
-                      children: recruiterSlots
-                          .where((slot) {
-                            // Filter slots: show available slots or booked/requested slots for this application
-                            if (slot.isAvailable && slot.bookedBy == null) {
-                              return true; // Show all available slots
-                            }
-                            // Show booked slots only if they match this application
-                            if (slot.bookedBy != null) {
-                              return slot.matchId == applicationId;
-                            }
-                            // Show requested slots (they're already filtered by matchId in the service)
-                            return true;
-                          })
+                      children: filteredSlots
                           .map((slot) {
                         final isUnavailable = unavailableSlots.contains(slot.id);
                         final isBooked = slot.bookedBy != null && slot.matchId == applicationId;
@@ -437,76 +457,98 @@ class JobseekerSlotsList extends StatelessWidget {
               slotsByRecruiter.putIfAbsent(slot.recruiterId, () => []).add(slot);
             }
 
-            // Check for requested slots and post status
-            final jobseekerId = authService.currentUserId;
-            // Get application ID from selectedApplication if available
-            final applicationId = selectedApplication?.id;
-            return FutureBuilder<Map<String, dynamic>>(
-              future: Future.wait([
-                availabilityService.getRequestedSlotIdsForJobseeker(
-                  jobseekerId,
-                  matchId: applicationId, // Filter by selected application
-                ),
-                applicationId != null ? _checkPostStatus(applicationId) : Future.value(false),
-              ]).then((results) => {
-                'requestedSlotIds': results[0] as Set<String>,
-                'isPostCompleted': results[1] as bool,
-              }),
-              builder: (context, dataSnapshot) {
-                final requestedSlotIds = (dataSnapshot.data?['requestedSlotIds'] as Set<String>?) ?? {};
-                final isPostCompleted = (dataSnapshot.data?['isPostCompleted'] as bool?) ?? false;
+             // Check for requested slots and post status
+             final jobseekerId = authService.currentUserId;
+             // Get application ID from selectedApplication if available
+             final applicationId = selectedApplication?.id;
+             return FutureBuilder<Map<String, dynamic>>(
+               future: Future.wait([
+                 availabilityService.getRequestedSlotIdsForJobseeker(
+                   jobseekerId,
+                   matchId: applicationId, // Filter by selected application
+                 ),
+                 applicationId != null ? _checkPostStatus(applicationId) : Future.value(false),
+                 selectedApplication != null ? postService.getById(selectedApplication!.postId) : Future<Post?>.value(null),
+               ]).then((results) => {
+                 'requestedSlotIds': results[0] as Set<String>,
+                 'isPostCompleted': results[1] as bool,
+                 'post': results[2] as Post?,
+               }),
+               builder: (context, dataSnapshot) {
+                 final requestedSlotIds = (dataSnapshot.data?['requestedSlotIds'] as Set<String>?) ?? {};
+                 final isPostCompleted = (dataSnapshot.data?['isPostCompleted'] as bool?) ?? false;
+                 final post = dataSnapshot.data?['post'] as Post?;
 
-                return Column(
-                  children: List.generate(slotsByRecruiter.length, (index) {
-                    final recruiterId = slotsByRecruiter.keys.elementAt(index);
-                    var recruiterSlots = slotsByRecruiter[recruiterId]!;
+                 return Column(
+                   children: List.generate(slotsByRecruiter.length, (index) {
+                     final recruiterId = slotsByRecruiter.keys.elementAt(index);
+                     var recruiterSlots = slotsByRecruiter[recruiterId]!;
 
-                    // Sort slots by start time
-                    recruiterSlots.sort((a, b) => a.startTime.compareTo(b.startTime));
+                     // Sort slots by start time
+                     recruiterSlots.sort((a, b) => a.startTime.compareTo(b.startTime));
 
-                    // Use selectedApplication if it matches this recruiter, otherwise skip
-                    Application? application;
-                    if (selectedApplication != null && selectedApplication!.recruiterId == recruiterId) {
-                      application = selectedApplication;
-                    } else {
-                      // No application available for this recruiter, skip
-                      return const SizedBox.shrink();
-                    }
+                     // Use selectedApplication if it matches this recruiter, otherwise skip
+                     Application? application;
+                     if (selectedApplication != null && selectedApplication!.recruiterId == recruiterId) {
+                       application = selectedApplication;
+                     } else {
+                       // No application available for this recruiter, skip
+                       return const SizedBox.shrink();
+                     }
 
-                    // Store application in a final variable for null safety (we know it's not null here)
-                    final currentApplication = application!;
-                    // Get application ID for this specific application
-                    final matchApplicationId = currentApplication.id;
+                     // Store application in a final variable for null safety (we know it's not null here)
+                     final currentApplication = application!;
+                     // Get application ID for this specific application
+                     final matchApplicationId = currentApplication.id;
 
-                    // Check which slots should be unavailable (after a booked slot)
-                    final unavailableSlots = <String>{};
-                    for (int i = 0; i < recruiterSlots.length; i++) {
-                      if (recruiterSlots[i].bookedBy != null) {
-                        // Mark all subsequent slots as unavailable
-                        for (int j = i + 1; j < recruiterSlots.length; j++) {
-                          unavailableSlots.add(recruiterSlots[j].id);
-                        }
-                        break; // Only the first booked slot matters
-                      }
-                    }
+                     // Filter slots by post event end date (allow booking before event starts)
+                     final dateFilteredSlots = recruiterSlots.where((slot) {
+                       // Check if slot date is before or on event end date
+                       if (post != null && post.eventEndDate != null) {
+                         final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
+                         final eventEndDateOnly = DateTime(
+                           post.eventEndDate!.year,
+                           post.eventEndDate!.month,
+                           post.eventEndDate!.day,
+                         );
+                         
+                         // Only check if slot date is after event end date
+                         if (slotDateOnly.isAfter(eventEndDateOnly)) {
+                           return false; // Slot is after event end date
+                         }
+                       }
+                       return true; // If no event end date, show all slots
+                     }).toList();
 
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Column(
-                        children: recruiterSlots
-                            .where((slot) {
-                              // Filter slots: show available slots or booked/requested slots for this application
-                              if (slot.isAvailable && slot.bookedBy == null) {
-                                return true; // Show all available slots
-                              }
-                              // Show booked slots only if they match this application
-                              if (slot.bookedBy != null) {
-                                return slot.matchId == matchApplicationId;
-                              }
-                              // Show requested slots (they're already filtered by matchId in the service)
-                              return true;
-                            })
-                            .map((slot) {
+                     // Check which slots should be unavailable (after a booked slot)
+                     final unavailableSlots = <String>{};
+                     for (int i = 0; i < dateFilteredSlots.length; i++) {
+                       if (dateFilteredSlots[i].bookedBy != null) {
+                         // Mark all subsequent slots as unavailable
+                         for (int j = i + 1; j < dateFilteredSlots.length; j++) {
+                           unavailableSlots.add(dateFilteredSlots[j].id);
+                         }
+                         break; // Only the first booked slot matters
+                       }
+                     }
+
+                     return Padding(
+                       padding: const EdgeInsets.symmetric(horizontal: 16),
+                       child: Column(
+                         children: dateFilteredSlots
+                             .where((slot) {
+                               // Filter slots: show available slots or booked/requested slots for this application
+                               if (slot.isAvailable && slot.bookedBy == null) {
+                                 return true; // Show all available slots
+                               }
+                               // Show booked slots only if they match this application
+                               if (slot.bookedBy != null) {
+                                 return slot.matchId == matchApplicationId;
+                               }
+                               // Show requested slots (they're already filtered by matchId in the service)
+                               return true;
+                             })
+                             .map((slot) {
                           final isUnavailable = unavailableSlots.contains(slot.id);
                           final isBooked = slot.bookedBy != null && slot.matchId == matchApplicationId;
                           final isRequested = requestedSlotIds.contains(slot.id);
