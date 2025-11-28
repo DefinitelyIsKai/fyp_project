@@ -313,6 +313,12 @@ class WalletService {
     await _ensureWallet();
     final txnRef = _txnCol.doc();
 
+    // Get post title for description
+    final postTitle = await _getPostTitle(postId);
+    final description = postTitle.isNotEmpty
+        ? 'Application fee (On Hold) - $postTitle'
+        : 'Application fee (On Hold)';
+
     await _firestore.runTransaction((tx) async {
       final snap = await tx.get(_walletDoc);
       final data = snap.data() ?? <String, dynamic>{'balance': 0, 'heldCredits': 0};
@@ -333,7 +339,7 @@ class WalletService {
         'userId': _uid,
         'type': 'debit',
         'amount': feeCredits,
-        'description': 'Application fee (On Hold)',
+        'description': description,
         'createdAt': FieldValue.serverTimestamp(),
         'referenceId': postId,
       });
@@ -406,14 +412,25 @@ class WalletService {
     final txnCol = walletDoc.collection('transactions');
 
     try {
-      // Find the "On Hold" transaction to update it (query outside transaction)
-      // Note: Firestore transactions don't support queries, only document reads
+      // Get post title for description
+      final postTitle = await getPostTitle(firestore: firestore, postId: postId);
+      
+      // Find the "On Hold" transaction (query outside transaction)
+      // Look for transactions that contain "Application fee (On Hold)" in description
       final onHoldTransactions = await txnCol
-          .where('description', isEqualTo: 'Application fee (On Hold)')
           .where('referenceId', isEqualTo: postId)
           .where('type', isEqualTo: 'debit')
-          .limit(1)
           .get();
+
+      // Find the On Hold transaction (description may contain post title)
+      String? onHoldTxnId;
+      for (final doc in onHoldTransactions.docs) {
+        final desc = doc.data()['description'] as String? ?? '';
+        if (desc.contains('Application fee (On Hold)')) {
+          onHoldTxnId = doc.id;
+          break;
+        }
+      }
 
       await firestore.runTransaction((tx) async {
         // ========== PHASE 1: ALL READS FIRST ==========
@@ -426,68 +443,59 @@ class WalletService {
         final walletData = walletSnap.data()!;
         final int currentHeldCredits = _parseIntFromFirestore(walletData['heldCredits']);
 
+        // Safety check: Ensure heldCredits is sufficient
+        if (currentHeldCredits < feeCredits) {
+          print('Warning: heldCredits ($currentHeldCredits) is less than feeCredits ($feeCredits). This may indicate duplicate processing.');
+          // Don't throw error, but clamp to 0 to prevent negative values
+        }
+
         // Read the "On Hold" transaction document if it exists
         DocumentReference? onHoldTxnRef;
-        bool shouldUpdateTransaction = false;
-
-        if (onHoldTransactions.docs.isNotEmpty) {
-          final onHoldTxnId = onHoldTransactions.docs.first.id;
+        if (onHoldTxnId != null) {
           onHoldTxnRef = txnCol.doc(onHoldTxnId);
-
-          // Read the transaction document in the transaction to verify it still exists
-          // This ensures Firestore can evaluate the security rules properly
           final onHoldTxnSnap = await tx.get(onHoldTxnRef);
-
-          if (onHoldTxnSnap.exists) {
-            final onHoldData = onHoldTxnSnap.data() as Map<String, dynamic>?;
-            // Verify it's still an On Hold transaction before updating
-            if (onHoldData != null &&
-                onHoldData['description'] == 'Application fee (On Hold)' &&
-                onHoldData['referenceId'] == postId &&
-                onHoldData['type'] == 'debit') {
-              shouldUpdateTransaction = true;
-              print('Found On Hold transaction to update: $onHoldTxnId');
-            } else {
-              print('On Hold transaction found but data mismatch: $onHoldData');
-            }
-          } else {
-            print('On Hold transaction document does not exist in transaction');
+          if (!onHoldTxnSnap.exists) {
+            onHoldTxnRef = null; // Transaction was deleted, create new one
           }
-        } else {
-          print('No On Hold transaction found for postId: $postId');
+        }
+
+        // Check if already processed by looking for existing released transaction
+        if (onHoldTxnId != null) {
+          final releasedTxn = await txnCol
+              .where('parentTxnId', isEqualTo: onHoldTxnId)
+              .where('type', isEqualTo: 'credit')
+              .limit(1)
+              .get();
+          if (releasedTxn.docs.isNotEmpty) {
+            print('Transaction already processed (released), skipping duplicate release');
+            return; // Already processed, exit early
+          }
         }
 
         // ========== PHASE 2: ALL WRITES AFTER READS ==========
-        // Calculate new heldCredits value
-        final int newHeldCredits = currentHeldCredits - feeCredits;
+        // Calculate new heldCredits value, clamp to prevent negative values
+        final int newHeldCredits = (currentHeldCredits - feeCredits).clamp(0, double.infinity).toInt();
 
         // Update wallet to release held credits
         tx.update(walletDoc, {'heldCredits': newHeldCredits, 'updatedAt': FieldValue.serverTimestamp()});
 
-        // Update the "On Hold" transaction to "Application fee (Released)"
-        if (shouldUpdateTransaction && onHoldTxnRef != null) {
-          // Update description from "Application fee (On Hold)" to "Application fee (Released)"
-          // Also update type from 'debit' to 'credit' since releasing credits is a credit operation
-          print('🔄 Updating transaction from "On Hold" to "Released"');
-          tx.update(onHoldTxnRef, {
-            'description': 'Application fee (Released)',
-            'type': 'credit', // Change from debit to credit when releasing
-          });
-        } else {
-          // If no "On Hold" transaction exists, create a new one
-          // This handles edge cases where the On Hold transaction might have been deleted
-          print('➕ Creating new transaction record (On Hold not found)');
-          final txnRef = txnCol.doc();
-          tx.set(txnRef, {
-            'id': txnRef.id,
-            'userId': userId,
-            'type': 'credit', // Released credits should be credit type
-            'amount': feeCredits,
-            'description': 'Application fee (Released)',
-            'createdAt': FieldValue.serverTimestamp(),
-            'referenceId': postId,
-          });
-        }
+        // Create new transaction record instead of updating the old one
+        final newTxnRef = txnCol.doc();
+        final description = postTitle.isNotEmpty
+            ? 'Application fee (Released) - $postTitle'
+            : 'Application fee (Released)';
+        
+        print('Creating new transaction record for released credits');
+        tx.set(newTxnRef, {
+          'id': newTxnRef.id,
+          'userId': userId,
+          'type': 'credit', // Released credits should be credit type
+          'amount': feeCredits,
+          'description': description,
+          'createdAt': FieldValue.serverTimestamp(),
+          'referenceId': postId,
+          if (onHoldTxnId != null) 'parentTxnId': onHoldTxnId, // Link to original On Hold transaction
+        });
       });
 
       print("Release credits successful for user $userId");
@@ -512,13 +520,42 @@ class WalletService {
     final txnCol = walletDoc.collection('transactions');
 
     try {
-      // Find the "On Hold" transaction to update it (query outside transaction)
+      // Get post title for description
+      final postTitle = await getPostTitle(firestore: firestore, postId: postId);
+      
+      // Find the "On Hold" transaction (query outside transaction)
+      // Look for transactions that contain "Application fee (On Hold)" in description
       final onHoldTransactions = await txnCol
-          .where('description', isEqualTo: 'Application fee (On Hold)')
           .where('referenceId', isEqualTo: postId)
           .where('type', isEqualTo: 'debit')
-          .limit(1)
           .get();
+
+      // Find the On Hold transaction (description may contain post title)
+      String? onHoldTxnId;
+      for (final doc in onHoldTransactions.docs) {
+        final desc = doc.data()['description'] as String? ?? '';
+        if (desc.contains('Application fee (On Hold)')) {
+          onHoldTxnId = doc.id;
+          break;
+        }
+      }
+
+      // Check if already processed by looking for existing completed transaction (outside transaction)
+      if (onHoldTxnId != null) {
+        final allPostTransactions = await txnCol
+            .where('referenceId', isEqualTo: postId)
+            .get();
+        final alreadyProcessed = allPostTransactions.docs.any((doc) {
+          final data = doc.data();
+          return data['parentTxnId'] == onHoldTxnId &&
+                 data['type'] == 'debit' &&
+                 !(data['description'] as String? ?? '').contains('(On Hold)');
+        });
+        if (alreadyProcessed) {
+          print('Transaction already processed, skipping duplicate deduction');
+          return true; // Already processed, exit early
+        }
+      }
 
       await firestore.runTransaction((tx) async {
         // ========== PHASE 1: ALL READS FIRST ==========
@@ -532,41 +569,27 @@ class WalletService {
         final int currentBalance = _parseIntFromFirestore(walletData['balance']);
         final int currentHeldCredits = _parseIntFromFirestore(walletData['heldCredits']);
 
+        // Safety check: Ensure heldCredits is sufficient
+        if (currentHeldCredits < feeCredits) {
+          print('Warning: heldCredits ($currentHeldCredits) is less than feeCredits ($feeCredits). This may indicate duplicate processing.');
+          // Don't throw error, but clamp to 0 to prevent negative values
+        }
+
         // Read the "On Hold" transaction document if it exists
         DocumentReference? onHoldTxnRef;
-        bool shouldUpdateTransaction = false;
-
-        if (onHoldTransactions.docs.isNotEmpty) {
-          final onHoldTxnId = onHoldTransactions.docs.first.id;
+        if (onHoldTxnId != null) {
           onHoldTxnRef = txnCol.doc(onHoldTxnId);
-
-          // Read the transaction document in the transaction to verify it still exists
-          // This ensures Firestore can evaluate the security rules properly
           final onHoldTxnSnap = await tx.get(onHoldTxnRef);
-
-          if (onHoldTxnSnap.exists) {
-            final onHoldData = onHoldTxnSnap.data() as Map<String, dynamic>?;
-            // Verify it's still an On Hold transaction before updating
-            if (onHoldData != null &&
-                onHoldData['description'] == 'Application fee (On Hold)' &&
-                onHoldData['referenceId'] == postId &&
-                onHoldData['type'] == 'debit') {
-              shouldUpdateTransaction = true;
-              print('Found On Hold transaction to update: $onHoldTxnId');
-            } else {
-              print('On Hold transaction found but data mismatch: $onHoldData');
-            }
-          } else {
-            print('On Hold transaction document does not exist in transaction');
+          if (!onHoldTxnSnap.exists) {
+            onHoldTxnRef = null; // Transaction was deleted, create new one
           }
-        } else {
-          print('No On Hold transaction found for postId: $postId');
         }
 
         // ========== PHASE 2: ALL WRITES AFTER READS ==========
         // Calculate new values
         final int newBalance = currentBalance - feeCredits;
-        final int newHeldCredits = currentHeldCredits - feeCredits;
+        // Clamp heldCredits to prevent negative values
+        final int newHeldCredits = (currentHeldCredits - feeCredits).clamp(0, double.infinity).toInt();
 
         // 同时减少 balance 和 heldCredits（将 hold 转换为实际扣款）
         // Use explicit values so security rules can evaluate them
@@ -576,26 +599,23 @@ class WalletService {
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        // Update the "On Hold" transaction to "Application fee" (completed)
-        if (shouldUpdateTransaction && onHoldTxnRef != null) {
-          // Update description from "Application fee (On Hold)" to "Application fee"
-          print('🔄 Updating transaction from "On Hold" to "Application fee"');
-          tx.update(onHoldTxnRef, {'description': 'Application fee'});
-        } else {
-          // If no "On Hold" transaction exists, create a new one
-          // This handles edge cases where the On Hold transaction might have been deleted
-          print('➕ Creating new transaction record (On Hold not found)');
-          final txnRef = txnCol.doc();
-          tx.set(txnRef, {
-            'id': txnRef.id,
-            'userId': userId,
-            'type': 'debit',
-            'amount': feeCredits,
-            'description': 'Application fee',
-            'createdAt': FieldValue.serverTimestamp(),
-            'referenceId': postId,
-          });
-        }
+        // Create new transaction record instead of updating the old one
+        final newTxnRef = txnCol.doc();
+        final description = postTitle.isNotEmpty
+            ? 'Application fee - $postTitle'
+            : 'Application fee';
+        
+        print('➕ Creating new transaction record for deducted credits');
+        tx.set(newTxnRef, {
+          'id': newTxnRef.id,
+          'userId': userId,
+          'type': 'debit',
+          'amount': feeCredits,
+          'description': description,
+          'createdAt': FieldValue.serverTimestamp(),
+          'referenceId': postId,
+          if (onHoldTxnId != null) 'parentTxnId': onHoldTxnId, // Link to original On Hold transaction
+        });
       });
 
       print("Deduct successful for user $userId");
@@ -677,6 +697,12 @@ class WalletService {
     await _ensureWallet();
     final txnRef = _txnCol.doc();
 
+    // Get post title for description
+    final postTitle = await _getPostTitle(postId);
+    final description = postTitle.isNotEmpty
+        ? 'Post creation fee (On Hold) - $postTitle'
+        : 'Post creation fee (On Hold)';
+
     await _firestore.runTransaction((tx) async {
       final snap = await tx.get(_walletDoc);
       final data = snap.data() ?? <String, dynamic>{'balance': 0, 'heldCredits': 0};
@@ -706,7 +732,7 @@ class WalletService {
         'userId': _uid,
         'type': 'debit',
         'amount': feeCredits,
-        'description': 'Post creation fee (On Hold)',
+        'description': description,
         'createdAt': FieldValue.serverTimestamp(),
         'referenceId': postId,
       });
@@ -740,13 +766,25 @@ class WalletService {
     final txnCol = walletDoc.collection('transactions');
 
     try {
-      // Find the "On Hold" transaction to update it (query outside transaction)
+      // Get post title for description
+      final postTitle = await getPostTitle(firestore: firestore, postId: postId);
+      
+      // Find the "On Hold" transaction (query outside transaction)
+      // Look for transactions that contain "Post creation fee (On Hold)" in description
       final onHoldTransactions = await txnCol
-          .where('description', isEqualTo: 'Post creation fee (On Hold)')
           .where('referenceId', isEqualTo: postId)
           .where('type', isEqualTo: 'debit')
-          .limit(1)
           .get();
+
+      // Find the On Hold transaction (description may contain post title)
+      String? onHoldTxnId;
+      for (final doc in onHoldTransactions.docs) {
+        final desc = doc.data()['description'] as String? ?? '';
+        if (desc.contains('Post creation fee (On Hold)')) {
+          onHoldTxnId = doc.id;
+          break;
+        }
+      }
 
       await firestore.runTransaction((tx) async {
         final walletSnap = await tx.get(walletDoc);
@@ -757,52 +795,58 @@ class WalletService {
         final walletData = walletSnap.data()!;
         final int currentHeldCredits = _parseIntFromFirestore(walletData['heldCredits']);
 
+        // Safety check: Ensure heldCredits is sufficient
+        if (currentHeldCredits < feeCredits) {
+          print('Warning: heldCredits ($currentHeldCredits) is less than feeCredits ($feeCredits). This may indicate duplicate processing.');
+          // Don't throw error, but clamp to 0 to prevent negative values
+        }
+
         // Read the "On Hold" transaction document if it exists
         DocumentReference? onHoldTxnRef;
-        bool shouldUpdateTransaction = false;
-
-        if (onHoldTransactions.docs.isNotEmpty) {
-          final onHoldTxnId = onHoldTransactions.docs.first.id;
+        if (onHoldTxnId != null) {
           onHoldTxnRef = txnCol.doc(onHoldTxnId);
-
           final onHoldTxnSnap = await tx.get(onHoldTxnRef);
-
-          if (onHoldTxnSnap.exists) {
-            final onHoldData = onHoldTxnSnap.data() as Map<String, dynamic>?;
-            if (onHoldData != null &&
-                onHoldData['description'] == 'Post creation fee (On Hold)' &&
-                onHoldData['referenceId'] == postId &&
-                onHoldData['type'] == 'debit') {
-              shouldUpdateTransaction = true;
-            }
+          if (!onHoldTxnSnap.exists) {
+            onHoldTxnRef = null; // Transaction was deleted, create new one
           }
         }
 
-        final int newHeldCredits = currentHeldCredits - feeCredits;
+        // Check if already processed by looking for existing released transaction
+        if (onHoldTxnId != null) {
+          final releasedTxn = await txnCol
+              .where('parentTxnId', isEqualTo: onHoldTxnId)
+              .where('type', isEqualTo: 'credit')
+              .limit(1)
+              .get();
+          if (releasedTxn.docs.isNotEmpty) {
+            print('Transaction already processed (released), skipping duplicate release');
+            return; // Already processed, exit early
+          }
+        }
+
+        // Clamp heldCredits to prevent negative values
+        final int newHeldCredits = (currentHeldCredits - feeCredits).clamp(0, double.infinity).toInt();
 
         // Update wallet to release held credits
         tx.update(walletDoc, {'heldCredits': newHeldCredits, 'updatedAt': FieldValue.serverTimestamp()});
 
-        // Update the "On Hold" transaction to "Post creation fee (Released)"
-        if (shouldUpdateTransaction && onHoldTxnRef != null) {
-          // Update description and change type from 'debit' to 'credit' since releasing credits is a credit operation
-          tx.update(onHoldTxnRef, {
-            'description': 'Post creation fee (Released)',
-            'type': 'credit', // Change from debit to credit when releasing
-          });
-        } else {
-          // If no "On Hold" transaction exists, create a new one
-          final txnRef = txnCol.doc();
-          tx.set(txnRef, {
-            'id': txnRef.id,
-            'userId': userId,
-            'type': 'credit', // Released credits should be credit type
-            'amount': feeCredits,
-            'description': 'Post creation fee (Released)',
-            'createdAt': FieldValue.serverTimestamp(),
-            'referenceId': postId,
-          });
-        }
+        // Create new transaction record instead of updating the old one
+        final newTxnRef = txnCol.doc();
+        final description = postTitle.isNotEmpty
+            ? 'Post creation fee (Released) - $postTitle'
+            : 'Post creation fee (Released)';
+        
+        print('➕ Creating new transaction record for released post creation credits');
+        tx.set(newTxnRef, {
+          'id': newTxnRef.id,
+          'userId': userId,
+          'type': 'credit', // Released credits should be credit type
+          'amount': feeCredits,
+          'description': description,
+          'createdAt': FieldValue.serverTimestamp(),
+          'referenceId': postId,
+          if (onHoldTxnId != null) 'parentTxnId': onHoldTxnId, // Link to original On Hold transaction
+        });
       });
 
       return true;
@@ -826,13 +870,25 @@ class WalletService {
     final txnCol = walletDoc.collection('transactions');
 
     try {
-      // Find the "On Hold" transaction to update it (query outside transaction)
+      // Get post title for description
+      final postTitle = await getPostTitle(firestore: firestore, postId: postId);
+      
+      // Find the "On Hold" transaction (query outside transaction)
+      // Look for transactions that contain "Post creation fee (On Hold)" in description
       final onHoldTransactions = await txnCol
-          .where('description', isEqualTo: 'Post creation fee (On Hold)')
           .where('referenceId', isEqualTo: postId)
           .where('type', isEqualTo: 'debit')
-          .limit(1)
           .get();
+
+      // Find the On Hold transaction (description may contain post title)
+      String? onHoldTxnId;
+      for (final doc in onHoldTransactions.docs) {
+        final desc = doc.data()['description'] as String? ?? '';
+        if (desc.contains('Post creation fee (On Hold)')) {
+          onHoldTxnId = doc.id;
+          break;
+        }
+      }
 
       await firestore.runTransaction((tx) async {
         // ========== PHASE 1: ALL READS FIRST ==========
@@ -845,29 +901,39 @@ class WalletService {
         final int currentBalance = _parseIntFromFirestore(walletData['balance']);
         final int currentHeldCredits = _parseIntFromFirestore(walletData['heldCredits']);
 
+        // Safety check: Ensure heldCredits is sufficient
+        if (currentHeldCredits < feeCredits) {
+          print('Warning: heldCredits ($currentHeldCredits) is less than feeCredits ($feeCredits). This may indicate duplicate processing.');
+          // Don't throw error, but clamp to 0 to prevent negative values
+        }
+
         // Read the "On Hold" transaction document if it exists
         DocumentReference? onHoldTxnRef;
-        bool shouldUpdateTransaction = false;
-
-        if (onHoldTransactions.docs.isNotEmpty) {
-          final onHoldTxnId = onHoldTransactions.docs.first.id;
+        if (onHoldTxnId != null) {
           onHoldTxnRef = txnCol.doc(onHoldTxnId);
-
           final onHoldTxnSnap = await tx.get(onHoldTxnRef);
+          if (!onHoldTxnSnap.exists) {
+            onHoldTxnRef = null; // Transaction was deleted, create new one
+          }
+        }
 
-          if (onHoldTxnSnap.exists) {
-            final onHoldData = onHoldTxnSnap.data() as Map<String, dynamic>?;
-            if (onHoldData != null &&
-                onHoldData['description'] == 'Post creation fee (On Hold)' &&
-                onHoldData['referenceId'] == postId &&
-                onHoldData['type'] == 'debit') {
-              shouldUpdateTransaction = true;
-            }
+        // Check if already processed by looking for existing completed transaction
+        if (onHoldTxnId != null) {
+          final completedTxn = await txnCol
+              .where('parentTxnId', isEqualTo: onHoldTxnId)
+              .where('type', isEqualTo: 'debit')
+              .where('description', isNotEqualTo: 'Post creation fee (On Hold)')
+              .limit(1)
+              .get();
+          if (completedTxn.docs.isNotEmpty) {
+            print('Transaction already processed, skipping duplicate deduction');
+            return; // Already processed, exit early
           }
         }
 
         final int newBalance = currentBalance - feeCredits;
-        final int newHeldCredits = currentHeldCredits - feeCredits;
+        // Clamp heldCredits to prevent negative values
+        final int newHeldCredits = (currentHeldCredits - feeCredits).clamp(0, double.infinity).toInt();
 
         // Update wallet to deduct from both balance and heldCredits
         tx.update(walletDoc, {
@@ -876,22 +942,23 @@ class WalletService {
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        // Update the "On Hold" transaction to "Post creation fee" (completed)
-        if (shouldUpdateTransaction && onHoldTxnRef != null) {
-          tx.update(onHoldTxnRef, {'description': 'Post creation fee'});
-        } else {
-          // If no "On Hold" transaction exists, create a new one
-          final txnRef = txnCol.doc();
-          tx.set(txnRef, {
-            'id': txnRef.id,
-            'userId': userId,
-            'type': 'debit',
-            'amount': feeCredits,
-            'description': 'Post creation fee',
-            'createdAt': FieldValue.serverTimestamp(),
-            'referenceId': postId,
-          });
-        }
+        // Create new transaction record instead of updating the old one
+        final newTxnRef = txnCol.doc();
+        final description = postTitle.isNotEmpty
+            ? 'Post creation fee - $postTitle'
+            : 'Post creation fee';
+        
+        print('➕ Creating new transaction record for deducted post creation credits');
+        tx.set(newTxnRef, {
+          'id': newTxnRef.id,
+          'userId': userId,
+          'type': 'debit',
+          'amount': feeCredits,
+          'description': description,
+          'createdAt': FieldValue.serverTimestamp(),
+          'referenceId': postId,
+          if (onHoldTxnId != null) 'parentTxnId': onHoldTxnId, // Link to original On Hold transaction
+        });
       });
 
       return true;
@@ -1182,6 +1249,40 @@ class WalletService {
       value = 'https://$value';
     }
     return value;
+  }
+
+  /// Helper function to get post title from postId
+  /// Returns post title or empty string if not found
+  Future<String> _getPostTitle(String postId) async {
+    if (postId.isEmpty) return '';
+    try {
+      final postDoc = await _firestore.collection('posts').doc(postId).get();
+      if (postDoc.exists) {
+        final data = postDoc.data();
+        return (data?['title'] as String?) ?? '';
+      }
+    } catch (e) {
+      print('Error fetching post title for $postId: $e');
+    }
+    return '';
+  }
+
+  /// Static helper function to get post title from postId
+  static Future<String> getPostTitle({
+    required FirebaseFirestore firestore,
+    required String postId,
+  }) async {
+    if (postId.isEmpty) return '';
+    try {
+      final postDoc = await firestore.collection('posts').doc(postId).get();
+      if (postDoc.exists) {
+        final data = postDoc.data();
+        return (data?['title'] as String?) ?? '';
+      }
+    } catch (e) {
+      print('Error fetching post title for $postId: $e');
+    }
+    return '';
   }
 }
 

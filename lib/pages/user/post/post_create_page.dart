@@ -561,6 +561,9 @@ class _PostCreatePageState extends State<PostCreatePage> {
     if (minAge < 17) {
       return 'Minimum age must be 17 or above';
     }
+    if (minAge > 50) {
+      return 'Minimum age must be 50 or below';
+    }
     if (maxAge < 17) {
       return 'Maximum age must be 17 or above';
     }
@@ -1314,6 +1317,10 @@ class _PostCreatePageState extends State<PostCreatePage> {
                               
                               if (minAge < 18) {
                                 return 'Minimum age must be 18 or above';
+                              }
+                              
+                              if (minAge > 50) {
+                                return 'Minimum age must be 50 or below';
                               }
                               
                               return null;
