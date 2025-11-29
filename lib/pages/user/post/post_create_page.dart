@@ -141,7 +141,11 @@ class _PostCreatePageState extends State<PostCreatePage> {
       _minAgeController.text = p.minAgeRequirement?.toString() ?? '';
       _maxAgeController.text = p.maxAgeRequirement?.toString() ?? '';
       _quotaController.text = p.applicantQuota?.toString() ?? '';
-      _selectedGender = p.genderRequirement;
+      // Validate gender requirement - must be one of the valid values
+      final validGenders = ['any', 'male', 'female'];
+      _selectedGender = (p.genderRequirement != null && validGenders.contains(p.genderRequirement))
+          ? p.genderRequirement
+          : null;
       _jobType = p.jobType;
       
       // Load existing attachments from Firestore (similar to post_details_page.dart)
@@ -310,9 +314,13 @@ class _PostCreatePageState extends State<PostCreatePage> {
         _quotaController.text = updatedPost.applicantQuota?.toString() ?? '';
       }
       
-      // Update gender
+      // Update gender - validate it's a valid value
+      final validGenders = ['any', 'male', 'female'];
       if (_selectedGender != updatedPost.genderRequirement) {
-        _selectedGender = updatedPost.genderRequirement;
+        _selectedGender = (updatedPost.genderRequirement != null && 
+                          validGenders.contains(updatedPost.genderRequirement))
+            ? updatedPost.genderRequirement
+            : null;
       }
       
       // Update job type
@@ -869,9 +877,84 @@ class _PostCreatePageState extends State<PostCreatePage> {
       Navigator.pop(context, publish);
     } catch (e) {
       if (!mounted || _hasPopped) return;
+      
+      String errorMessage = 'Failed to save: $e';
+      final errorString = e.toString();
+      
+      // Check if it's a document size limit error
+      final isSizeError = errorString.contains('exceeds the maximum allowed size') ||
+          errorString.contains('cannot be written because its size') ||
+          errorString.contains('invalid-argument') ||
+          errorString.contains('INVALID_ARGUMENT');
+      
+      if (isSizeError) {
+        // Try to extract size information
+        RegExpMatch? sizeMatch = RegExp(r'size \((\d+(?:,\d+)*) bytes\)').firstMatch(errorString);
+        RegExpMatch? maxSizeMatch = RegExp(r'maximum allowed size of (\d+(?:,\d+)*) bytes').firstMatch(errorString);
+        
+        // Fallback: try without commas
+        if (sizeMatch == null) {
+          sizeMatch = RegExp(r'size \((\d+) bytes\)').firstMatch(errorString);
+        }
+        if (maxSizeMatch == null) {
+          maxSizeMatch = RegExp(r'maximum.*?(\d+) bytes').firstMatch(errorString);
+        }
+        
+        // Fallback: extract large numbers
+        if (sizeMatch == null || maxSizeMatch == null) {
+          final allLargeNumbers = RegExp(r'\d{6,}').allMatches(errorString).toList();
+          if (allLargeNumbers.isNotEmpty) {
+            final numbers = allLargeNumbers.map((m) => int.parse(m.group(0)!)).toList()..sort((a, b) => b.compareTo(a));
+            if (numbers.isNotEmpty && numbers[0] > 1000000) {
+              // Use largest number as actual size, 1MB as max
+              final actualSize = numbers[0];
+              final maxSize = 1048576;
+              final exceededSize = actualSize - maxSize;
+              
+              errorMessage = _buildSizeErrorMessage(actualSize, maxSize, exceededSize);
+            } else {
+              errorMessage = _buildGenericSizeErrorMessage();
+            }
+          } else {
+            errorMessage = _buildGenericSizeErrorMessage();
+          }
+        } else {
+          // Parse sizes from matches
+          try {
+            String actualSizeStr = sizeMatch.groupCount > 0 && sizeMatch.group(1) != null
+                ? sizeMatch.group(1)!.replaceAll(',', '').trim()
+                : sizeMatch.group(0)!.replaceAll(RegExp(r'[^\d]'), '').trim();
+            
+            String maxSizeStr = maxSizeMatch.groupCount > 0 && maxSizeMatch.group(1) != null
+                ? maxSizeMatch.group(1)!.replaceAll(',', '').trim()
+                : maxSizeMatch.group(0)!.replaceAll(RegExp(r'[^\d]'), '').trim();
+            
+            final actualSize = int.parse(actualSizeStr);
+            final maxSize = int.parse(maxSizeStr);
+            final exceededSize = actualSize - maxSize;
+            
+            errorMessage = _buildSizeErrorMessage(actualSize, maxSize, exceededSize);
+          } catch (_) {
+            // Fallback to extracting large numbers
+            final allLargeNumbers = RegExp(r'\d{6,}').allMatches(errorString).toList();
+            if (allLargeNumbers.isNotEmpty) {
+              final numbers = allLargeNumbers.map((m) => int.parse(m.group(0)!)).toList()..sort((a, b) => b.compareTo(a));
+              if (numbers.isNotEmpty && numbers[0] > 1000000) {
+                errorMessage = _buildSizeErrorMessage(numbers[0], 1048576, numbers[0] - 1048576);
+              } else {
+                errorMessage = _buildGenericSizeErrorMessage();
+              }
+            } else {
+              errorMessage = _buildGenericSizeErrorMessage();
+            }
+          }
+        }
+      }
+      
       DialogUtils.showWarningMessage(
         context: context,
-        message: 'Failed to save: $e',
+        message: errorMessage,
+        duration: const Duration(seconds: 8),
       );
     } finally {
       if (mounted && !_hasPopped) {
@@ -880,6 +963,40 @@ class _PostCreatePageState extends State<PostCreatePage> {
         _saving = false;
       }
     }
+  }
+
+  // Helper function to format bytes to readable string
+  String _formatBytes(int bytes) {
+    if (bytes >= 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+    } else {
+      return '${(bytes / 1024).toStringAsFixed(2)} KB';
+    }
+  }
+
+  // Helper function to build size error message
+  String _buildSizeErrorMessage(int actualSize, int maxSize, int exceededSize) {
+    final actualSizeReadable = _formatBytes(actualSize);
+    final maxSizeReadable = _formatBytes(maxSize);
+    final exceededSizeReadable = _formatBytes(exceededSize);
+    final recommendedMax = (maxSize * 0.9).round();
+    final recommendedMaxReadable = _formatBytes(recommendedMax);
+    
+    return 'Image Size exceeds the limit!\n\n'
+        'Current size: $actualSizeReadable\n'
+        'Maximum allowed: $maxSizeReadable\n'
+        'Exceeded by: $exceededSizeReadable\n\n'
+        'Suggestion:\n'
+        'Please remove some images or select smaller photos.\n'
+        'Recommended total size: less than $recommendedMaxReadable.';
+  }
+
+  // Helper function to build generic size error message
+  String _buildGenericSizeErrorMessage() {
+    return 'Image Size exceeds the limit!\n\n'
+        'Document size exceeds the 1MB limit.\n\n'
+        'Please remove some images or select smaller photos.\n'
+        'Recommended total size: less than 900 KB.';
   }
 
   double? _parseDouble(String input) {
@@ -1989,6 +2106,12 @@ class _PostCreatePageState extends State<PostCreatePage> {
   }
 
   Widget _buildGenderDropdown() {
+    // Validate that _selectedGender is a valid value to prevent DropdownButton assertion error
+    const validGenders = ['any', 'male', 'female'];
+    final String? safeSelectedGender = (_selectedGender != null && validGenders.contains(_selectedGender))
+        ? _selectedGender
+        : null;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2004,7 +2127,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
         Container(
           decoration: BoxDecoration(
             border: Border.all(
-              color: (_selectedGender == null && _genderFieldTouched) ? Colors.red : Colors.grey[400]!,
+              color: (safeSelectedGender == null && _genderFieldTouched) ? Colors.red : Colors.grey[400]!,
               width: 1,
             ),
             borderRadius: BorderRadius.circular(8),
@@ -2013,7 +2136,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: _selectedGender,
+                value: safeSelectedGender,
                 hint: Text(
                   'Select gender requirement',
                   style: TextStyle(
@@ -2070,7 +2193,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
             ),
           ),
         ),
-        if (_selectedGender == null && _genderFieldTouched) ...[
+        if (safeSelectedGender == null && _genderFieldTouched) ...[
           const SizedBox(height: 4),
           Padding(
             padding: const EdgeInsets.only(left: 12),

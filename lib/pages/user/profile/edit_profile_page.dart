@@ -92,7 +92,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
       _profProfileCtrl.text = (data['professionalProfile'] as String?) ?? '';
       _summaryCtrl.text = (data['professionalSummary'] as String?) ?? '';
       _experienceCtrl.text = (data['workExperience'] as String?) ?? '';
-      _selectedGender = data['gender'] as String?;
+      // Validate gender - only 'male' and 'female' are valid for profile
+      final genderValue = data['gender'] as String?;
+      const validGenders = ['male', 'female'];
+      _selectedGender = (genderValue != null && validGenders.contains(genderValue))
+          ? genderValue
+          : null;
       final attachment =
           ResumeAttachment.fromMap(data['resume']) ?? ResumeAttachment.fromLegacyValue(data['cvUrl']);
       final parsedTags = parseTagSelection(data['tags']);
@@ -736,6 +741,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   Widget _buildGenderDropdown() {
+    // Validate that _selectedGender is a valid value to prevent DropdownButton assertion error
+    const validGenders = ['male', 'female'];
+    final String? safeSelectedGender = (_selectedGender != null && validGenders.contains(_selectedGender))
+        ? _selectedGender
+        : null;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -760,7 +771,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: _selectedGender,
+                value: safeSelectedGender,
                 hint: Text(
                   'Select gender',
                   style: TextStyle(
