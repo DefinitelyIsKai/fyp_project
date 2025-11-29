@@ -78,7 +78,7 @@ class _PostManagementPageState extends State<PostManagementPage> {
 
   Widget _buildPostManagementBody() {
     return StreamBuilder<List<Post>>(
-      stream: _service.streamMyPosts(),
+      stream: _service.streamMyPosts(includeRejected: true),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           final error = snapshot.error.toString();
@@ -628,9 +628,11 @@ class _PostCard extends StatelessWidget {
     final bool isActive = !post.isDraft && post.status == PostStatus.active;
     final bool isPending = !post.isDraft && post.status == PostStatus.pending;
     final bool isCompleted = post.status == PostStatus.completed;
+    final bool isRejected = post.status == PostStatus.rejected;
     final bool canMarkCompleted = post.status == PostStatus.active && !post.isDraft;
-    // Hide edit button if post is active or completed
-    final bool canEdit = !isActive && !isCompleted;
+    // Hide edit button if post is active, completed, or rejected
+    // Rejected posts can only be viewed and deleted
+    final bool canEdit = !isActive && !isCompleted && !isRejected;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -658,19 +660,25 @@ class _PostCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: post.status == PostStatus.completed
                         ? Colors.grey.withOpacity(0.1)
-                        : (isPending 
-                            ? Colors.orange.withOpacity(0.15) 
-                            : (isActive ? const Color(0xFF00C8A0).withOpacity(0.15) : Colors.orange.withOpacity(0.15))),
+                        : (isRejected
+                            ? Colors.red.withOpacity(0.15)
+                            : (isPending 
+                                ? Colors.orange.withOpacity(0.15) 
+                                : (isActive ? const Color(0xFF00C8A0).withOpacity(0.15) : Colors.orange.withOpacity(0.15)))),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     post.status == PostStatus.completed 
                         ? 'Completed' 
-                        : (isPending ? 'Pending' : (isActive ? 'Active' : 'Draft')),
+                        : (isRejected
+                            ? 'Rejected'
+                            : (isPending ? 'Pending' : (isActive ? 'Active' : 'Draft'))),
                     style: TextStyle(
                       color: post.status == PostStatus.completed
                           ? Colors.grey[700]
-                          : (isPending ? Colors.orange : (isActive ? const Color(0xFF00C8A0) : Colors.orange)),
+                          : (isRejected
+                              ? Colors.red
+                              : (isPending ? Colors.orange : (isActive ? const Color(0xFF00C8A0) : Colors.orange))),
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),

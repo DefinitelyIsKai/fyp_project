@@ -242,11 +242,30 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                         final isQuotaReached = applicantQuota != null && 
                                               approvedCount >= applicantQuota;
                         
+                        // Check if event starts today or tomorrow (cannot apply on event day or one day before)
+                        bool isEventStartingSoon = false;
+                        if (currentPost.eventStartDate != null) {
+                          final now = DateTime.now();
+                          final today = DateTime(now.year, now.month, now.day);
+                          final eventStartDate = currentPost.eventStartDate!;
+                          final eventStartDateOnly = DateTime(
+                            eventStartDate.year,
+                            eventStartDate.month,
+                            eventStartDate.day,
+                          );
+                          final tomorrow = DateTime(today.year, today.month, today.day + 1);
+                          // Cannot apply if event starts today or tomorrow
+                          isEventStartingSoon = eventStartDateOnly.isAtSameMomentAs(today) || 
+                                               eventStartDateOnly.isAtSameMomentAs(tomorrow) ||
+                                               eventStartDateOnly.isBefore(today);
+                        }
+                        
                         // Determine button state and text based on application status
                         final bool isDisabled = hasApplied || 
                                               currentPost.status == PostStatus.completed || 
                                               currentPost.status == PostStatus.pending ||
-                                              isQuotaReached;
+                                              isQuotaReached ||
+                                              isEventStartingSoon;
                         
                         String buttonText;
                         if (_isApplying) {
@@ -273,6 +292,8 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                           buttonText = 'Pending Review';
                         } else if (isQuotaReached) {
                           buttonText = 'Quota Full';
+                        } else if (isEventStartingSoon) {
+                          buttonText = 'Event Starts';
                         } else {
                           buttonText = 'Apply Now - 100 points';
                         }
@@ -1358,6 +1379,30 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
   Future<void> _handleApply(BuildContext context) async {
     // Prevent multiple simultaneous executions
     if (_isApplying || !mounted) return;
+    
+    // Check if event starts today or tomorrow (prevent applying on event day or one day before)
+    if (widget.post.eventStartDate != null) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final eventStartDate = widget.post.eventStartDate!;
+      final eventStartDateOnly = DateTime(
+        eventStartDate.year,
+        eventStartDate.month,
+        eventStartDate.day,
+      );
+      final tomorrow = DateTime(today.year, today.month, today.day + 1);
+      // Cannot apply if event starts today or tomorrow
+      if (eventStartDateOnly.isAtSameMomentAs(today) || 
+          eventStartDateOnly.isAtSameMomentAs(tomorrow) ||
+          eventStartDateOnly.isBefore(today)) {
+        if (!mounted) return;
+        DialogUtils.showWarningMessage(
+          context: context,
+          message: 'Applications are no longer accepted. The event has started or starts soon.',
+        );
+        return;
+      }
+    }
     
     // Show confirmation dialog
     final confirmed = await DialogUtils.showConfirmationDialog(

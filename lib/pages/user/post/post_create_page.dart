@@ -526,6 +526,20 @@ class _PostCreatePageState extends State<PostCreatePage> {
     if (_eventEndDate == null) {
       return 'Event end date is required';
     }
+    
+    // Validate that event start date cannot be today
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final eventStartDateOnly = DateTime(
+      _eventStartDate!.year,
+      _eventStartDate!.month,
+      _eventStartDate!.day,
+    );
+    // Event start date cannot be today
+    if (eventStartDateOnly.isAtSameMomentAs(today)) {
+      return 'Event start date cannot be today';
+    }
+    
     if (_eventEndDate!.isBefore(_eventStartDate!)) {
       return 'Event end date cannot be before start date';
     }
@@ -749,8 +763,30 @@ class _PostCreatePageState extends State<PostCreatePage> {
         return;
       }
       
-      // For drafts, only validate title field (required for draft)
+      // For drafts, validate title field and event start date
       // Description and other fields are optional for drafts
+      // But event start date cannot be today
+      if (_eventStartDate != null) {
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final eventStartDateOnly = DateTime(
+          _eventStartDate!.year,
+          _eventStartDate!.month,
+          _eventStartDate!.day,
+        );
+        // Event start date cannot be today
+        if (eventStartDateOnly.isAtSameMomentAs(today)) {
+          if (mounted) {
+            setState(() => _saving = false);
+            DialogUtils.showWarningMessage(
+              context: context,
+              message: 'Event start date cannot be today',
+            );
+          }
+          return;
+        }
+      }
+      
       final formState = _formKey.currentState;
       if (formState == null) {
         if (mounted) setState(() => _saving = false);
@@ -1192,9 +1228,10 @@ class _PostCreatePageState extends State<PostCreatePage> {
                               });
                               _onFieldChanged();
                             },
-                            firstDate: DateTime.now(),
+                            firstDate: DateTime.now().add(const Duration(days: 1)), // Must be at least tomorrow
                             lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
                             required: true,
+                            helperText: 'Must be at least 1 day from today',
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -1208,7 +1245,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                               });
                               _onFieldChanged();
                             },
-                            firstDate: _eventStartDate ?? DateTime.now(),
+                            firstDate: _eventStartDate ?? DateTime.now().add(const Duration(days: 1)), // Must be at least tomorrow if no start date
                             lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
                             required: true,
                           ),
