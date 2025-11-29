@@ -36,6 +36,7 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
   String? _userRole;
   bool _isApplying = false;
   String? _ownerName;
+  String? _rejectionReason;
 
   @override
   void initState() {
@@ -43,6 +44,28 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
     _loadAttachments();
     _checkUserRoleAndIncrementView();
     _loadOwnerName();
+    _loadRejectionReason();
+  }
+
+  Future<void> _loadRejectionReason() async {
+    if (widget.post.status == PostStatus.rejected) {
+      try {
+        final doc = await FirebaseFirestore.instance
+            .collection('posts')
+            .doc(widget.post.id)
+            .get();
+        if (doc.exists) {
+          final data = doc.data();
+          if (mounted) {
+            setState(() {
+              _rejectionReason = data?['rejectionReason'] as String?;
+            });
+          }
+        }
+      } catch (e) {
+        debugPrint('Error loading rejection reason: $e');
+      }
+    }
   }
 
   Future<void> _checkUserRoleAndIncrementView() async {
@@ -680,6 +703,65 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                     ),
                     const SizedBox(height: 12),
                     _buildAttachments(),
+                  ],
+                ),
+              ),
+            ],
+            
+            // Rejection Reason Section (only show if post is rejected)
+            if (widget.post.status == PostStatus.rejected && _rejectionReason != null && _rejectionReason!.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.red.withOpacity(0.3)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.cancel_outlined, size: 20, color: Colors.red[700]),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Rejection Reason',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.red.withOpacity(0.2)),
+                      ),
+                      child: Text(
+                        _rejectionReason!,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[800],
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),

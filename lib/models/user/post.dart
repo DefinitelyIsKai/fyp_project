@@ -32,6 +32,7 @@ class Post {
   String? workTimeStart; // Format: "HH:mm" (e.g., "09:00")
   String? workTimeEnd; // Format: "HH:mm" (e.g., "17:00")
   String? genderRequirement; // Gender requirement: "male", "female", or "any"
+  String? rejectionReason; // Reason for rejection (only when status is rejected)
   int views;
   int applicants;
 
@@ -62,6 +63,7 @@ class Post {
     this.workTimeStart,
     this.workTimeEnd,
     this.genderRequirement,
+    this.rejectionReason,
     this.views = 0,
     this.applicants = 0,
   })  : tags = tags ?? <String>[],
@@ -96,6 +98,7 @@ class Post {
       'workTimeStart': workTimeStart,
       'workTimeEnd': workTimeEnd,
       'genderRequirement': genderRequirement,
+      'rejectionReason': rejectionReason,
       'createdAt': createdAt,
       'views': views,
       'applicants': applicants,
@@ -142,6 +145,7 @@ class Post {
         workTimeStart: map['workTimeStart'] as String?,
         workTimeEnd: map['workTimeEnd'] as String?,
         genderRequirement: map['genderRequirement'] as String?,
+        rejectionReason: map['rejectionReason'] as String?,
         createdAt: (map['createdAt'] is Timestamp)
             ? (map['createdAt'] as Timestamp).toDate()
             : (map['createdAt'] as DateTime?) ?? DateTime.now(),
