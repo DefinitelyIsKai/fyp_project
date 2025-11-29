@@ -72,6 +72,7 @@ class WalletTransaction {
     required this.description,
     required this.createdAt,
     this.referenceId,
+    this.parentTxnId, // ID of the parent transaction (for tracking state changes)
   });
 
   final String id;
@@ -81,6 +82,7 @@ class WalletTransaction {
   final String description;
   final DateTime createdAt;
   final String? referenceId; // e.g. postId, taskId, paymentIntentId
+  final String? parentTxnId; // ID of the parent transaction (for tracking state changes)
 
   Map<String, dynamic> toMap() {
     return <String, dynamic>{
@@ -91,6 +93,7 @@ class WalletTransaction {
       'description': description,
       'createdAt': createdAt,
       'referenceId': referenceId,
+      if (parentTxnId != null) 'parentTxnId': parentTxnId,
     };
   }
 
@@ -127,6 +130,7 @@ class WalletTransaction {
       description: (map['description'] as String?) ?? '',
       createdAt: createdAt,
       referenceId: map['referenceId'] as String?,
+      parentTxnId: map['parentTxnId'] as String?,
     );
   }
 }

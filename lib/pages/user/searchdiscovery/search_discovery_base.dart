@@ -55,6 +55,19 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
   // Cache for posts stream to avoid multiple stream creation
   Stream<List<Post>>? _cachedPostsStream;
 
+  Future<void> refreshData() async {
+    setState(() {
+      // Clear cached stream to force refresh
+      _cachedPostsStream = null;
+      _lastPosts = null;
+      _pages = [];
+      _currentPage = 0;
+    });
+    // Re-fetch location if needed
+    _getCurrentLocation();
+    await Future.delayed(const Duration(milliseconds: 100));
+  }
+
   @override
   void initState() {
     super.initState();

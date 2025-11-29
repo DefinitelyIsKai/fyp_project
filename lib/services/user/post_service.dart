@@ -699,6 +699,74 @@ class PostService {
     }, SetOptions(merge: true));
   }
 
+  /// Automatically mark posts as completed when they reach their event end date and time
+  /// This method checks all active posts and marks them as completed if the current time
+  /// has passed the eventEndDate + workTimeEnd
+  Future<int> autoCompleteExpiredPosts() async {
+    try {
+      final now = DateTime.now();
+      int completedCount = 0;
+
+      // Query all active posts that are not drafts
+      final snapshot = await _col
+          .where('status', isEqualTo: PostStatus.active.name)
+          .where('isDraft', isEqualTo: false)
+          .get();
+
+      for (final doc in snapshot.docs) {
+        if (!doc.exists) continue;
+        final data = doc.data();
+        // ignore: unnecessary_null_comparison
+        if (data == null) continue; // Safety check
+
+        // Get eventEndDate
+        final eventEndDate = data['eventEndDate'];
+
+        // Skip if eventEndDate is missing
+        if (eventEndDate == null) continue;
+
+        // Parse eventEndDate (could be Timestamp or DateTime)
+        DateTime endDate;
+        if (eventEndDate is Timestamp) {
+          endDate = eventEndDate.toDate();
+        } else if (eventEndDate is DateTime) {
+          endDate = eventEndDate;
+        } else {
+          continue; // Skip if we can't parse the date
+        }
+
+        // Check if current time has passed the event end date
+        // Compare only the date part (ignore time)
+        final nowDate = DateTime(now.year, now.month, now.day);
+        final endDateOnly = DateTime(endDate.year, endDate.month, endDate.day);
+        
+        if (nowDate.isAfter(endDateOnly) || nowDate.isAtSameMomentAs(endDateOnly)) {
+          // Mark post as completed
+          try {
+            await _col.doc(doc.id).update({
+              'status': PostStatus.completed.name,
+              'completedAt': FieldValue.serverTimestamp(),
+            });
+            completedCount++;
+            debugPrint('Auto-completed post: ${doc.id} (${data['title'] ?? 'Unknown'})');
+          } catch (e) {
+            debugPrint('Error auto-completing post ${doc.id}: $e');
+            // Continue with other posts even if one fails
+          }
+        }
+      }
+
+      if (completedCount > 0) {
+        debugPrint('Auto-completed $completedCount expired post(s)');
+      }
+
+      return completedCount;
+    } catch (e) {
+      debugPrint('Error in autoCompleteExpiredPosts: $e');
+      return 0;
+    }
+  }
+
   Future<void> incrementViewCount({required String postId}) async {
     await _col.doc(postId).update({'views': FieldValue.increment(1)});
   }

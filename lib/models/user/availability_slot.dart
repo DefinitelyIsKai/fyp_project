@@ -10,8 +10,6 @@ class AvailabilitySlot {
   final String? bookedBy; // jobseekerId if booked
   final String? matchId; // jobMatchId if booked
   final DateTime createdAt;
-  final bool isRecurring;
-  final String? recurringPattern; // 'daily', 'weekly', 'monthly'
 
   AvailabilitySlot({
     required this.id,
@@ -23,8 +21,6 @@ class AvailabilitySlot {
     this.bookedBy,
     this.matchId,
     required this.createdAt,
-    this.isRecurring = false,
-    this.recurringPattern,
   });
 
   factory AvailabilitySlot.fromFirestore(DocumentSnapshot doc) {
@@ -39,8 +35,6 @@ class AvailabilitySlot {
       bookedBy: data['bookedBy'] as String?,
       matchId: data['matchId'] as String?,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      isRecurring: data['isRecurring'] as bool? ?? false,
-      recurringPattern: data['recurringPattern'] as String?,
     );
   }
 
@@ -54,8 +48,6 @@ class AvailabilitySlot {
       if (bookedBy != null) 'bookedBy': bookedBy,
       if (matchId != null) 'matchId': matchId,
       'createdAt': Timestamp.fromDate(createdAt),
-      'isRecurring': isRecurring,
-      if (recurringPattern != null) 'recurringPattern': recurringPattern,
     };
   }
 

@@ -283,7 +283,17 @@ class _NotificationsPageState extends State<NotificationsPage> {
                     ],
                   ),
                 )
-              : Column(
+              : RefreshIndicator(
+                  onRefresh: () async {
+                    setState(() {
+                      // Force refresh by clearing pages
+                      _pages.clear();
+                      _currentPage = 0;
+                    });
+                    await Future.delayed(const Duration(milliseconds: 100));
+                  },
+                  color: const Color(0xFF00C8A0),
+                  child: Column(
                   children: [
                     _buildUnreadHeader(),
                     Expanded(
@@ -307,7 +317,18 @@ class _NotificationsPageState extends State<NotificationsPage> {
                           }
                           
                           final pageNotifications = _pages[pageIndex];
-                          return ListView.separated(
+                          return RefreshIndicator(
+                            onRefresh: () async {
+                              setState(() {
+                                // Force refresh by clearing pages
+                                _pages.clear();
+                                _currentPage = 0;
+                              });
+                              await Future.delayed(const Duration(milliseconds: 100));
+                            },
+                            color: const Color(0xFF00C8A0),
+                            child: ListView.separated(
+                              physics: const AlwaysScrollableScrollPhysics(),
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             itemCount: pageNotifications.length,
                             separatorBuilder: (_, index) {
@@ -319,6 +340,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                             itemBuilder: (context, index) {
                               return _buildNotificationCard(pageNotifications[index]);
                             },
+                            ),
                           );
                         },
                       ),
@@ -332,6 +354,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                         ),
                       ),
                   ],
+                ),
                 ),
     );
   }

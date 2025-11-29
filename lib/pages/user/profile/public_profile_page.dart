@@ -110,7 +110,16 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
           final resume =
               ResumeAttachment.fromMap(data['resume']) ?? ResumeAttachment.fromLegacyValue(data['cvUrl']);
 
-          return SingleChildScrollView(
+          return RefreshIndicator(
+            onRefresh: () async {
+              setState(() {
+                // Force refresh by updating state
+              });
+              await Future.delayed(const Duration(milliseconds: 100));
+            },
+            color: const Color(0xFF00C8A0),
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
             child: Column(
               children: [
                 _buildHeader(name, role),
@@ -134,8 +143,10 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                 ),
               ],
             ),
+          ),
           );
         },
+        
       ),
     );
   }

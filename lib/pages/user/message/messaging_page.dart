@@ -134,7 +134,16 @@ class _MessagingPageState extends State<MessagingPage> {
                   );
                 }
 
-                return ListView.builder(
+                return RefreshIndicator(
+                  onRefresh: () async {
+                    setState(() {
+                      // Force refresh by updating state
+                    });
+                    await Future.delayed(const Duration(milliseconds: 100));
+                  },
+                  color: const Color(0xFF00C8A0),
+                  child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   itemCount: conversations.length,
                   itemBuilder: (context, index) {
@@ -161,6 +170,7 @@ class _MessagingPageState extends State<MessagingPage> {
                       },
                     );
                   },
+                  ),
                 );
               },
             ),

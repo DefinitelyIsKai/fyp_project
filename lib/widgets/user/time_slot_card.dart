@@ -174,78 +174,84 @@ class TimeSlotCard extends StatelessWidget {
               fontSize: 15,
             ),
           ),
-          subtitle: slot.isAvailable
-              ? hasPendingRequest && isRecruiter
+          subtitle: isBooked
               ? Row(
-            children: [
-              Icon(
-                Icons.pending,
-                size: 14,
-                color: Colors.amber[700],
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  'Pending booking request',
-                  style: TextStyle(
-                    color: Colors.amber[800],
-                    fontWeight: FontWeight.w500,
-                    fontSize: 13,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          )
-              : Row(
-            children: [
-              Expanded(
-                child: Text(
-                  isBooked ? 'Booked' : 'Available for booking',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 13,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (isBooked) ...[
-                const SizedBox(width: 4),
-                Icon(
-                  Icons.info_outline,
-                  size: 14,
-                  color: themeColor,
-                ),
-              ],
-            ],
-          )
-              : Row(
-            children: [
-              Text(
-                'Unavailable',
-                style: TextStyle(
-                  color: themeColor,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 13,
-                ),
-              ),
-              if (isBooked) ...[
-                const SizedBox(width: 4),
-                Icon(
-                  Icons.info_outline,
-                  size: 14,
-                  color: themeColor,
-                ),
-              ],
-            ],
-          ),
+                  children: [
+                    Icon(
+                      Icons.check_circle,
+                      size: 14,
+                      color: Colors.green[700],
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        'Booked',
+                        style: TextStyle(
+                          color: Colors.green[800],
+                          fontWeight: FontWeight.w500,
+                          fontSize: 13,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                )
+              : slot.isAvailable
+                  ? hasPendingRequest && isRecruiter
+                      ? Row(
+                          children: [
+                            Icon(
+                              Icons.pending,
+                              size: 14,
+                              color: Colors.amber[700],
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                'Pending booking request',
+                                style: TextStyle(
+                                  color: Colors.amber[800],
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 13,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Available for booking',
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontSize: 13,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        )
+                  : Row(
+                      children: [
+                        Text(
+                          'Unavailable',
+                          style: TextStyle(
+                            color: themeColor,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
           trailing: isRecruiter
               ? Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Switch(
                 value: slot.isAvailable,
-                onChanged: onToggle,
+                onChanged: isBooked ? null : onToggle, // Disable toggle if booked
                 activeColor: themeColor,
               ),
               IconButton(
