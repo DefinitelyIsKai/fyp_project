@@ -1014,15 +1014,27 @@ class _PostCreatePageState extends State<PostCreatePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      widget.existing == null ? 'Create New Job Post' : 'Edit Job Post',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black,
-                      ),
+                    Row(
+                      children: [
+                        Icon(
+                          widget.existing == null ? Icons.add_circle_outline : Icons.edit_outlined,
+                          size: 20,
+                          color: const Color(0xFF00C8A0),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            widget.existing == null ? 'Create New Job Post' : 'Edit Job Post',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 12),
                     Text(
                       widget.existing == null 
                           ? 'Fill in the details to create a new job posting'

@@ -9,6 +9,7 @@ import '../../../utils/user/timestamp_utils.dart';
 import '../../../widgets/user/loading_indicator.dart';
 import '../../../widgets/user/empty_state.dart';
 import '../../../widgets/admin/dialogs/user_dialogs/add_credits_dialog.dart';
+import '../../../widgets/user/pagination_dots_widget.dart';
 
 class CreditWalletPage extends StatefulWidget {
   const CreditWalletPage({super.key});
@@ -34,11 +35,14 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
   
   // Pagination state
   final PageController _pageController = PageController();
+  final ValueNotifier<int> _currentPageNotifier = ValueNotifier<int>(0);
   List<List<_UnifiedTransaction>> _pages = [];
+  List<List<_UnifiedTransaction>> _filteredPages = []; // Cache filtered pages
   int _currentPage = 0;
   bool _isLoadingMore = false;
   bool _hasMore = true;
   List<_UnifiedTransaction> _allTransactions = [];
+  WalletTxnType? _lastFilter; // Track filter changes
   static const int _itemsPerPage = 10;
   static const int _initialStreamLimit = 50; // Load first 50 transactions in real-time
   
@@ -58,27 +62,23 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
       _refreshPendingPayments();
     });
     
-    // Listen to scroll events
-    _scrollController.addListener(_onScroll);
+    // Removed automatic scroll-based shrink - now manual toggle only
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _pageController.dispose();
-    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _currentPageNotifier.dispose();
     _cachedUnifiedStream = null; // Clear cached stream
     super.dispose();
   }
   
-  void _onScroll() {
-    final shouldShrink = _scrollController.offset > 50; // Shrink after scrolling 50px
-    if (shouldShrink != _isCardShrunk) {
-      setState(() {
-        _isCardShrunk = shouldShrink;
-      });
-    }
+  void _toggleCardShrink() {
+    setState(() {
+      _isCardShrunk = !_isCardShrunk;
+    });
   }
 
   /// Combine transactions and cancelled payments streams
@@ -253,8 +253,30 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
         pages.add(_allTransactions.sublist(i, end));
       }
 
+      // Recalculate filtered pages with new data
+      final filteredTransactions = _selectedFilter == null
+          ? _allTransactions
+          : _allTransactions.where((t) {
+              if (_selectedFilter == WalletTxnType.credit) {
+                return t.type == WalletTxnType.credit && !t.isCancelled;
+              }
+              return t.type == _selectedFilter;
+            }).toList();
+
+      final filteredPages = <List<_UnifiedTransaction>>[];
+      for (int i = 0; i < filteredTransactions.length; i += _itemsPerPage) {
+        final end = (i + _itemsPerPage < filteredTransactions.length) 
+            ? i + _itemsPerPage 
+            : filteredTransactions.length;
+        filteredPages.add(filteredTransactions.sublist(i, end));
+      }
+      if (filteredPages.isEmpty && filteredTransactions.isNotEmpty) {
+        filteredPages.add(filteredTransactions);
+      }
+
       setState(() {
         _pages = pages;
+        _filteredPages = filteredPages;
         if (unified.length < _itemsPerPage) {
           _hasMore = false;
         }
@@ -493,27 +515,7 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
         elevation: 1,
         iconTheme: const IconThemeData(color: Colors.black),
       ),
-      body: NotificationListener<ScrollNotification>(
-        onNotification: (ScrollNotification notification) {
-          if (notification is ScrollUpdateNotification || notification is ScrollEndNotification) {
-            // Get scroll offset from the notification
-            final scrollOffset = notification.metrics.pixels;
-            final shouldShrink = scrollOffset > 50;
-            
-            // Only update if state actually changed to avoid unnecessary rebuilds
-            if (shouldShrink != _isCardShrunk) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) {
-                  setState(() {
-                    _isCardShrunk = shouldShrink;
-                  });
-                }
-              });
-            }
-          }
-          return false; // Allow the notification to continue bubbling
-        },
-        child: RefreshIndicator(
+      body: RefreshIndicator(
           onRefresh: () async {
             setState(() {
               // Force refresh by updating state
@@ -721,30 +723,32 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
                 ),
                 
                 // Balance Card
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                  margin: EdgeInsets.all(_isCardShrunk ? 8 : 16),
-                  padding: EdgeInsets.all(_isCardShrunk ? 12 : 24),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        const Color(0xFF00C8A0),
-                        const Color(0xFF00C8A0).withOpacity(0.8),
+                GestureDetector(
+                  onTap: _toggleCardShrink,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                    margin: EdgeInsets.all(_isCardShrunk ? 8 : 16),
+                    padding: EdgeInsets.all(_isCardShrunk ? 12 : 24),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          const Color(0xFF00C8A0),
+                          const Color(0xFF00C8A0).withOpacity(0.8),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(_isCardShrunk ? 12 : 20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF00C8A0).withOpacity(0.3),
+                          blurRadius: 15,
+                          offset: const Offset(0, 4),
+                        ),
                       ],
                     ),
-                    borderRadius: BorderRadius.circular(_isCardShrunk ? 12 : 20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF00C8A0).withOpacity(0.3),
-                        blurRadius: 15,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: _isCardShrunk
+                    child: _isCardShrunk
                       ? Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -815,21 +819,38 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
                                 ],
                               ),
                             ),
-                            StreamBuilder<List<Map<String, dynamic>>>(
-                              stream: _walletService.streamPendingPayments(),
-                              builder: (context, snap) {
-                                final hasPending = (snap.data?.isNotEmpty ?? false);
-                                
-                                return IconButton(
-                                  onPressed: hasPending ? null : _showAddCreditDialog,
-                                  icon: Icon(
-                                    hasPending ? Icons.block : Icons.add,
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  onPressed: _toggleCardShrink,
+                                  icon: const Icon(
+                                    Icons.expand,
                                     color: Colors.white,
-                                    size: 24,
+                                    size: 20,
                                   ),
-                                  tooltip: hasPending ? 'Complete Pending Payment First' : 'Add Credits',
-                                );
-                              },
+                                  tooltip: 'Expand',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                                const SizedBox(width: 8),
+                                StreamBuilder<List<Map<String, dynamic>>>(
+                                  stream: _walletService.streamPendingPayments(),
+                                  builder: (context, snap) {
+                                    final hasPending = (snap.data?.isNotEmpty ?? false);
+                                    
+                                    return IconButton(
+                                      onPressed: hasPending ? null : _showAddCreditDialog,
+                                      icon: Icon(
+                                        hasPending ? Icons.block : Icons.add,
+                                        color: Colors.white,
+                                        size: 24,
+                                      ),
+                                      tooltip: hasPending ? 'Complete Pending Payment First' : 'Add Credits',
+                                    );
+                                  },
+                                ),
+                              ],
                             ),
                           ],
                         )
@@ -917,53 +938,71 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
                               ),
                             ),
                             const SizedBox(height: 20),
-                            StreamBuilder<List<Map<String, dynamic>>>(
-                              stream: _walletService.streamPendingPayments(),
-                              builder: (context, snap) {
-                                final hasPending = (snap.data?.isNotEmpty ?? false);
-                                
-                                return SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton(
-                                    onPressed: hasPending ? null : _showAddCreditDialog,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: hasPending 
-                                          ? Colors.grey.shade300 
-                                          : Colors.white,
-                                      foregroundColor: hasPending 
-                                          ? Colors.grey.shade600 
-                                          : const Color(0xFF00C8A0),
-                                      padding: const EdgeInsets.symmetric(vertical: 14),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      elevation: hasPending ? 0 : 2,
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          hasPending ? Icons.block : Icons.add,
-                                          size: 20,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          hasPending 
-                                              ? 'Complete Pending Payment First'
-                                              : 'Add Credits',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: StreamBuilder<List<Map<String, dynamic>>>(
+                                    stream: _walletService.streamPendingPayments(),
+                                    builder: (context, snap) {
+                                      final hasPending = (snap.data?.isNotEmpty ?? false);
+                                      
+                                      return ElevatedButton(
+                                        onPressed: hasPending ? null : _showAddCreditDialog,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: hasPending 
+                                              ? Colors.grey.shade300 
+                                              : Colors.white,
+                                          foregroundColor: hasPending 
+                                              ? Colors.grey.shade600 
+                                              : const Color(0xFF00C8A0),
+                                          padding: const EdgeInsets.symmetric(vertical: 14),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(12),
                                           ),
+                                          elevation: hasPending ? 0 : 2,
                                         ),
-                                      ],
-                                    ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              hasPending ? Icons.block : Icons.add,
+                                              size: 20,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              hasPending 
+                                                  ? 'Complete Pending Payment First'
+                                                  : 'Add Credits',
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
                                   ),
-                                );
-                              },
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  onPressed: _toggleCardShrink,
+                                  icon: const Icon(
+                                    Icons.unfold_less,
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
+                                  tooltip: 'Shrink',
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: Colors.white.withOpacity(0.2),
+                                    padding: const EdgeInsets.all(12),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
+                  ),
                 ),
 
                 // Filter Chips
@@ -1014,7 +1053,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
           ),
         ],
         ),
-        ),
       ),
     );
   }
@@ -1048,40 +1086,78 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
         }
 
         // Update state only if data actually changed (avoid unnecessary rebuilds)
-        if (_allTransactions.length != allTransactions.length ||
-            _pages.length != pages.length) {
+        final dataChanged = _allTransactions.length != allTransactions.length ||
+            _pages.length != pages.length;
+        final filterChanged = _lastFilter != _selectedFilter;
+        
+        if (dataChanged || filterChanged) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
+              // Apply filter to all transactions first, then paginate
+              final filteredTransactions = _selectedFilter == null
+                  ? allTransactions
+                  : allTransactions.where((t) {
+                      // For "Added" filter, only show credit transactions that are NOT cancelled
+                      if (_selectedFilter == WalletTxnType.credit) {
+                        return t.type == WalletTxnType.credit && !t.isCancelled;
+                      }
+                      // For "Spent" filter, show debit transactions (cancelled payments are not debits)
+                      return t.type == _selectedFilter;
+                    }).toList();
+
+              // Organize filtered transactions into pages
+              final filteredPages = <List<_UnifiedTransaction>>[];
+              for (int i = 0; i < filteredTransactions.length; i += _itemsPerPage) {
+                final end = (i + _itemsPerPage < filteredTransactions.length) 
+                    ? i + _itemsPerPage 
+                    : filteredTransactions.length;
+                filteredPages.add(filteredTransactions.sublist(i, end));
+              }
+              if (filteredPages.isEmpty && filteredTransactions.isNotEmpty) {
+                filteredPages.add(filteredTransactions);
+              }
+
               setState(() {
                 _allTransactions = allTransactions;
                 _pages = pages;
+                _filteredPages = filteredPages;
                 _hasMore = allTransactions.length >= _initialStreamLimit;
+                _lastFilter = _selectedFilter;
+                // Reset to first page if filter changed
+                if (filterChanged) {
+                  _currentPage = 0;
+                  _currentPageNotifier.value = 0;
+                  if (_pageController.hasClients) {
+                    _pageController.jumpToPage(0);
+                  }
+                }
               });
             }
           });
         }
 
-        // Apply filter to pages
-        final filteredPages = _selectedFilter == null
-            ? pages
-            : pages
-                .map((page) => page.where((t) {
-                  // For "Added" filter, only show credit transactions that are NOT cancelled
-                  if (_selectedFilter == WalletTxnType.credit) {
-                    return t.type == WalletTxnType.credit && !t.isCancelled;
-                  }
-                  // For "Spent" filter, show debit transactions (cancelled payments are not debits)
-                  return t.type == _selectedFilter;
-                }).toList())
-                .where((page) => page.isNotEmpty)
-                .toList();
+        // Use cached filtered pages to avoid recalculation on every rebuild
+        final filteredPages = _filteredPages.isEmpty && _allTransactions.isNotEmpty
+            ? _pages // Fallback to unfiltered pages if filtered pages not yet calculated
+            : _filteredPages;
 
         if (filteredPages.isEmpty || filteredPages.every((page) => page.isEmpty)) {
+          // Check if we should load more when filter results are empty
+          if (_hasMore && !_isLoadingMore && allTransactions.length >= _initialStreamLimit) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _loadMoreTransactions();
+            });
+          }
           return const EmptyState.noTransactions();
         }
 
         // Check if we need to load more when reaching the last page
-        if (_currentPage >= filteredPages.length - 1 && _hasMore && !_isLoadingMore) {
+        // Only load more if we have filtered results and there might be more data
+        final shouldLoadMore = _currentPage >= filteredPages.length - 1 && 
+                              _hasMore && 
+                              !_isLoadingMore &&
+                              allTransactions.length >= _initialStreamLimit;
+        if (shouldLoadMore) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _loadMoreTransactions();
           });
@@ -1094,11 +1170,17 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
                 controller: _pageController,
                 itemCount: filteredPages.length + (_isLoadingMore ? 1 : 0),
                 onPageChanged: (index) {
-                  setState(() {
+                  // Update current page using ValueNotifier to avoid full rebuild
+                  if (_currentPage != index) {
                     _currentPage = index;
-                  });
+                    _currentPageNotifier.value = index;
+                  }
                   // Load more if approaching the end
-                  if (index >= filteredPages.length - 2 && _hasMore && !_isLoadingMore) {
+                  // Only load if we're near the end of filtered pages and there might be more data
+                  if (index >= filteredPages.length - 2 && 
+                      _hasMore && 
+                      !_isLoadingMore &&
+                      allTransactions.length >= _initialStreamLimit) {
                     _loadMoreTransactions();
                   }
                 },
@@ -1282,22 +1364,14 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
         if (filteredPages.length > 1)
           Container(
             padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(
-                filteredPages.length,
-                (index) => Container(
-                  width: 8,
-                  height: 8,
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: index == _currentPage
-                        ? const Color(0xFF00C8A0)
-                        : Colors.grey[300],
-                  ),
-                ),
-              ),
+            child: ValueListenableBuilder<int>(
+              valueListenable: _currentPageNotifier,
+              builder: (context, currentPage, _) {
+                return PaginationDotsWidget(
+                  totalPages: filteredPages.length,
+                  currentPage: currentPage,
+                );
+              },
             ),
           ),
         ],
@@ -1325,7 +1399,14 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
               : label == 'Added' 
                   ? WalletTxnType.credit 
                   : WalletTxnType.debit;
+          // Reset to first page when filter changes
+          _currentPage = 0;
+          _currentPageNotifier.value = 0;
         });
+        // Jump to first page
+        if (_pageController.hasClients) {
+          _pageController.jumpToPage(0);
+        }
       },
       backgroundColor: Colors.grey[100],
       selectedColor: const Color(0xFF00C8A0),

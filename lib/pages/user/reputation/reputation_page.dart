@@ -446,52 +446,52 @@ class ReputationPage extends StatelessWidget {
               ),
             ],
           ),
-          // Show jobseeker name for recruiters
-          if (isRecruiterView) ...[
-            const SizedBox(height: 8),
-            FutureBuilder<DocumentSnapshot>(
-              future: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(review.jobseekerId)
-                  .get(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Row(
-                    children: [
-                      Icon(Icons.person, size: 16, color: Colors.grey[600]),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Loading...',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey[600],
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ],
-                  );
-                }
-                
-                final userData = snapshot.data?.data() as Map<String, dynamic>?;
-                final jobseekerName = userData?['fullName'] as String? ?? 'Unknown User';
-                
+          // Show jobseeker name for recruiters, or recruiter name for jobseekers
+          const SizedBox(height: 8),
+          FutureBuilder<DocumentSnapshot>(
+            future: FirebaseFirestore.instance
+                .collection('users')
+                .doc(isRecruiterView ? review.jobseekerId : review.recruiterId)
+                .get(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
                 return Row(
                   children: [
-                    Icon(Icons.person, size: 16, color: const Color(0xFF00C8A0)),
+                    Icon(Icons.person, size: 16, color: Colors.grey[600]),
                     const SizedBox(width: 6),
                     Text(
-                      'Reviewed: $jobseekerName',
+                      'Loading...',
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.grey[700],
-                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[600],
+                        fontStyle: FontStyle.italic,
                       ),
                     ),
                   ],
                 );
-              },
-            ),
-          ],
+              }
+              
+              final userData = snapshot.data?.data() as Map<String, dynamic>?;
+              final userName = userData?['fullName'] as String? ?? 'Unknown User';
+              
+              return Row(
+                children: [
+                  Icon(Icons.person, size: 16, color: const Color(0xFF00C8A0)),
+                  const SizedBox(width: 6),
+                  Text(
+                    isRecruiterView 
+                        ? 'Reviewed: $userName'
+                        : 'Reviewed by: $userName',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey[700],
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
           const SizedBox(height: 8),
           if (review.comment.isNotEmpty)
             Text(
