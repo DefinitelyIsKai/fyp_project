@@ -432,6 +432,24 @@ class WalletService {
         }
       }
 
+      // Check if already processed by looking for existing completed transaction (outside transaction)
+      // Use simpler query to avoid needing composite index - query by referenceId and filter client-side
+      if (onHoldTxnId != null) {
+        // Query by referenceId (which should have an index) and filter client-side
+        final allPostTransactions = await txnCol
+            .where('referenceId', isEqualTo: postId)
+            .get();
+        final alreadyProcessed = allPostTransactions.docs.any((doc) {
+          final data = doc.data();
+          return data['parentTxnId'] == onHoldTxnId &&
+                 data['type'] == 'credit';
+        });
+        if (alreadyProcessed) {
+          print('Transaction already processed (released), skipping duplicate release');
+          return true; // Already processed, exit early
+        }
+      }
+
       await firestore.runTransaction((tx) async {
         // ========== PHASE 1: ALL READS FIRST ==========
         // Read wallet first to get current values (needed for security rule evaluation)
@@ -456,19 +474,6 @@ class WalletService {
           final onHoldTxnSnap = await tx.get(onHoldTxnRef);
           if (!onHoldTxnSnap.exists) {
             onHoldTxnRef = null; // Transaction was deleted, create new one
-          }
-        }
-
-        // Check if already processed by looking for existing released transaction
-        if (onHoldTxnId != null) {
-          final releasedTxn = await txnCol
-              .where('parentTxnId', isEqualTo: onHoldTxnId)
-              .where('type', isEqualTo: 'credit')
-              .limit(1)
-              .get();
-          if (releasedTxn.docs.isNotEmpty) {
-            print('Transaction already processed (released), skipping duplicate release');
-            return; // Already processed, exit early
           }
         }
 
@@ -541,7 +546,9 @@ class WalletService {
       }
 
       // Check if already processed by looking for existing completed transaction (outside transaction)
+      // Use simpler query to avoid needing composite index - query by referenceId and filter client-side
       if (onHoldTxnId != null) {
+        // Query by referenceId (which should have an index) and filter client-side
         final allPostTransactions = await txnCol
             .where('referenceId', isEqualTo: postId)
             .get();
@@ -811,19 +818,6 @@ class WalletService {
           }
         }
 
-        // Check if already processed by looking for existing released transaction
-        if (onHoldTxnId != null) {
-          final releasedTxn = await txnCol
-              .where('parentTxnId', isEqualTo: onHoldTxnId)
-              .where('type', isEqualTo: 'credit')
-              .limit(1)
-              .get();
-          if (releasedTxn.docs.isNotEmpty) {
-            print('Transaction already processed (released), skipping duplicate release');
-            return; // Already processed, exit early
-          }
-        }
-
         // Clamp heldCredits to prevent negative values
         final int newHeldCredits = (currentHeldCredits - feeCredits).clamp(0, double.infinity).toInt();
 
@@ -890,6 +884,25 @@ class WalletService {
         }
       }
 
+      // Check if already processed by looking for existing completed transaction (outside transaction)
+      // Use simpler query to avoid needing composite index - query by referenceId and filter client-side
+      if (onHoldTxnId != null) {
+        // Query by referenceId (which should have an index) and filter client-side
+        final allPostTransactions = await txnCol
+            .where('referenceId', isEqualTo: postId)
+            .get();
+        final alreadyProcessed = allPostTransactions.docs.any((doc) {
+          final data = doc.data();
+          return data['parentTxnId'] == onHoldTxnId &&
+                 data['type'] == 'debit' &&
+                 !(data['description'] as String? ?? '').contains('(On Hold)');
+        });
+        if (alreadyProcessed) {
+          print('Transaction already processed, skipping duplicate deduction');
+          return true; // Already processed, exit early
+        }
+      }
+
       await firestore.runTransaction((tx) async {
         // ========== PHASE 1: ALL READS FIRST ==========
         final walletSnap = await tx.get(walletDoc);
@@ -917,20 +930,6 @@ class WalletService {
           }
         }
 
-        // Check if already processed by looking for existing completed transaction
-        if (onHoldTxnId != null) {
-          final completedTxn = await txnCol
-              .where('parentTxnId', isEqualTo: onHoldTxnId)
-              .where('type', isEqualTo: 'debit')
-              .where('description', isNotEqualTo: 'Post creation fee (On Hold)')
-              .limit(1)
-              .get();
-          if (completedTxn.docs.isNotEmpty) {
-            print('Transaction already processed, skipping duplicate deduction');
-            return; // Already processed, exit early
-          }
-        }
-
         final int newBalance = currentBalance - feeCredits;
         // Clamp heldCredits to prevent negative values
         final int newHeldCredits = (currentHeldCredits - feeCredits).clamp(0, double.infinity).toInt();
@@ -948,7 +947,7 @@ class WalletService {
             ? 'Post creation fee - $postTitle'
             : 'Post creation fee';
         
-        print('➕ Creating new transaction record for deducted post creation credits');
+        print('Creating new transaction record for deducted post creation credits');
         tx.set(newTxnRef, {
           'id': newTxnRef.id,
           'userId': userId,
