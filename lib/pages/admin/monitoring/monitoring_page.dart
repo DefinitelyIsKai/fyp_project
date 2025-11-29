@@ -8,12 +8,23 @@ import 'package:fyp_project/utils/admin/app_colors.dart';
 class MonitoringPage extends StatelessWidget {
   const MonitoringPage({super.key});
 
-  // Real-time stream: counts total posts
+  // Real-time stream: counts total posts (excluding drafts)
   Stream<int> _totalPostsCountStream() {
     return FirebaseFirestore.instance
         .collection('posts')
         .snapshots()
-        .map((snap) => snap.size);
+        .map((snap) {
+          int count = 0;
+          for (final doc in snap.docs) {
+            final data = doc.data() as Map<String, dynamic>?;
+            if (data == null) continue;
+            final isDraft = data['isDraft'] as bool?;
+            if (isDraft != true) {
+              count++;
+            }
+          }
+          return count;
+        });
   }
 
   // Real-time stream: counts total users

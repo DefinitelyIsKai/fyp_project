@@ -26,6 +26,13 @@ class UserModel {
   final Map<String, dynamic>? image;
   final Map<String, dynamic>? resume;
 
+  final int? age;
+  final String? gender;
+  final bool emailVerified;
+  final double? latitude;
+  final double? longitude;
+  final Map<String, dynamic>? tags;
+
   final int reportCount;
   final DateTime createdAt;
 
@@ -53,6 +60,12 @@ class UserModel {
     this.cvUrl,
     this.image,
     this.resume,
+    this.age,
+    this.gender,
+    this.emailVerified = false,
+    this.latitude,
+    this.longitude,
+    this.tags,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json, String docId) {
@@ -99,6 +112,13 @@ class UserModel {
 
       image: json['image'],
       resume: json['resume'],
+
+      age: json['age'] != null ? (json['age'] is num ? (json['age'] as num).toInt() : null) : null,
+      gender: json['gender'],
+      emailVerified: json['emailVerified'] ?? false,
+      latitude: json['latitude'] != null ? (json['latitude'] as num).toDouble() : null,
+      longitude: json['longitude'] != null ? (json['longitude'] as num).toDouble() : null,
+      tags: json['tags'],
     );
   }
 

@@ -171,7 +171,22 @@ class AuthService {
   Future<bool> refreshAndCheckEmailVerified() async {
     final user = _auth.currentUser;
     if (user == null) return false;
-    await user.reload();
+    
+    try {
+      await user.reload();
+    } on FirebaseAuthException catch (e) {
+      // Handle network errors gracefully - don't crash the app
+      // Return false so polling can continue when network is restored
+      if (e.code == 'network-request-failed') {
+        return false;
+      }
+      // Re-throw other auth exceptions
+      rethrow;
+    } catch (e) {
+      // Handle any other unexpected errors
+      return false;
+    }
+    
     final isVerified = _auth.currentUser?.emailVerified ?? false;
     
     // Sync emailVerified status to Firestore

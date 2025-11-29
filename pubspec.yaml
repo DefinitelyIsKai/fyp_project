@@ -69,7 +69,7 @@ dependencies:
   http: ^1.2.2
   url_launcher: ^6.3.0
   mailer: ^6.0.1
-
+  share_plus: ^10.1.2
 dev_dependencies:
   flutter_test:
     sdk: flutter

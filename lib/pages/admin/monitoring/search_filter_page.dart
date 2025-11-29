@@ -109,6 +109,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
         
         var filteredPosts = postsSnapshot.docs
             .map((doc) => JobPostModel.fromFirestore(doc))
+            .where((post) => post.isDraft != true) // Exclude drafts
             .toList();
 
         // Apply filters

@@ -38,17 +38,26 @@ class _EmailVerificationLoadingPageState extends State<EmailVerificationLoadingP
   Future<void> _checkVerified() async {
     if (_checking) return;
     setState(() => _checking = true);
-    final verified = await _authService.refreshAndCheckEmailVerified();
-    setState(() => _checking = false);
-    if (!mounted) return;
-    if (verified) {
-      _pollTimer?.cancel();
+    try {
+      final verified = await _authService.refreshAndCheckEmailVerified();
       if (!mounted) return;
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginPage()),
-        (_) => false,
-      );
+      if (verified) {
+        _pollTimer?.cancel();
+        if (!mounted) return;
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginPage()),
+          (_) => false,
+        );
+      }
+    } catch (e) {
+      // Handle any unexpected errors gracefully
+      // Don't show error dialog for network issues - polling will retry
+      // Only log or handle critical errors if needed
+    } finally {
+      if (mounted) {
+        setState(() => _checking = false);
+      }
     }
   }
 

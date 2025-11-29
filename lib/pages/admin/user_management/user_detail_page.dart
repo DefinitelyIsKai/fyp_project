@@ -1,13 +1,114 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
 import 'package:fyp_project/models/admin/user_model.dart';
 import 'package:fyp_project/services/admin/user_service.dart';
+import 'package:fyp_project/services/admin/auth_service.dart';
 import 'package:intl/intl.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 
-class UserDetailPage extends StatelessWidget {
+class UserDetailPage extends StatefulWidget {
   final UserModel user;
 
   const UserDetailPage({super.key, required this.user});
+
+  @override
+  State<UserDetailPage> createState() => _UserDetailPageState();
+}
+
+class _UserDetailPageState extends State<UserDetailPage> {
+  bool _isEditing = false;
+  bool _isSaving = false;
+  late UserModel _user;
+  
+  // Text editing controllers
+  late TextEditingController _fullNameController;
+  late TextEditingController _phoneNumberController;
+  late TextEditingController _locationController;
+  late TextEditingController _professionalSummaryController;
+  late TextEditingController _professionalProfileController;
+  late TextEditingController _workExperienceController;
+  late TextEditingController _seekingController;
+
+  @override
+  void initState() {
+    super.initState();
+    _user = widget.user;
+    _initializeControllers();
+  }
+
+  void _initializeControllers() {
+    _fullNameController = TextEditingController(text: _user.fullName);
+    _phoneNumberController = TextEditingController(text: _user.phoneNumber ?? '');
+    _locationController = TextEditingController(text: _user.location);
+    _professionalSummaryController = TextEditingController(text: _user.professionalSummary);
+    _professionalProfileController = TextEditingController(text: _user.professionalProfile);
+    _workExperienceController = TextEditingController(text: _user.workExperience);
+    _seekingController = TextEditingController(text: _user.seeking);
+  }
+
+  @override
+  void dispose() {
+    _fullNameController.dispose();
+    _phoneNumberController.dispose();
+    _locationController.dispose();
+    _professionalSummaryController.dispose();
+    _professionalProfileController.dispose();
+    _workExperienceController.dispose();
+    _seekingController.dispose();
+    super.dispose();
+  }
+
+  UserModel get user => _user;
+
+  /// Check if current user can edit this user's profile
+  bool _canEditUser() {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentAdmin = authService.currentAdmin;
+    
+    if (currentAdmin == null) return false;
+    
+    // Cannot edit your own profile
+    if (currentAdmin.id == _user.id) {
+      return false;
+    }
+    
+    final currentRole = currentAdmin.role.toLowerCase();
+    final targetRole = _user.role.toLowerCase();
+    
+    // Staff and HR cannot edit Manager profiles
+    if ((currentRole == 'staff' || currentRole == 'hr') && targetRole == 'manager') {
+      return false;
+    }
+    
+    // Manager can edit all profiles (except their own)
+    if (currentRole == 'manager') {
+      return true;
+    }
+    
+    // Staff and HR can edit other roles (except their own)
+    return true;
+  }
+
+  /// Check if current user can access Account Management actions
+  bool _canAccessAccountManagement() {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentAdmin = authService.currentAdmin;
+    
+    if (currentAdmin == null) return false;
+    
+    // Cannot perform account management on yourself (view only)
+    if (currentAdmin.id == _user.id) {
+      return false;
+    }
+    
+    final currentRole = currentAdmin.role.toLowerCase();
+    
+    // Only Manager can access Account Management
+    // HR and Staff cannot access Account Management
+    return currentRole == 'manager';
+  }
 
   Color _getRoleColor(String role) {
     switch (role) {
@@ -64,6 +165,200 @@ class UserDetailPage extends StatelessWidget {
 
   String _formatDateTime(DateTime date) {
     return DateFormat('MMM dd, yyyy - HH:mm').format(date);
+  }
+
+  Widget _buildProfileAvatar() {
+    final imageData = user.image;
+    String? base64String;
+    
+    if (imageData != null && imageData['base64'] != null) {
+      base64String = imageData['base64'] as String?;
+    }
+    
+    return Container(
+      width: 100,
+      height: 100,
+      decoration: BoxDecoration(
+        color: _getRoleColor(user.role).withOpacity(0.1),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: _getRoleColor(user.role).withOpacity(0.3),
+          width: 3,
+        ),
+      ),
+      child: ClipOval(
+        child: base64String != null && base64String.isNotEmpty
+            ? _buildBase64Image(base64String)
+            : _buildPlaceholderAvatar(),
+      ),
+    );
+  }
+
+  Widget _buildBase64Image(String base64String) {
+    try {
+      final cleanBase64 = base64String.trim().replaceAll(RegExp(r'\s+'), '');
+      if (cleanBase64.isEmpty) {
+        return _buildPlaceholderAvatar();
+      }
+      
+      final bytes = base64Decode(cleanBase64);
+      return Image.memory(
+        bytes,
+        fit: BoxFit.cover,
+        width: 100,
+        height: 100,
+        errorBuilder: (context, error, stackTrace) {
+          debugPrint('Error displaying base64 image: $error');
+          return _buildPlaceholderAvatar();
+        },
+      );
+    } catch (e) {
+      debugPrint('Error decoding base64 image: $e');
+      return _buildPlaceholderAvatar();
+    }
+  }
+
+  Widget _buildPlaceholderAvatar() {
+    return Container(
+      color: _getRoleColor(user.role).withOpacity(0.1),
+      child: Center(
+        child: Text(
+          user.fullName.isNotEmpty
+              ? user.fullName[0].toUpperCase()
+              : user.email.isNotEmpty
+              ? user.email[0].toUpperCase()
+              : '?',
+          style: TextStyle(
+            fontSize: 36,
+            fontWeight: FontWeight.bold,
+            color: _getRoleColor(user.role),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _enterEditMode() {
+    if (!_canEditUser()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You do not have permission to edit this user profile'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    
+    setState(() {
+      _isEditing = true;
+    });
+  }
+
+  void _cancelEdit() {
+    setState(() {
+      _isEditing = false;
+      // Reset controllers to original values
+      _initializeControllers();
+    });
+  }
+
+  Future<void> _saveUserInfo() async {
+    // Check permission before saving
+    if (!_canEditUser()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You do not have permission to edit this user profile'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        setState(() {
+          _isEditing = false;
+        });
+      }
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      final userService = UserService();
+      
+      final result = await userService.updateUserInfo(
+        userId: _user.id,
+        fullName: _fullNameController.text.trim(),
+        phoneNumber: _phoneNumberController.text.trim().isEmpty 
+            ? null 
+            : _phoneNumberController.text.trim(),
+        location: _locationController.text.trim(),
+        professionalSummary: _professionalSummaryController.text.trim(),
+        professionalProfile: _professionalProfileController.text.trim(),
+        workExperience: _workExperienceController.text.trim(),
+        seeking: _seekingController.text.trim(),
+      );
+
+      if (!mounted) return;
+
+      if (result['success'] == true) {
+        // Fetch updated user data
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(_user.id)
+            .get();
+        
+        if (userDoc.exists) {
+          setState(() {
+            _user = UserModel.fromJson(userDoc.data()!, userDoc.id);
+            _isEditing = false;
+            _isSaving = false;
+          });
+          // Reinitialize controllers with new data
+          _initializeControllers();
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('User information updated successfully'),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          // Return true to refresh parent page
+          Navigator.pop(context, true);
+        }
+      } else {
+        setState(() {
+          _isSaving = false;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error updating user: ${result['error']}'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _isSaving = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating user: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   void _showStatusConfirmationDialog(BuildContext context, UserService userService, String action) {
@@ -204,14 +499,32 @@ class UserDetailPage extends StatelessWidget {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              // Refresh user data
-              Navigator.pop(context, true);
-            },
-            tooltip: 'Refresh',
-          ),
+          if (_isEditing) ...[
+            IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: _isSaving ? null : _cancelEdit,
+              tooltip: 'Cancel',
+            ),
+            IconButton(
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Icon(Icons.save),
+              onPressed: _isSaving ? null : _saveUserInfo,
+              tooltip: 'Save',
+            ),
+          ] else if (_canEditUser())
+            IconButton(
+              icon: const Icon(Icons.edit),
+              onPressed: _enterEditMode,
+              tooltip: 'Edit',
+            ),
         ],
       ),
       body: SingleChildScrollView(
@@ -235,13 +548,20 @@ class UserDetailPage extends StatelessWidget {
             const SizedBox(height: 20),
 
             // Professional Information Card (if available)
-            if (user.professionalSummary.isNotEmpty || user.workExperience.isNotEmpty)
+            if (user.professionalSummary.isNotEmpty || user.workExperience.isNotEmpty || user.seeking.isNotEmpty || user.professionalProfile.isNotEmpty)
               _buildProfessionalInfoCard(),
-            if (user.professionalSummary.isNotEmpty || user.workExperience.isNotEmpty)
+            if (user.professionalSummary.isNotEmpty || user.workExperience.isNotEmpty || user.seeking.isNotEmpty || user.professionalProfile.isNotEmpty)
               const SizedBox(height: 20),
 
-            // Account Actions Card
-            _buildActionsCard(context, userService, statusColor, statusText),
+            // Tags Card (if available)
+            if (user.tags != null && user.tags!.isNotEmpty)
+              _buildTagsCard(),
+            if (user.tags != null && user.tags!.isNotEmpty)
+              const SizedBox(height: 20),
+
+            // Account Actions Card (hidden in edit mode and for HR/Staff roles)
+            if (!_isEditing && _canAccessAccountManagement())
+              _buildActionsCard(context, userService, statusColor, statusText),
             const SizedBox(height: 20),
           ],
         ),
@@ -261,32 +581,7 @@ class UserDetailPage extends StatelessWidget {
             Stack(
               alignment: Alignment.bottomRight,
               children: [
-                Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    color: _getRoleColor(user.role).withOpacity(0.1),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: _getRoleColor(user.role).withOpacity(0.3),
-                      width: 3,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      user.fullName.isNotEmpty
-                          ? user.fullName[0].toUpperCase()
-                          : user.email.isNotEmpty
-                          ? user.email[0].toUpperCase()
-                          : '?',
-                      style: TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.bold,
-                        color: _getRoleColor(user.role),
-                      ),
-                    ),
-                  ),
-                ),
+                _buildProfileAvatar(),
                 // Status indicator
                 Container(
                   width: 24,
@@ -506,33 +801,94 @@ class UserDetailPage extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            _DetailRow(
-              label: 'Full Name',
-              value: user.fullName,
-              icon: Icons.person,
-            ),
-            _DetailRow(
-              label: 'Email Address',
-              value: user.email,
-              icon: Icons.email,
-            ),
-            _DetailRow(
-              label: 'User Role',
-              value: _getRoleDisplayName(user.role),
-              icon: Icons.work,
-              valueColor: _getRoleColor(user.role),
-            ),
-            if (user.phoneNumber != null && user.phoneNumber!.isNotEmpty)
-              _DetailRow(
-                label: 'Phone Number',
-                value: user.phoneNumber!,
-                icon: Icons.phone,
+            if (_isEditing) ...[
+              _EditableDetailRow(
+                label: 'Full Name',
+                controller: _fullNameController,
+                icon: Icons.person,
+                enabled: !_isSaving,
               ),
+              _DetailRow(
+                label: 'Email Address',
+                value: user.email,
+                icon: Icons.email,
+              ),
+              _DetailRow(
+                label: 'User Role',
+                value: _getRoleDisplayName(user.role),
+                icon: Icons.work,
+                valueColor: _getRoleColor(user.role),
+              ),
+              _EditableDetailRow(
+                label: 'Phone Number',
+                controller: _phoneNumberController,
+                icon: Icons.phone,
+                enabled: !_isSaving,
+                keyboardType: TextInputType.phone,
+              ),
+              _EditableDetailRow(
+                label: 'Location',
+                controller: _locationController,
+                icon: Icons.location_on,
+                enabled: !_isSaving,
+              ),
+            ] else ...[
+              _DetailRow(
+                label: 'Full Name',
+                value: user.fullName,
+                icon: Icons.person,
+              ),
+              _DetailRow(
+                label: 'Email Address',
+                value: user.email,
+                icon: Icons.email,
+              ),
+              _DetailRow(
+                label: 'User Role',
+                value: _getRoleDisplayName(user.role),
+                icon: Icons.work,
+                valueColor: _getRoleColor(user.role),
+              ),
+              if (user.phoneNumber != null && user.phoneNumber!.isNotEmpty)
+                _DetailRow(
+                  label: 'Phone Number',
+                  value: user.phoneNumber!,
+                  icon: Icons.phone,
+                ),
+              _DetailRow(
+                label: 'Location',
+                value: user.location.isNotEmpty ? user.location : 'Not specified',
+                icon: Icons.location_on,
+              ),
+            ],
+            // Age field
+            if (user.age != null)
+              _DetailRow(
+                label: 'Age',
+                value: user.age.toString(),
+                icon: Icons.cake,
+              ),
+            // Gender field
+            if (user.gender != null && user.gender!.isNotEmpty)
+              _DetailRow(
+                label: 'Gender',
+                value: user.gender![0].toUpperCase() + user.gender!.substring(1).toLowerCase(),
+                icon: Icons.person,
+              ),
+            // Email Verified
             _DetailRow(
-              label: 'Location',
-              value: user.location.isNotEmpty ? user.location : 'Not specified',
-              icon: Icons.location_on,
+              label: 'Email Verified',
+              value: user.emailVerified ? 'Yes' : 'No',
+              icon: Icons.verified,
+              valueColor: user.emailVerified ? Colors.green : Colors.orange,
             ),
+            // Coordinates (if available)
+            if (user.latitude != null && user.longitude != null)
+              _DetailRow(
+                label: 'Coordinates',
+                value: '${user.latitude!.toStringAsFixed(6)}, ${user.longitude!.toStringAsFixed(6)}',
+                icon: Icons.map,
+              ),
             _DetailRow(
               label: 'Account Created',
               value: _formatDateTime(user.createdAt),
@@ -543,6 +899,12 @@ class UserDetailPage extends StatelessWidget {
               value: user.profileCompleted ? 'Yes' : 'No',
               icon: Icons.check_circle,
               valueColor: user.profileCompleted ? Colors.green : Colors.orange,
+            ),
+            _DetailRow(
+              label: 'Accepted Terms',
+              value: user.acceptedTerms ? 'Yes' : 'No',
+              icon: Icons.description,
+              valueColor: user.acceptedTerms ? Colors.green : Colors.grey,
             ),
           ],
         ),
@@ -574,28 +936,176 @@ class UserDetailPage extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            if (user.professionalSummary.isNotEmpty)
-              _DetailSection(
+            if (_isEditing) ...[
+              _EditableDetailSection(
                 label: 'Professional Summary',
-                value: user.professionalSummary,
+                controller: _professionalSummaryController,
                 icon: Icons.description,
+                enabled: !_isSaving,
+                maxLines: 5,
               ),
-            if (user.workExperience.isNotEmpty)
-              _DetailSection(
+              _EditableDetailSection(
+                label: 'Professional Profile',
+                controller: _professionalProfileController,
+                icon: Icons.description,
+                enabled: !_isSaving,
+                maxLines: 5,
+              ),
+              _EditableDetailSection(
                 label: 'Work Experience',
-                value: user.workExperience,
+                controller: _workExperienceController,
                 icon: Icons.business_center,
+                enabled: !_isSaving,
+                maxLines: 5,
               ),
-            if (user.seeking.isNotEmpty)
-              _DetailSection(
+              _EditableDetailSection(
                 label: 'Currently Seeking',
-                value: user.seeking,
+                controller: _seekingController,
                 icon: Icons.search,
+                enabled: !_isSaving,
+                maxLines: 3,
               ),
+            ] else ...[
+              if (user.professionalSummary.isNotEmpty)
+                _DetailSection(
+                  label: 'Professional Summary',
+                  value: user.professionalSummary,
+                  icon: Icons.description,
+                ),
+              if (user.professionalProfile.isNotEmpty)
+                _DetailSection(
+                  label: 'Professional Profile',
+                  value: user.professionalProfile,
+                  icon: Icons.description,
+                ),
+              if (user.workExperience.isNotEmpty)
+                _DetailSection(
+                  label: 'Work Experience',
+                  value: user.workExperience,
+                  icon: Icons.business_center,
+                ),
+              if (user.seeking.isNotEmpty)
+                _DetailSection(
+                  label: 'Currently Seeking',
+                  value: user.seeking,
+                  icon: Icons.search,
+                ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildTagsCard() {
+    if (user.tags == null || user.tags!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.label_outline, color: Colors.purple[700]),
+                const SizedBox(width: 8),
+                Text(
+                  'Tags & Skills',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.purple[700],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            ...user.tags!.entries.map((entry) {
+              final categoryId = entry.key;
+              final tagsList = entry.value;
+              
+              // Skip if not a list
+              if (tagsList is! List) {
+                return const SizedBox.shrink();
+              }
+              
+              // Get category name (try to infer from tag content)
+              String categoryName = _getTagCategoryName(categoryId, tagsList);
+              
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      categoryName,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: tagsList.map((tag) {
+                        if (tag is! String) return const SizedBox.shrink();
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.purple[50],
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.purple[200]!),
+                          ),
+                          child: Text(
+                            tag,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.purple[700],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getTagCategoryName(String categoryId, List<dynamic> tagsList) {
+    // Try to infer category name from tag content
+    if (tagsList.isEmpty) return 'Tags';
+    
+    // Check first few tags to infer category
+    final firstTags = tagsList.take(3).join(' ').toLowerCase();
+    
+    if (firstTags.contains('license') || firstTags.contains('vaccinated') || 
+        firstTags.contains('transport') || firstTags.contains('passport')) {
+      return 'Qualifications & Certifications';
+    }
+    if (firstTags.contains('confident') || firstTags.contains('friendly') || 
+        firstTags.contains('leadership') || firstTags.contains('polite')) {
+      return 'Personal Traits';
+    }
+    if (firstTags.contains('service') || firstTags.contains('support') || 
+        firstTags.contains('learner') || firstTags.contains('teamwork')) {
+      return 'Skills';
+    }
+    
+    // Default fallback
+    return 'Tags';
   }
 
   Widget _buildActionsCard(BuildContext context, UserService userService, Color statusColor, String statusText) {
@@ -1587,6 +2097,142 @@ class ActionButton extends StatelessWidget {
       child: Text(
         text,
         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+      ),
+    );
+  }
+}
+
+// Editable Detail Row Widget
+class _EditableDetailRow extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+  final IconData icon;
+  final bool enabled;
+  final TextInputType? keyboardType;
+
+  const _EditableDetailRow({
+    required this.label,
+    required this.controller,
+    required this.icon,
+    this.enabled = true,
+    this.keyboardType,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              icon,
+              size: 18,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: controller,
+                  enabled: enabled,
+                  keyboardType: keyboardType,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    isDense: true,
+                  ),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Editable Detail Section Widget
+class _EditableDetailSection extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+  final IconData icon;
+  final bool enabled;
+  final int maxLines;
+
+  const _EditableDetailSection({
+    required this.label,
+    required this.controller,
+    required this.icon,
+    this.enabled = true,
+    this.maxLines = 3,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: Colors.grey[600]),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: controller,
+            enabled: enabled,
+            maxLines: maxLines,
+            decoration: InputDecoration(
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              contentPadding: const EdgeInsets.all(12),
+            ),
+            style: const TextStyle(
+              fontSize: 14,
+              color: Colors.black87,
+            ),
+          ),
+        ],
       ),
     );
   }

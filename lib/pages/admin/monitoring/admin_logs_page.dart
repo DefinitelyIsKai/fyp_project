@@ -16,57 +16,24 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
   DateTime? _startDate;
   DateTime? _endDate;
   bool _isFiltersExpanded = true;
-  List<String> _availableActionTypes = [];
-  bool _isLoadingActionTypes = true;
+  
+  // Fixed list of available action types
+  final List<String> _availableActionTypes = [
+    'add_credit',
+    'deduct_credit',
+    'reward_distribution',
+    'post_approved',
+    'post_rejected',
+    'user_deleted',
+    'user_reactivated',
+    'user_suspended',
+    'user_unsuspended',
+    'warning_issued',
+  ];
 
   @override
   void initState() {
     super.initState();
-    _loadActionTypes();
-  }
-
-  Future<void> _loadActionTypes() async {
-    setState(() {
-      _isLoadingActionTypes = true;
-    });
-    
-    try {
-      final logsSnapshot = await FirebaseFirestore.instance
-          .collection('logs')
-          .get();
-      
-      debugPrint('Total logs found: ${logsSnapshot.docs.length}');
-      
-      final actionTypes = <String>{};
-      for (var doc in logsSnapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>?;
-        if (data == null) continue;
-        
-        final actionType = data['actionType'] as String?;
-        debugPrint('Found actionType: $actionType');
-        
-        if (actionType != null && actionType.isNotEmpty) {
-          actionTypes.add(actionType);
-        }
-      }
-      
-      final sortedActionTypes = actionTypes.toList()..sort();
-      debugPrint('Unique action types: $sortedActionTypes');
-      
-      if (mounted) {
-        setState(() {
-          _availableActionTypes = sortedActionTypes;
-          _isLoadingActionTypes = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading action types: $e');
-      if (mounted) {
-        setState(() {
-          _isLoadingActionTypes = false;
-        });
-      }
-    }
   }
 
   @override
@@ -87,7 +54,6 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
-              _loadActionTypes();
               setState(() {});
             },
             tooltip: 'Refresh',
@@ -356,7 +322,7 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
     final userId = data['userId'] as String? ?? data['ownerId'] as String? ?? '';
     final userName = data['userName'] as String? ?? '';
     final createdAt = data['createdAt'] as Timestamp?;
-    final reason = data['reason'] as String? ?? data['rejectionReason'] as String? ?? data['violationReason'] as String? ?? '';
+    final reason = data['description'] as String? ?? data['reason'] as String? ?? data['rejectionReason'] as String? ?? data['violationReason'] as String? ?? '';
     final createdBy = data['createdBy'] as String? ?? '';
     // Post-related fields
     final postTitle = data['postTitle'] as String? ?? '';
@@ -777,7 +743,7 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
         };
       case 'reward_distribution':
         return {
-          'name': 'Reward Distribution',
+          'name': 'Monthly Reward',
           'icon': Icons.card_giftcard,
           'color': Colors.purple,
         };
@@ -795,13 +761,13 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
         };
       case 'post_approved':
         return {
-          'name': 'Post Approved',
+          'name': 'Post Approval',
           'icon': Icons.check_circle_outline,
           'color': Colors.green,
         };
       case 'post_rejected':
         return {
-          'name': 'Post Rejected',
+          'name': 'Post Reject',
           'icon': Icons.cancel_outlined,
           'color': Colors.red,
         };
@@ -849,7 +815,7 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
         };
       case 'warning_issued':
         return {
-          'name': 'Warning Issued',
+          'name': 'Issue Warning',
           'icon': Icons.warning_amber_rounded,
           'color': Colors.orange,
         };
@@ -945,95 +911,47 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
   }
 
   void _showTypeFilter() async {
-    // Reload action types when opening the filter if empty
-    if (_availableActionTypes.isEmpty && !_isLoadingActionTypes) {
-      await _loadActionTypes();
-    }
-    
     if (!mounted) return;
     
     showModalBottomSheet(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) {
-          // Reload if still loading
-          if (_isLoadingActionTypes) {
-            _loadActionTypes().then((_) {
-              if (mounted) {
-                setModalState(() {});
-              }
-            });
-          }
-          
-          return Container(
-            padding: const EdgeInsets.all(20),
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height * 0.7,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.7,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Select Action Type',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Select Action Type',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: _isLoadingActionTypes
-                      ? const Center(child: CircularProgressIndicator())
-                      : _availableActionTypes.isEmpty
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.info_outline, size: 48, color: Colors.grey[400]),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    'No action types found',
-                                    style: TextStyle(
-                                      color: Colors.grey[600],
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  TextButton.icon(
-                                    onPressed: () async {
-                                      await _loadActionTypes();
-                                      if (mounted) {
-                                        setModalState(() {});
-                                      }
-                                    },
-                                    icon: const Icon(Icons.refresh, size: 16),
-                                    label: const Text('Retry'),
-                                  ),
-                                ],
-                              ),
-                            )
-                          : ListView(
-                              children: [
-                                ListTile(
-                                  title: const Text('All Actions'),
-                                  trailing: _selectedFilter == 'all'
-                                      ? const Icon(Icons.check, color: Colors.blue)
-                                      : null,
-                                  onTap: () {
-                                    setState(() => _selectedFilter = 'all');
-                                    Navigator.pop(context);
-                                  },
-                                ),
-                                ..._availableActionTypes.map((actionType) {
-                                  return _buildTypeFilterItem(
-                                    actionType,
-                                    _getActionDisplayName(actionType),
-                                  );
-                                }),
-                              ],
-                            ),
-                ),
-              ],
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView(
+                children: [
+                  ListTile(
+                    title: const Text('All Actions'),
+                    trailing: _selectedFilter == 'all'
+                        ? const Icon(Icons.check, color: Colors.blue)
+                        : null,
+                    onTap: () {
+                      setState(() => _selectedFilter = 'all');
+                      Navigator.pop(context);
+                    },
+                  ),
+                  ..._availableActionTypes.map((actionType) {
+                    return _buildTypeFilterItem(
+                      actionType,
+                      _getActionDisplayName(actionType),
+                    );
+                  }),
+                ],
+              ),
             ),
-          );
-        },
+          ],
+        ),
       ),
     );
   }
@@ -1095,29 +1013,19 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
       case 'deduct_credit':
         return 'Deduct Credit';
       case 'reward_distribution':
-        return 'Reward Distribution';
-      case 'user_management':
-        return 'User Management';
-      case 'post_management':
-        return 'Post Management';
+        return 'Monthly Reward';
       case 'post_approved':
-        return 'Post Approved';
+        return 'Post Approval';
       case 'post_rejected':
-        return 'Post Rejected';
-      case 'post_completed':
-        return 'Post Completed';
-      case 'post_reopened':
-        return 'Post Reopened';
-      case 'post_deleted':
-        return 'Post Deleted';
-      case 'user_suspended':
-        return 'User Suspended';
-      case 'user_unsuspended':
-        return 'User Unsuspended';
+        return 'Post Reject';
       case 'user_deleted':
         return 'Delete User';
       case 'user_reactivated':
         return 'Reactivate User';
+      case 'user_suspended':
+        return 'User Suspended';
+      case 'user_unsuspended':
+        return 'User Unsuspended';
       case 'warning_issued':
         return 'Issue Warning';
       default:

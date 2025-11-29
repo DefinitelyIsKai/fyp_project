@@ -8,6 +8,8 @@ class AuthService extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final RoleService _roleService = RoleService();
+  final CollectionReference<Map<String, dynamic>> _logsRef = 
+      FirebaseFirestore.instance.collection('logs');
 
   AdminModel? _currentAdmin;
   bool _isAuthenticated = false;
@@ -24,10 +26,25 @@ class AuthService extends ChangeNotifier {
   /// If originalUserPassword is provided, the original user's session will be restored.
   /// If not provided, the user will need to log in again.
   /// --------------------
-  Future<RegisterResult> register(String name, String email, String password, {required String role, String? originalUserPassword}) async{
+  Future<RegisterResult> register(
+    String name,
+    String email,
+    String password, {
+    required String role,
+    String? originalUserPassword,
+    String? location,
+    int? age,
+    String? phoneNumber,
+    String? gender,
+    String? imageBase64,
+    String? imageFileType,
+  }) async {
     // Store the current user's info before creating new user
     final originalUser = _auth.currentUser;
     final originalUserEmail = originalUser?.email;
+    final originalAdminId = originalUser?.uid;
+    final originalAdminName = _currentAdmin?.name ?? 'Unknown Admin';
+    
     
     // CRITICAL: Validate original user password BEFORE creating new user
     // This prevents creating a user if password is wrong
@@ -97,7 +114,7 @@ class AuthService extends ChangeNotifier {
       // Create user document in Firestore
       // Store role in lowercase for consistency
       try {
-        await _firestore.collection('users').doc(newUserUid).set({
+        final userData = <String, dynamic>{
           'email': email.trim().toLowerCase(),
           'fullName': name,
           'role': normalizedRole, // Store in lowercase for consistency
@@ -105,9 +122,51 @@ class AuthService extends ChangeNotifier {
           'createdAt': FieldValue.serverTimestamp(),
           'isActive': true,
           'status': 'Active',
-        });
+        };
+        
+        // Add optional fields if provided
+        if (location != null && location.isNotEmpty) {
+          userData['location'] = location;
+        }
+        if (age != null) {
+          userData['age'] = age;
+        }
+        if (phoneNumber != null && phoneNumber.isNotEmpty) {
+          userData['phoneNumber'] = phoneNumber;
+        }
+        if (gender != null && gender.isNotEmpty) {
+          userData['gender'] = gender;
+        }
+        if (imageBase64 != null && imageBase64.isNotEmpty && imageFileType != null) {
+          userData['image'] = {
+            'base64': imageBase64,
+            'fileType': imageFileType,
+            'uploadedAt': FieldValue.serverTimestamp(),
+          };
+        }
+        
+        await _firestore.collection('users').doc(newUserUid).set(userData);
         
         debugPrint('User document created with role: $normalizedRole, permissions: $permissions');
+        
+        // Create log entry for admin user creation
+        // Note: We use the original admin info saved before creating the new user
+        // because at this point, the current user is already the newly created user
+        try {
+          await _logsRef.add({
+            'actionType': 'admin_created',
+            'newAdminId': newUserUid,
+            'newAdminName': name,
+            'newAdminEmail': email.trim().toLowerCase(),
+            'newAdminRole': normalizedRole,
+            'createdAt': FieldValue.serverTimestamp(),
+            'createdBy': originalAdminId,
+            'createdByName': originalAdminName,
+          });
+        } catch (logError) {
+          debugPrint('Error creating admin creation log entry: $logError');
+          // Don't fail the operation if logging fails
+        }
       } catch (firestoreError) {
         // If Firestore creation fails, delete the Firebase Auth user to prevent orphaned accounts
         debugPrint('Error creating user document in Firestore: $firestoreError');
@@ -122,29 +181,52 @@ class AuthService extends ChangeNotifier {
         throw firestoreError;
       }
 
-      // Sign out the newly created user immediately
-      // (since createUserWithEmailAndPassword automatically signed them in)
-      try {
-        await _auth.signOut();
-      } catch (signOutError) {
-        debugPrint('Error signing out new user: $signOutError');
-        // Continue anyway - we'll try to restore session
+      // CRITICAL: Firebase Auth's createUserWithEmailAndPassword automatically signs in the new user
+      // We need to sign out the new user and restore the original user's session
+      // The key is to ALWAYS sign out the new user, then restore the original user's session
+      
+      // Check if we're currently logged in as the new user (we should be)
+      final currentUserAfterCreation = _auth.currentUser;
+      if (currentUserAfterCreation != null && currentUserAfterCreation.uid == newUserUid) {
+        // Yes, we're logged in as the new user - MUST sign out
+        try {
+          await _auth.signOut();
+          debugPrint('Signed out newly created user');
+        } catch (signOutError) {
+          debugPrint('Error signing out new user: $signOutError');
+        }
+      } else if (currentUserAfterCreation != null) {
+        // We're logged in as someone else - this could be the original user
+        // But we should still sign out to be safe, then restore
+        debugPrint('Warning: Current user is not the newly created user. Current: ${currentUserAfterCreation.email}, New: $email');
+        try {
+          await _auth.signOut();
+          debugPrint('Signed out current user to ensure clean state');
+        } catch (signOutError) {
+          debugPrint('Error signing out current user: $signOutError');
+        }
       }
       
-      // Clear state before restoring session to prevent listener issues
-      _currentAdmin = null;
-      _isAuthenticated = false;
-      notifyListeners();
-      
       // Small delay to ensure sign out completes
-      await Future.delayed(const Duration(milliseconds: 200));
+      await Future.delayed(const Duration(milliseconds: 400));
       
-      // Try to restore the original user's session if password is provided
-      // Password was already validated above, so this should succeed
-      if (originalUserEmail != null && originalUserPassword != null && originalUserPassword.isNotEmpty) {
+      // Verify we're signed out
+      final userAfterSignOut = _auth.currentUser;
+      if (userAfterSignOut != null) {
+        debugPrint('Warning: Still logged in after signOut. Current user: ${userAfterSignOut.email}');
+        // Force sign out again
         try {
-          // Sign back in as the original user using the login method
-          // This will properly restore the admin state
+          await _auth.signOut();
+          await Future.delayed(const Duration(milliseconds: 200));
+        } catch (e) {
+          debugPrint('Error in second signOut attempt: $e');
+        }
+      }
+      
+      // Now try to restore the original user's session
+      if (originalUserEmail != null && originalUserPassword != null && originalUserPassword.isNotEmpty) {
+        // Password provided - use it to restore session
+        try {
           final loginResult = await login(originalUserEmail, originalUserPassword).timeout(
             const Duration(seconds: 10),
             onTimeout: () {
@@ -155,20 +237,41 @@ class AuthService extends ChangeNotifier {
           
           if (loginResult.success) {
             debugPrint('Original user session restored: $originalUserEmail');
-            
-            // Small delay to ensure session is fully established
             await Future.delayed(const Duration(milliseconds: 300));
             
-            return RegisterResult(
-              success: true,
-              requiresReauth: false,
-              message: 'Admin user "$name" created successfully.',
-              originalUserEmail: originalUserEmail,
-            );
+            // Verify we're logged in as the original user
+            final restoredUser = _auth.currentUser;
+            if (restoredUser != null && restoredUser.email == originalUserEmail) {
+              return RegisterResult(
+                success: true,
+                requiresReauth: false,
+                message: 'Admin user "$name" created successfully.',
+                originalUserEmail: originalUserEmail,
+              );
+            } else {
+              debugPrint('ERROR: Restored user is not the original user! Current: ${restoredUser?.email}');
+              // Force sign out and clear state
+              try {
+                await _auth.signOut();
+              } catch (e) {
+                debugPrint('Error signing out wrong user: $e');
+              }
+              _currentAdmin = null;
+              _isAuthenticated = false;
+              notifyListeners();
+              
+              return RegisterResult(
+                success: true,
+                requiresReauth: true,
+                message: 'Admin user "$name" created successfully.\n\nSession restoration failed. Please log in again.',
+                originalUserEmail: originalUserEmail,
+              );
+            }
           } else {
             debugPrint('Failed to restore original user session: ${loginResult.error}');
-            // This shouldn't happen since we validated the password, but handle it gracefully
-            // State is already cleared above
+            _currentAdmin = null;
+            _isAuthenticated = false;
+            notifyListeners();
             
             return RegisterResult(
               success: true,
@@ -179,7 +282,9 @@ class AuthService extends ChangeNotifier {
           }
         } catch (e) {
           debugPrint('Failed to restore original user session: $e');
-          // State is already cleared above
+          _currentAdmin = null;
+          _isAuthenticated = false;
+          notifyListeners();
           
           return RegisterResult(
             success: true,
@@ -188,23 +293,49 @@ class AuthService extends ChangeNotifier {
             originalUserEmail: originalUserEmail,
           );
         }
+      } else {
+        // No password provided - cannot restore session automatically
+        // We've already signed out, so we're logged out
+        debugPrint('New admin user created: $email (UID: $newUserUid)');
+        debugPrint('Original user was: $originalUserEmail');
+        debugPrint('No password provided - cannot restore session automatically');
+        
+        // Verify we're signed out (not logged in as the new user)
+        final finalCheck = _auth.currentUser;
+        if (finalCheck != null) {
+          // Still logged in - this shouldn't happen, but if it does, sign out
+          debugPrint('ERROR: Still logged in after signOut! Current user: ${finalCheck.email}');
+          if (finalCheck.uid == newUserUid) {
+            debugPrint('ERROR: Still logged in as the new user! Force signing out...');
+            try {
+              await _auth.signOut();
+              await Future.delayed(const Duration(milliseconds: 200));
+            } catch (e) {
+              debugPrint('Error force signing out: $e');
+            }
+          }
+        }
+        
+        // Clear state since we can't restore
+        _currentAdmin = null;
+        _isAuthenticated = false;
+        notifyListeners();
+        
+        if (originalUserEmail != null) {
+          return RegisterResult(
+            success: true,
+            requiresReauth: true,
+            message: 'Admin user "$name" created successfully.\n\nPlease log in again to continue.',
+            originalUserEmail: originalUserEmail,
+          );
+        }
+        
+        return RegisterResult(
+          success: true,
+          requiresReauth: false,
+          message: 'Admin user "$name" created successfully.',
+        );
       }
-      
-      // If we couldn't restore the session, clear the admin state
-      _currentAdmin = null;
-      _isAuthenticated = false;
-      notifyListeners();
-      
-      debugPrint('New admin user created: $email (UID: $newUserUid)');
-      debugPrint('Original user was: $originalUserEmail');
-      debugPrint('Note: Current session has been signed out. User needs to log in again.');
-      
-      return RegisterResult(
-        success: true,
-        requiresReauth: true,
-        message: 'Admin user "$name" created successfully.\n\nYou have been signed out. Please log in again to continue.',
-        originalUserEmail: originalUserEmail,
-      );
     } on FirebaseAuthException catch (e) {
       debugPrint('FirebaseAuth register error: ${e.code}');
       String errorMessage = 'Failed to create admin user.';
@@ -229,6 +360,7 @@ class AuthService extends ChangeNotifier {
       );
     }
   }
+
 
   /// --------------------
   /// Login User

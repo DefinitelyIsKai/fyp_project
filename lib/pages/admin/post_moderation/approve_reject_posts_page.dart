@@ -36,17 +36,81 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   // Track processing posts to prevent rapid clicks
   final Set<String> _processingPostIds = {};
   
+  // Global loading state to prevent all interactions
+  bool _isProcessingGlobal = false;
+  
   // Debounce timer for search
   Timer? _searchDebounce;
   
   // Throttle timer for stream updates
   Timer? _streamThrottle;
   List<JobPostModel>? _pendingPostsUpdate;
+  
+  // Stream subscription for manual refresh
+  StreamSubscription<List<JobPostModel>>? _postsSubscription;
+  final StreamController<List<JobPostModel>> _postsStreamController = StreamController<List<JobPostModel>>.broadcast();
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(_onSearchChanged);
+    _initializeStream();
+  }
+  
+  void _initializeStream() {
+    // Subscribe to the posts stream and forward to our controller
+    _postsSubscription = _postService.streamAllPosts().listen(
+      (posts) {
+        _postsStreamController.add(posts);
+      },
+      onError: (error) {
+        debugPrint('Error in posts stream: $error');
+      },
+    );
+  }
+  
+  // Immediately update UI and refresh from Firestore
+  void _immediatelyRefreshPost(JobPostModel post) {
+    if (!mounted) return;
+    
+    // Remove post immediately from all lists so it disappears instantly
+    setState(() {
+      _allPosts.removeWhere((p) => p.id == post.id);
+      _pendingPosts.removeWhere((p) => p.id == post.id);
+      _activePosts.removeWhere((p) => p.id == post.id);
+      _completedPosts.removeWhere((p) => p.id == post.id);
+      _rejectedPosts.removeWhere((p) => p.id == post.id);
+    });
+    
+    // Immediately fetch latest posts from Firestore (no delay)
+    FirebaseFirestore.instance
+        .collection('posts')
+        .get()
+        .then((snapshot) {
+          if (!mounted || _postsStreamController.isClosed) return;
+          
+          final posts = snapshot.docs
+              .map((doc) => JobPostModel.fromFirestore(doc))
+              .toList();
+          
+          // Trigger immediate stream update
+          _postsStreamController.add(posts);
+        })
+        .catchError((e) {
+          debugPrint('Error refreshing posts from Firestore: $e');
+        });
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _streamThrottle?.cancel();
+    _postsSubscription?.cancel();
+    _postsStreamController.close();
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    _tabPageController.dispose();
+    super.dispose();
   }
   
   void _onSearchChanged() {
@@ -59,18 +123,8 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
     });
   }
 
-  @override
-  void dispose() {
-    _searchDebounce?.cancel();
-    _streamThrottle?.cancel();
-    _searchController.removeListener(_onSearchChanged);
-    _searchController.dispose();
-    _tabPageController.dispose();
-    super.dispose();
-  }
-
   void _switchTab(int index) {
-    if (!mounted || _currentTabIndex == index) return;
+    if (!mounted || _currentTabIndex == index || _isProcessingGlobal) return;
     setState(() => _currentTabIndex = index);
     if (_tabPageController.hasClients) {
       _tabPageController.animateToPage(
@@ -86,11 +140,12 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   }
 
   Future<void> _approvePost(JobPostModel post) async {
-    // Prevent multiple clicks on the same post
-    if (_processingPostIds.contains(post.id)) return;
+    // Prevent multiple clicks on the same post or if already processing globally
+    if (_processingPostIds.contains(post.id) || _isProcessingGlobal) return;
     
     setState(() {
       _processingPostIds.add(post.id);
+      _isProcessingGlobal = true;
     });
     
     try {
@@ -133,6 +188,10 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
       }
       
       if (!mounted) return;
+      
+      // Immediately remove post and refresh from Firestore
+      _immediatelyRefreshPost(post);
+      
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Post approved and now active'), backgroundColor: Colors.green),
       );
@@ -145,14 +204,15 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
       if (mounted) {
         setState(() {
           _processingPostIds.remove(post.id);
+          _isProcessingGlobal = false;
         });
       }
     }
   }
 
   Future<void> _rejectPost(JobPostModel post) async {
-    // Prevent multiple clicks on the same post
-    if (_processingPostIds.contains(post.id)) return;
+    // Prevent multiple clicks on the same post or if already processing globally
+    if (_processingPostIds.contains(post.id) || _isProcessingGlobal) return;
     
     final reason = await showDialog<String>(
       context: context,
@@ -162,6 +222,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
     if (reason != null && reason.isNotEmpty) {
       setState(() {
         _processingPostIds.add(post.id);
+        _isProcessingGlobal = true;
       });
       
       try {
@@ -205,6 +266,10 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
         }
         
         if (!mounted) return;
+        
+        // Immediately remove post and refresh from Firestore
+        _immediatelyRefreshPost(post);
+        
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Post rejected'), backgroundColor: Colors.orange),
         );
@@ -217,6 +282,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
         if (mounted) {
           setState(() {
             _processingPostIds.remove(post.id);
+            _isProcessingGlobal = false;
           });
         }
       }
@@ -225,8 +291,8 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
 
 
   void _viewPost(JobPostModel post) {
-    // Prevent multiple navigation pushes
-    if (!mounted) return;
+    // Prevent multiple navigation pushes or navigation during processing
+    if (!mounted || _isProcessingGlobal) return;
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => PostDetailPage(post: post)),
@@ -256,7 +322,8 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
     _pendingPostsUpdate = nonDraftPosts;
     
     _streamThrottle?.cancel();
-    _streamThrottle = Timer(const Duration(milliseconds: 200), () {
+    // Minimal throttle delay for faster updates
+    _streamThrottle = Timer(const Duration(milliseconds: 50), () {
       if (!mounted || _pendingPostsUpdate == null) return;
       
       final postsToProcess = _pendingPostsUpdate!;
@@ -265,20 +332,40 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
       // Batch fetch user names for all unique owner IDs (async, non-blocking)
       _batchFetchUserNames(postsToProcess);
       
-      // Use addPostFrameCallback to batch UI updates
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        
-        // Simple length check first 
-        if (_allPosts.length == postsToProcess.length && !_isLoading) {
-          if (_allPosts.isNotEmpty && postsToProcess.isNotEmpty) {
-            if (_allPosts.first.id == postsToProcess.first.id &&
-                _allPosts.last.id == postsToProcess.last.id) {
-              return;
+      // Update immediately without waiting for postFrameCallback for faster response
+      if (!mounted) return;
+      
+      // Check if data actually changed to avoid unnecessary rebuilds
+      bool hasChanged = false;
+      if (_allPosts.length != postsToProcess.length) {
+        hasChanged = true;
+      } else if (_allPosts.isNotEmpty && postsToProcess.isNotEmpty) {
+        // Check if first or last post changed (quick check)
+        if (_allPosts.first.id != postsToProcess.first.id ||
+            _allPosts.last.id != postsToProcess.last.id) {
+          hasChanged = true;
+        } else {
+          // Check a few more posts in the middle for accuracy
+          final checkIndices = [
+            _allPosts.length ~/ 4,
+            _allPosts.length ~/ 2,
+            (3 * _allPosts.length) ~/ 4,
+          ];
+          for (final idx in checkIndices) {
+            if (idx < _allPosts.length && idx < postsToProcess.length) {
+              if (_allPosts[idx].id != postsToProcess[idx].id ||
+                  _allPosts[idx].status != postsToProcess[idx].status) {
+                hasChanged = true;
+                break;
+              }
             }
           }
         }
-        
+      } else {
+        hasChanged = true;
+      }
+      
+      if (hasChanged) {
         setState(() {
           _allPosts = postsToProcess;
           _pendingPosts = _allPosts.where((p) => p.status == 'pending').toList()
@@ -291,7 +378,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
             ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
           _isLoading = false;
         });
-      });
+      }
     });
   }
   
@@ -353,20 +440,25 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Job Post Management',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-        ),
-        backgroundColor: AppColors.primaryDark,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: Column(
+    return PopScope(
+      canPop: !_isProcessingGlobal,
+      child: Stack(
+        children: [
+          Scaffold(
+            appBar: AppBar(
+              title: const Text(
+                'Job Post Management',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+              backgroundColor: AppColors.primaryDark,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              automaticallyImplyLeading: true,
+            ),
+            body: Column(
         children: [
           // Search bar
           Container(
@@ -383,6 +475,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
             ),
             child: TextField(
               controller: _searchController,
+              enabled: !_isProcessingGlobal,
               decoration: InputDecoration(
                 hintText: 'Search job posts by title, description, or author...',
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
@@ -446,7 +539,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
           // Stream posts and swipable content area
           Expanded(
             child: StreamBuilder<List<JobPostModel>>(
-              stream: _postService.streamAllPosts(),
+              stream: _postsStreamController.stream,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting && _isLoading) {
                   return const Center(
@@ -494,6 +587,9 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                 return PageView(
                   controller: _tabPageController,
                   onPageChanged: _onPageChanged,
+                  physics: _isProcessingGlobal 
+                      ? const NeverScrollableScrollPhysics() 
+                      : const PageScrollPhysics(),
                   children: [
                     // Pending Tab
                     _PostsList(
@@ -548,6 +644,66 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
               },
             ),
           ),
+          ],
+          ),
+          ),
+          // Loading overlay to block all interactions (covers entire screen including AppBar)
+          if (_isProcessingGlobal)
+            Positioned.fill(
+              child: AbsorbPointer(
+                child: Container(
+                  color: Colors.black.withOpacity(0.5),
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CircularProgressIndicator(),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Processing...',
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                              fontFamily: 'Roboto',
+                              color: Color(0xFF1A1A1A),
+                              letterSpacing: 0.5,
+                              decoration: TextDecoration.none,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Please wait while we update the post',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontFamily: 'Roboto',
+                              color: Colors.grey[700],
+                              letterSpacing: 0.2,
+                              decoration: TextDecoration.none,
+                              fontWeight: FontWeight.w400,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -639,7 +795,7 @@ class _RejectPostDialogState extends State<_RejectPostDialog> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Reject Job Post',
+                          'Disable Job Post',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
@@ -837,7 +993,7 @@ class _RejectPostDialogState extends State<_RejectPostDialog> {
                         children: [
                           Icon(Icons.close, size: 18),
                           SizedBox(width: 8),
-                          Text('Reject Post'),
+                          Text('Disable Post'),
                         ],
                       ),
                     ),
@@ -1388,7 +1544,7 @@ class _PostCard extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
                     : const Icon(Icons.close, size: 18),
-                label: Text(isProcessing ? 'Processing...' : 'Reject'),
+                label: Text(isProcessing ? 'Processing...' : 'Disable'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
                   foregroundColor: Colors.white,

@@ -6,6 +6,9 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 
 class ContentAnalyticsPage extends StatefulWidget {
@@ -507,6 +510,460 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
     }
   }
 
+  Future<void> _sharePDF() async {
+    if (_analytics == null) return;
+
+    try {
+      final pdf = pw.Document();
+      final analytics = _analytics!;
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(40),
+          build: (pw.Context context) {
+            return [
+              // Header
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'Content Analytics Report',
+                    style: pw.TextStyle(
+                      fontSize: 20,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.blue700,
+                    ),
+                  ),
+                  pw.Text(
+                    DateFormat('dd MMM yyyy HH:mm').format(DateTime.now()),
+                    style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 15),
+
+              // Date Range
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                  borderRadius: pw.BorderRadius.circular(6),
+                ),
+                child: pw.Row(
+                  children: [
+                    pw.Text(
+                      'Period: ',
+                      style: pw.TextStyle(
+                        fontSize: 12,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.Text(
+                      '${_formatDateTime(_startDate)} - ${_formatDateTime(_endDate)}',
+                      style: pw.TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+
+              // Overview Statistics
+              pw.Text(
+                'Overview Statistics',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey400,
+                  width: 0.5,
+                ),
+                cellAlignment: pw.Alignment.centerLeft,
+                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                headerStyle: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                cellStyle: pw.TextStyle(fontSize: 9),
+                rowDecoration: pw.BoxDecoration(
+                  border: pw.Border(
+                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  ),
+                ),
+                headers: ['Metric', 'All Time', 'Selected Period'],
+                data: [
+                  [
+                    'Total Posts',
+                    analytics['totalPosts'].toString(),
+                    analytics['postsInPeriod'].toString(),
+                  ],
+                  [
+                    'Pending',
+                    analytics['pending'].toString(),
+                    analytics['pendingInPeriod'].toString(),
+                  ],
+                  [
+                    'Active',
+                    analytics['active'].toString(),
+                    analytics['activeInPeriod'].toString(),
+                  ],
+                  [
+                    'Completed',
+                    analytics['completed'].toString(),
+                    analytics['completedInPeriod'].toString(),
+                  ],
+                  [
+                    'Rejected',
+                    analytics['rejected'].toString(),
+                    analytics['rejectedInPeriod'].toString(),
+                  ],
+                  [
+                    'Approval Rate',
+                    '${(analytics['approvalRate'] as double).toStringAsFixed(1)}%',
+                    () {
+                      final activeInPeriod = analytics['activeInPeriod'] as int;
+                      final completedInPeriod = analytics['completedInPeriod'] as int;
+                      final rejectedInPeriod = analytics['rejectedInPeriod'] as int;
+                      final approvedInPeriod = activeInPeriod + completedInPeriod;
+                      final totalProcessedInPeriod = approvedInPeriod + rejectedInPeriod;
+                      if (totalProcessedInPeriod > 0) {
+                        final rate = (approvedInPeriod / totalProcessedInPeriod) * 100;
+                        return '${rate.toStringAsFixed(1)}%';
+                      }
+                      return '0.0%';
+                    }(),
+                  ],
+                  [
+                    'Rejection Rate',
+                    '${(analytics['rejectionRate'] as double).toStringAsFixed(1)}%',
+                    () {
+                      final activeInPeriod = analytics['activeInPeriod'] as int;
+                      final completedInPeriod = analytics['completedInPeriod'] as int;
+                      final rejectedInPeriod = analytics['rejectedInPeriod'] as int;
+                      final approvedInPeriod = activeInPeriod + completedInPeriod;
+                      final totalProcessedInPeriod = approvedInPeriod + rejectedInPeriod;
+                      if (totalProcessedInPeriod > 0) {
+                        final rate = (rejectedInPeriod / totalProcessedInPeriod) * 100;
+                        return '${rate.toStringAsFixed(1)}%';
+                      }
+                      return '0.0%';
+                    }(),
+                  ],
+                ],
+              ),
+              pw.SizedBox(height: 20),
+
+              // Budget Analysis
+              if (analytics['avgBudgetMin'] != null ||
+                  analytics['avgBudgetMax'] != null) ...[
+                pw.Text(
+                  'Budget Analysis',
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+                pw.TableHelper.fromTextArray(
+                  context: context,
+                  border: pw.TableBorder.all(
+                    color: PdfColors.grey400,
+                    width: 0.5,
+                  ),
+                  cellAlignment: pw.Alignment.centerLeft,
+                  headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                  headerStyle: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                  cellStyle: pw.TextStyle(fontSize: 9),
+                  rowDecoration: pw.BoxDecoration(
+                    border: pw.Border(
+                      bottom: pw.BorderSide(
+                        color: PdfColors.grey300,
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
+                  headers: ['Metric', 'Value'],
+                  data: [
+                    if (analytics['avgBudgetMin'] != null)
+                      [
+                        'Average Budget Min',
+                        'RM ${(analytics['avgBudgetMin'] as double).toStringAsFixed(2)}',
+                      ],
+                    if (analytics['avgBudgetMax'] != null)
+                      [
+                        'Average Budget Max',
+                        'RM ${(analytics['avgBudgetMax'] as double).toStringAsFixed(2)}',
+                      ],
+                  ].whereType<List<String>>().toList(),
+                ),
+                pw.SizedBox(height: 20),
+              ],
+
+              // Event Breakdown (using event field)
+              if (analytics['eventBreakdown'] != null &&
+                  (analytics['eventBreakdown'] as Map).isNotEmpty) ...[
+                pw.Text(
+                  'Event Breakdown (Top 10)',
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+                pw.TableHelper.fromTextArray(
+                  context: context,
+                  border: pw.TableBorder.all(
+                    color: PdfColors.grey400,
+                    width: 0.5,
+                  ),
+                  cellAlignment: pw.Alignment.centerLeft,
+                  headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                  headerStyle: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                  cellStyle: pw.TextStyle(fontSize: 9),
+                  rowDecoration: pw.BoxDecoration(
+                    border: pw.Border(
+                      bottom: pw.BorderSide(
+                        color: PdfColors.grey300,
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
+                  headers: ['Event', 'Posts'],
+                  data: () {
+                    final entries =
+                        (analytics['eventBreakdown'] as Map<String, dynamic>)
+                            .entries
+                            .toList();
+                    entries.sort((a, b) => b.value.compareTo(a.value));
+                    return entries
+                        .take(10)
+                        .map((entry) => [entry.key, entry.value.toString()])
+                        .toList();
+                  }(),
+                ),
+                pw.SizedBox(height: 20),
+              ],
+
+              // Job Type Breakdown
+              if (analytics['jobTypeBreakdown'] != null &&
+                  (analytics['jobTypeBreakdown'] as Map).isNotEmpty) ...[
+                pw.Text(
+                  'Job Type Breakdown',
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+                pw.TableHelper.fromTextArray(
+                  context: context,
+                  border: pw.TableBorder.all(
+                    color: PdfColors.grey400,
+                    width: 0.5,
+                  ),
+                  cellAlignment: pw.Alignment.centerLeft,
+                  headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                  headerStyle: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                  cellStyle: pw.TextStyle(fontSize: 9),
+                  rowDecoration: pw.BoxDecoration(
+                    border: pw.Border(
+                      bottom: pw.BorderSide(
+                        color: PdfColors.grey300,
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
+                  headers: ['Job Type', 'Posts'],
+                  data: () {
+                    final entries =
+                        (analytics['jobTypeBreakdown'] as Map<String, dynamic>)
+                            .entries
+                            .toList();
+                    entries.sort((a, b) => b.value.compareTo(a.value));
+                    return entries
+                        .map((entry) => [entry.key, entry.value.toString()])
+                        .toList();
+                  }(),
+                ),
+                pw.SizedBox(height: 20),
+              ],
+
+              // Location Breakdown (State only)
+              if (analytics['locationBreakdown'] != null &&
+                  (analytics['locationBreakdown'] as Map).isNotEmpty) ...[
+                pw.Text(
+                  'Location Breakdown by State (Top 10)',
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+                pw.TableHelper.fromTextArray(
+                  context: context,
+                  border: pw.TableBorder.all(
+                    color: PdfColors.grey400,
+                    width: 0.5,
+                  ),
+                  cellAlignment: pw.Alignment.centerLeft,
+                  headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                  headerStyle: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                  cellStyle: pw.TextStyle(fontSize: 9),
+                  rowDecoration: pw.BoxDecoration(
+                    border: pw.Border(
+                      bottom: pw.BorderSide(
+                        color: PdfColors.grey300,
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
+                  headers: ['State', 'Posts'],
+                  data: () {
+                    final entries =
+                        (analytics['locationBreakdown'] as Map<String, dynamic>)
+                            .entries
+                            .toList();
+                    entries.sort((a, b) => b.value.compareTo(a.value));
+                    return entries
+                        .take(10)
+                        .map((entry) => [entry.key, entry.value.toString()])
+                        .toList();
+                  }(),
+                ),
+                pw.SizedBox(height: 20),
+              ],
+
+              // Tags Breakdown
+              if (analytics['tagsBreakdown'] != null &&
+                  (analytics['tagsBreakdown'] as Map).isNotEmpty) ...[
+                pw.Text(
+                  'Tags Breakdown (Top 10)',
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+                pw.TableHelper.fromTextArray(
+                  context: context,
+                  border: pw.TableBorder.all(
+                    color: PdfColors.grey400,
+                    width: 0.5,
+                  ),
+                  cellAlignment: pw.Alignment.centerLeft,
+                  headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
+                  headerStyle: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                  cellStyle: pw.TextStyle(fontSize: 9),
+                  rowDecoration: pw.BoxDecoration(
+                    border: pw.Border(
+                      bottom: pw.BorderSide(
+                        color: PdfColors.grey300,
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
+                  headers: ['Tag', 'Posts'],
+                  data: () {
+                    final entries =
+                        (analytics['tagsBreakdown'] as Map<String, dynamic>)
+                            .entries
+                            .toList();
+                    entries.sort((a, b) => b.value.compareTo(a.value));
+                    return entries
+                        .take(10)
+                        .map((entry) => [entry.key, entry.value.toString()])
+                        .toList();
+                  }(),
+                ),
+                pw.SizedBox(height: 20),
+              ],
+            ];
+          },
+        ),
+      );
+
+      // Save PDF to temporary file and share
+      final bytes = await pdf.save();
+      final directory = await getTemporaryDirectory();
+      final fileName = 'Content_Analytics_Report_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
+      final filePath = '${directory.path}/$fileName';
+      final file = File(filePath);
+      await file.writeAsBytes(bytes);
+
+      // Share the file
+      try {
+        await Share.shareXFiles(
+          [XFile(filePath)],
+          text: 'Content Analytics Report',
+          subject: 'Content Analytics Report - ${_formatDateTime(_startDate)} to ${_formatDateTime(_endDate)}',
+        );
+
+        // Clean up temporary file after a delay
+        Future.delayed(const Duration(seconds: 5), () async {
+          try {
+            if (await file.exists()) {
+              await file.delete();
+            }
+          } catch (e) {
+            // Ignore cleanup errors
+          }
+        });
+      } catch (shareError) {
+        // Handle MissingPluginException specifically
+        if (shareError.toString().contains('MissingPluginException') || 
+            shareError.toString().contains('missing plugin')) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('分享功能需要重新构建应用。请运行: flutter clean && flutter pub get && flutter run'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 5),
+              ),
+            );
+          }
+        } else {
+          rethrow;
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        String errorMessage = '分享 PDF 时出错: ${e.toString()}';
+        if (e.toString().contains('MissingPluginException') || 
+            e.toString().contains('missing plugin')) {
+          errorMessage = '分享插件未正确加载。请重新构建应用 (flutter clean && flutter pub get && flutter run)';
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -519,12 +976,18 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
             onPressed: _loadAnalytics,
             tooltip: 'Refresh',
           ),
-          if (_analytics != null)
+          if (_analytics != null) ...[
+            IconButton(
+              icon: const Icon(Icons.share),
+              onPressed: _sharePDF,
+              tooltip: 'Share PDF',
+            ),
             IconButton(
               icon: const Icon(Icons.picture_as_pdf),
               onPressed: _downloadPDF,
               tooltip: 'Download PDF',
             ),
+          ],
         ],
       ),
       body: Column(
@@ -946,16 +1409,24 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
   Widget _buildStatusChart() {
     final analytics = _analytics!;
     // Show selected period data
-    final data = [
-      ChartData('Active', analytics['activeInPeriod'].toDouble(), Colors.green),
-      ChartData('Pending', analytics['pendingInPeriod'].toDouble(), Colors.orange),
-      ChartData('Completed', analytics['completedInPeriod'].toDouble(), Colors.blue),
-      ChartData('Rejected', analytics['rejectedInPeriod'].toDouble(), Colors.red),
-    ].where((item) => item.value > 0).toList();
+    final statusData = [
+      MapEntry('Active', analytics['activeInPeriod'] as int? ?? 0),
+      MapEntry('Pending', analytics['pendingInPeriod'] as int? ?? 0),
+      MapEntry('Completed', analytics['completedInPeriod'] as int? ?? 0),
+      MapEntry('Rejected', analytics['rejectedInPeriod'] as int? ?? 0),
+    ].where((entry) => entry.value > 0).toList();
 
-    if (data.isEmpty) {
+    if (statusData.isEmpty) {
       return const SizedBox.shrink();
     }
+
+    final totalPosts = analytics['postsInPeriod'] as int;
+    final statusColors = {
+      'Active': Colors.green,
+      'Pending': Colors.orange,
+      'Completed': Colors.blue,
+      'Rejected': Colors.red,
+    };
 
     return Card(
       elevation: 2,
@@ -969,21 +1440,90 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
               'Status Distribution (Selected Period)',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
+            const SizedBox(height: 8),
+            Text(
+              'Post status breakdown in selected period',
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 16),
+            // Statistics List
+            Container(
+              constraints: const BoxConstraints(maxHeight: 200),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: statusData.length,
+                itemBuilder: (context, index) {
+                  final entry = statusData[index];
+                  final count = entry.value;
+                  final percentage = totalPosts > 0
+                      ? (count / totalPosts * 100)
+                      : 0.0;
+                  final statusColor = statusColors[entry.key] ?? Colors.grey;
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            entry.key,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            '$count posts',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[700],
+                            ),
+                            textAlign: TextAlign.right,
+                          ),
+                        ),
+                        SizedBox(
+                          width: 60,
+                          child: Text(
+                            '${percentage.toStringAsFixed(1)}%',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: statusColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            textAlign: TextAlign.right,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
             const SizedBox(height: 16),
             SizedBox(
               height: 300,
-              child: SfCircularChart(
-                legend: Legend(
-                  isVisible: true,
-                  position: LegendPosition.bottom,
+              child: SfCartesianChart(
+                primaryXAxis: CategoryAxis(
+                  isVisible: false,
                 ),
-                series: <CircularSeries>[
-                  DoughnutSeries<ChartData, String>(
-                    dataSource: data,
-                    xValueMapper: (data, _) => data.label,
-                    yValueMapper: (data, _) => data.value,
-                    dataLabelSettings: const DataLabelSettings(isVisible: true),
-                    pointColorMapper: (data, _) => data.color,
+                primaryYAxis: NumericAxis(),
+                legend: const Legend(isVisible: false),
+                tooltipBehavior: TooltipBehavior(enable: true),
+                series: <CartesianSeries>[
+                  ColumnSeries<MapEntry<String, int>, String>(
+                    name: 'Posts',
+                    dataSource: statusData,
+                    xValueMapper: (entry, _) => entry.key,
+                    yValueMapper: (entry, _) => entry.value,
+                    pointColorMapper: (entry, _) => statusColors[entry.key] ?? Colors.grey,
+                    dataLabelSettings: DataLabelSettings(
+                      isVisible: true,
+                      labelPosition: ChartDataLabelPosition.outside,
+                      textStyle: const TextStyle(fontSize: 10),
+                    ),
                   ),
                 ],
               ),
@@ -1356,7 +1896,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
 
   Widget _buildIndustryChart() {
     final analytics = _analytics!;
-    // Use period data
+    // Use period data (now using event field)
     final industryBreakdown =
         analytics['industryBreakdownInPeriod'] as Map<String, dynamic>?;
 
@@ -1391,15 +1931,20 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Top Industries (Selected Period)',
+              'Top Events (Selected Period)',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Top 10 Events by post count in selected period',
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
             SizedBox(
               height: 300,
               child: SfCartesianChart(
                 primaryXAxis: CategoryAxis(
-                  labelRotation: topIndustries.length > 5 ? -45 : 0,
+                  isVisible: false,
                 ),
                 primaryYAxis: NumericAxis(),
                 legend: const Legend(isVisible: false),
@@ -1779,6 +2324,11 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
             const Text(
               'Top Industries: All Time vs Selected Period',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Based on event field from posts collection',
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
             _buildComparisonHeader(),
