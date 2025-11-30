@@ -56,9 +56,7 @@ class _PostManagementPageState extends State<PostManagementPage> {
   }
 
   Future<void> _refreshApplications() async {
-    // Trigger auto-reject check to ensure data is up to date
     _applicationService.checkAndAutoRejectApplications();
-    // Small delay to allow the check to complete
     await Future.delayed(const Duration(milliseconds: 200));
   }
 
@@ -108,7 +106,7 @@ class _PostManagementPageState extends State<PostManagementPage> {
                   if (isIndexError) ...[
                     const SizedBox(height: 16),
                     const Text(
-                      'Note: Make sure the composite index is fully built and matches:\nownerId (Asc) + createdAt (Desc)',
+                      ' check composite index ownerId (Asc) + createdAt (Desc)',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.orange, fontSize: 11),
                     ),
@@ -222,22 +220,47 @@ class _PostManagementPageState extends State<PostManagementPage> {
                             }
                           },
                           onDelete: () async {
+                            String message;
+                            if (post.isDraft) {
+                              message = 'Are you sure you want to delete "${post.title}"? This action cannot be undone.';
+                            } else if (post.status == PostStatus.pending) {
+                              message = 'Are you sure you want to delete "${post.title}"? This action cannot be undone. Your 200 points will be refunded.';
+                            } else {
+                              message = 'Are you sure you want to delete "${post.title}"? This action cannot be undone.';
+                            }
+
                             final confirmed = await DialogUtils.showDestructiveConfirmation(
                               context: context,
                               title: 'Delete Post',
-                              message: 'Are you sure you want to delete "${post.title}"? This action cannot be undone.',
+                              message: message,
                               icon: Icons.delete_outline,
                               confirmText: 'Delete',
                               cancelText: 'Cancel',
                             );
 
                             if (confirmed == true && context.mounted) {
-                              _service.delete(post.id);
-                              if (context.mounted) {
-                                DialogUtils.showInfoMessage(
-                                  context: context,
-                                  message: 'Post deleted',
-                                );
+                              try {
+                                await _service.delete(post.id);
+                                if (context.mounted) {
+                                  if (post.status == PostStatus.pending && !post.isDraft) {
+                                    DialogUtils.showSuccessMessage(
+                                      context: context,
+                                      message: 'Post deleted. 200 points refunded.',
+                                    );
+                                  } else {
+                                    DialogUtils.showInfoMessage(
+                                      context: context,
+                                      message: 'Post deleted',
+                                    );
+                                  }
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  DialogUtils.showWarningMessage(
+                                    context: context,
+                                    message: 'Failed to delete post: ${e.toString().replaceAll('Exception: ', '').replaceAll('StateError: ', '')}',
+                                  );
+                                }
                               }
                             }
                           },
@@ -269,9 +292,9 @@ class _PostManagementPageState extends State<PostManagementPage> {
     for (int i = 0; i < a.length; i++) {
       final postA = a[i];
       final postB = b[i];
-      // Compare IDs first
+      //check id
       if (postA.id != postB.id) return false;
-      // Compare key fields that might change and affect UI
+      //check fiels
       if (postA.status != postB.status ||
           postA.isDraft != postB.isDraft ||
           postA.views != postB.views ||
@@ -310,7 +333,7 @@ class _PostManagementPageState extends State<PostManagementPage> {
                             Icon(Icons.error_outline, color: const Color(0xFF00C8A0), size: 48),
                             const SizedBox(height: 16),
                             Text(
-                              'Could not load your applications',
+                              'could not load applications',
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 color: Colors.black,
@@ -352,7 +375,7 @@ class _PostManagementPageState extends State<PostManagementPage> {
                                 Icon(Icons.work_outline, size: 80, color: Colors.grey[400]),
                                 const SizedBox(height: 20),
                                 Text(
-                                  'No applications yet',
+                                  'no applications yet',
                                   style: TextStyle(
                                     fontSize: 18,
                                     color: Colors.grey[600],
@@ -361,7 +384,7 @@ class _PostManagementPageState extends State<PostManagementPage> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Apply to posts to see them here',
+                                  'apply to posts to see them here',
                                   style: TextStyle(
                                     fontSize: 14,
                                     color: Colors.grey[500],
@@ -388,12 +411,9 @@ class _PostManagementPageState extends State<PostManagementPage> {
                         stream: _service.streamPostById(app.postId),
                         builder: (context, postSnap) {
                           final post = postSnap.data;
-                          // Hide applications only if post doesn't exist at all (after initial load)
                           if (post == null && postSnap.connectionState == ConnectionState.active) {
-                            // Post was deleted or doesn't exist - hide the application
                             return const SizedBox.shrink();
                           }
-                          // Show loading state while checking
                           if (postSnap.connectionState == ConnectionState.waiting && post == null) {
                             return const SizedBox(
                               height: 80,
@@ -630,9 +650,8 @@ class _PostCard extends StatelessWidget {
     final bool isCompleted = post.status == PostStatus.completed;
     final bool isRejected = post.status == PostStatus.rejected;
     final bool canMarkCompleted = post.status == PostStatus.active && !post.isDraft;
-    // Hide edit button if post is active, completed, or rejected
-    // Rejected posts can only be viewed and deleted
     final bool canEdit = !isActive && !isCompleted && !isRejected;
+    final bool canDelete = post.isDraft || isPending;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -719,7 +738,7 @@ class _PostCard extends StatelessWidget {
                   ),
                   child: const Text('View'),
                 ),
-                // Hide edit button if post is active or completed
+                 //edit when not active and completed and rejected
                 if (canEdit)
                   OutlinedButton(
                     onPressed: onEdit,
@@ -731,16 +750,18 @@ class _PostCard extends StatelessWidget {
                     ),
                     child: const Text('Edit'),
                   ),
-                OutlinedButton(
-                  onPressed: onDelete,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                    side: const BorderSide(color: Colors.red),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                //delete when draft or pending
+                if (canDelete)
+                  OutlinedButton(
+                    onPressed: onDelete,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    ),
+                    child: const Text('Delete'),
                   ),
-                  child: const Text('Delete'),
-                ),
                 if (canMarkCompleted)
                   FilledButton(
                     onPressed: () async {
@@ -795,7 +816,6 @@ class _PostCard extends StatelessWidget {
       ),
     );
   }
-
   String _dateString(DateTime dt) {
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }

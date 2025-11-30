@@ -1439,10 +1439,9 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
   }
 
   Future<void> _handleApply(BuildContext context) async {
-    // Prevent multiple simultaneous executions
+    //no multiple apply
     if (_isApplying || !mounted) return;
     
-    // Check if event starts today or tomorrow (prevent applying on event day or one day before)
     if (widget.post.eventStartDate != null) {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
@@ -1453,7 +1452,7 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
         eventStartDate.day,
       );
       final tomorrow = DateTime(today.year, today.month, today.day + 1);
-      // Cannot apply if event starts today or tomorrow
+      // tomorrow start no aply
       if (eventStartDateOnly.isAtSameMomentAs(today) || 
           eventStartDateOnly.isAtSameMomentAs(tomorrow) ||
           eventStartDateOnly.isBefore(today)) {
@@ -1466,7 +1465,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
       }
     }
     
-    // Show confirmation dialog
     final confirmed = await DialogUtils.showConfirmationDialog(
       context: context,
       title: 'Apply to Job',
@@ -1496,8 +1494,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
         context: context,
         message: 'Application submitted successfully! 100 points on hold.',
       );
-      
-      // Refresh the page by replacing the current route
       if (mounted) {
         Navigator.pushReplacement(
           context,
@@ -1531,7 +1527,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
   }
 
   Future<void> _showReportPostDialog(BuildContext context) async {
-    // Show confirmation dialog first
     final confirmed = await DialogUtils.showConfirmationDialog(
       context: context,
       title: 'Report Post',
@@ -1544,7 +1539,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
 
     if (confirmed != true || !context.mounted) return;
 
-    // Show the report form dialog
     final result = await showDialog<Map<String, String>>(
       context: context,
       builder: (context) => const ReportPostDialog(),
@@ -1575,7 +1569,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
   }
 
   Future<void> _showReportJobseekerListDialog(BuildContext context) async {
-    // Show confirmation dialog first
     final confirmed = await DialogUtils.showConfirmationDialog(
       context: context,
       title: 'Report Jobseeker',
@@ -1588,7 +1581,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
 
     if (confirmed != true || !context.mounted) return;
 
-    // Show the jobseeker list dialog
     await showDialog(
       context: context,
       builder: (context) => ReportJobseekerListDialog(
