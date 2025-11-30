@@ -46,22 +46,21 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
 
   Future<void> _refreshData() async {
     setState(() {
-      // Force refresh by updating state
     });
     await Future.delayed(const Duration(milliseconds: 100));
   }
 
-  // Helper function to normalize dates for comparison (removes time component)
+  //normalize date
   static DateTime _normalizeDate(DateTime date) {
     return DateTime(date.year, date.month, date.day);
   }
 
-  // Helper function to extract date from slot (normalized)
+  //extract date from slot
   static DateTime _slotDate(AvailabilitySlot slot) {
     return _normalizeDate(slot.date);
   }
 
-  // Helper to get month date range
+  //get month date range
   ({DateTime start, DateTime end}) _getMonthRange(DateTime month) {
     return (
       start: DateTime(month.year, month.month, 1),
@@ -69,7 +68,7 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
     );
   }
 
-  // Helper to get day date range (for selected date)
+  //get day date range
   ({DateTime start, DateTime end}) _getDayRange(DateTime date) {
     return (
       start: DateTime(date.year, date.month, date.day),
@@ -77,7 +76,7 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
     );
   }
 
-  // Helper to process slots and prepare calendar data
+  //process slots and prepare calendar data
   ({
     Set<DateTime> allDates,
     Set<DateTime> availableDates,
@@ -94,7 +93,7 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
     );
   }
 
-  // Helper to prepare pending dates and exclude from available
+  //prepare pending dates and exclude from available
   ({Set<DateTime> pendingDates, Set<DateTime> availableDatesExcludingPending})
   _preparePendingDates(
     List<AvailabilitySlot> slots,
@@ -196,7 +195,7 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
           ),
         ),
 
-        // Scrollable Content
+        //Pull to refresh
         Expanded(
           child: RefreshIndicator(
             onRefresh: _refreshData,
@@ -205,7 +204,6 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
               physics: const AlwaysScrollableScrollPhysics(),
               child: Column(
               children: [
-                // Month Navigation
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -247,8 +245,6 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
                     ],
                   ),
                 ),
-
-                // Calendar Legend
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -275,7 +271,6 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
                   ),
                 ),
 
-                // Calendar with real-time updates
                 Container(
                   padding: const EdgeInsets.all(16),
                   color: Colors.white,
@@ -295,7 +290,7 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
                       final slots = snapshot.data ?? [];
                       final processed = _processSlots(slots);
 
-                      // Get pending dates for recruiter
+                      //get pending dates
                       return FutureBuilder<Set<String>>(
                         future: _availabilityService
                             .getRequestedSlotIdsForRecruiter(
@@ -327,7 +322,7 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
 
                 const Divider(height: 1),
 
-                // Time Slots for Selected Date
+                
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -409,7 +404,7 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
                           );
                         }
 
-                        // Check for pending requests for these slots
+                        // validate pending requests 
                         return FutureBuilder<Set<String>>(
                           future: _availabilityService
                               .getRequestedSlotIdsForRecruiter(
@@ -489,7 +484,6 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
             startTime: startTime,
             endTime: endTime,
           );
-          // Calendar updates automatically via StreamBuilder
         },
       ),
     );

@@ -21,7 +21,7 @@ class _CompletedPostsRatingPageState extends State<CompletedPostsRatingPage> {
   final ReviewService _reviewService = ReviewService();
   final AuthService _authService = AuthService();
   
-  // Cache for user names and existing ratings
+  //cache user 
   final Map<String, String> _userNameCache = {};
   final Map<String, bool> _hasRatingCache = {};
 
@@ -117,7 +117,6 @@ class _CompletedPostsRatingPageState extends State<CompletedPostsRatingPage> {
           return RefreshIndicator(
             onRefresh: () async {
               setState(() {
-                // Force refresh by updating state
               });
               await Future.delayed(const Duration(milliseconds: 100));
             },
@@ -246,7 +245,7 @@ class _CompletedPostCardState extends State<_CompletedPostCard> {
                 }
 
                 final applications = snapshot.data ?? <Application>[];
-                // Only show approved applications for rating
+                //approved applications rating
                 final approvedApplications = applications
                     .where((app) => app.status == ApplicationStatus.approved)
                     .toList();

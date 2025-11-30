@@ -24,7 +24,6 @@ class _MessagingPageState extends State<MessagingPage> {
       backgroundColor: Colors.white,
       body: Column(
         children: [
-          // Search Bar
           Container(
             padding: const EdgeInsets.all(20),
             child: Container(
@@ -137,7 +136,6 @@ class _MessagingPageState extends State<MessagingPage> {
                 return RefreshIndicator(
                   onRefresh: () async {
                     setState(() {
-                      // Force refresh by updating state
                     });
                     await Future.delayed(const Duration(milliseconds: 100));
                   },
@@ -314,13 +312,11 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   }
 
   void _scrollToBottom() {
-    // 直接跳到底部，不使用滚动动画
     if (_scrollController.hasClients && mounted) {
       try {
         final maxScroll = _scrollController.position.maxScrollExtent;
         _scrollController.jumpTo(maxScroll);
       } catch (e) {
-        // 如果失败，在下一帧重试
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_scrollController.hasClients && mounted) {
             try {
@@ -330,7 +326,6 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         });
       }
     } else {
-      // 如果还没有 clients，等待下一帧
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scrollController.hasClients && mounted) {
           try {
@@ -349,28 +344,28 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   }
 
   Future<void> _sendMessage() async {
-    // 防止重复发送
+    //prevent duplicate sending
     if (_isSending || _messageController.text.trim().isEmpty) return;
 
     final currentUserId = _authService.currentUserId;
     final receiverId = widget.conversation.getOtherParticipantId(currentUserId);
     final messageContent = _messageController.text.trim();
 
-    // 立即清除输入框，给用户即时反馈
+    //clear input field
     _messageController.clear();
     
-    // 设置标志，确保在 StreamBuilder 更新时保持在底部
+    //set flag to ensure bottom when streambuilder updates
     setState(() {
       _isButtonPressed = true;
       _isSending = true;
-      _shouldStayAtBottom = true; // 标记需要保持在底部
+      _shouldStayAtBottom = true; 
     });
     
-    // 立即跳到底部，不等待任何响应
+    //to bottom
     _scrollToBottom();
     
-    // 快速恢复按钮状态，给用户"点了一下"的感觉
-    Future.delayed(const Duration(milliseconds: 150), () {
+    //
+    Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) {
         setState(() {
           _isButtonPressed = false;
@@ -378,20 +373,15 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       }
     });
 
-    // 在后台发送消息，不阻塞 UI
     try {
       await _messagingService.sendMessage(
         receiverId: receiverId,
         content: messageContent,
         matchId: widget.conversation.matchId,
       );
-      
-      // 1.5秒后刷新并跳到底部
       Future.delayed(const Duration(milliseconds: 1500), () {
         if (mounted) {
-          // 强制跳到底部
           _scrollToBottom();
-          // 再次确保跳到底部
           Future.delayed(const Duration(milliseconds: 100), () {
             if (mounted) {
               _scrollToBottom();
@@ -400,20 +390,19 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         }
       });
     } catch (e) {
-      // 如果发送失败，恢复消息内容
+      //restore message content
       _messageController.text = messageContent;
-      // handle error, can show error message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('发送失败: ${e.toString()}'),
+            content: Text('Failed to send: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
       }
     } finally {
       if (mounted) {
-        // 延迟清除标志，确保 StreamBuilder 更新后也能保持在底部
+        //delay clear flag
         Future.delayed(const Duration(milliseconds: 800), () {
           if (mounted) {
             setState(() {
@@ -533,22 +522,17 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                     ),
                   );
                 }
-
-                // 更新消息计数
                 final currentMessageCount = messages.length;
                 final hasNewMessage = currentMessageCount > _lastMessageCount;
-                
-                // 如果应该保持在底部（正在发送消息），使用多次回调确保跳到底部
+
                 if (_shouldStayAtBottom || _isSending) {
                   _lastMessageCount = currentMessageCount;
-                  // 立即在下一帧跳到底部
                   SchedulerBinding.instance.addPostFrameCallback((_) {
                     if (mounted && _scrollController.hasClients) {
                       _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
                       _hasScrolledToBottom = true;
                     }
                   });
-                  // 再添加一个延迟回调，确保 ListView 完全构建后跳到底部
                   Future.delayed(const Duration(milliseconds: 0), () {
                     SchedulerBinding.instance.addPostFrameCallback((_) {
                       if (mounted && _scrollController.hasClients) {
@@ -557,7 +541,6 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                     });
                   });
                 } 
-                // 接收新消息时也直接跳到底部
                 else if (hasNewMessage) {
                   _lastMessageCount = currentMessageCount;
                   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -567,7 +550,6 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                     }
                   });
                 } 
-                // 首次加载时直接跳到底部
                 else if (!_hasScrolledToBottom) {
                   _lastMessageCount = currentMessageCount;
                   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -663,9 +645,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                   },
                 );
                 
-                // 如果应该保持在底部，在 ListView 构建后立即跳到底部
                 if (_shouldStayAtBottom) {
-                  // 使用多个回调确保跳到底部
                   SchedulerBinding.instance.addPostFrameCallback((_) {
                     if (mounted && _scrollController.hasClients) {
                       _scrollController.jumpTo(_scrollController.position.maxScrollExtent);

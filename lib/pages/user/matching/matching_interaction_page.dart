@@ -131,10 +131,11 @@ class _MatchesTabState extends State<_MatchesTab> {
   bool _recomputing = false;
   // Recruiter always uses ANN (embeddingsAnn), no strategy selection needed
   static const MatchingStrategy _recruiterStrategy = MatchingStrategy.embeddingsAnn;
-
+  
+//refresh by updating state
   Future<void> _refreshData() async {
     setState(() {
-      // Force refresh by updating state
+      
     });
     await Future.delayed(const Duration(milliseconds: 100));
   }

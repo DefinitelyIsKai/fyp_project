@@ -51,9 +51,10 @@ class _EmailVerificationLoadingPageState extends State<EmailVerificationLoadingP
         );
       }
     } catch (e) {
-      // Handle any unexpected errors gracefully
-      // Don't show error dialog for network issues - polling will retry
-      // Only log or handle critical errors if needed
+      DialogUtils.showWarningMessage(
+        context: context, 
+        message: 'Not verified(network error): $e',
+      );
     } finally {
       if (mounted) {
         setState(() => _checking = false);
@@ -96,7 +97,6 @@ class _EmailVerificationLoadingPageState extends State<EmailVerificationLoadingP
               mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(height: 40),
-                // Email Icon
                 Container(
                   width: 120,
                   height: 120,
@@ -136,7 +136,6 @@ class _EmailVerificationLoadingPageState extends State<EmailVerificationLoadingP
                   color: Color(0xFF00C8A0),
                 ),
                 const SizedBox(height: 40),
-                // Action Buttons
                 Column(
                   children: [
                     SizedBox(

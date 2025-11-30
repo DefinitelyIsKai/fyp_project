@@ -29,10 +29,10 @@ class Post {
   DateTime createdAt;
   DateTime? eventStartDate;
   DateTime? eventEndDate;
-  String? workTimeStart; // Format: "HH:mm" (e.g., "09:00")
-  String? workTimeEnd; // Format: "HH:mm" (e.g., "17:00")
-  String? genderRequirement; // Gender requirement: "male", "female", or "any"
-  String? rejectionReason; // Reason for rejection (only when status is rejected)
+  String? workTimeStart; 
+  String? workTimeEnd; 
+  String? genderRequirement; 
+  String? rejectionReason; 
   int views;
   int applicants;
 

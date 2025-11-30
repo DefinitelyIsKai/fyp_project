@@ -10,6 +10,8 @@ class LocationViewerPage extends StatefulWidget {
   State<LocationViewerPage> createState() => _LocationViewerPageState();
 }
 
+//homepage usesage
+
 class _LocationViewerPageState extends State<LocationViewerPage> {
   GoogleMapController? _mapController;
   LatLng? _location;
@@ -31,7 +33,7 @@ class _LocationViewerPageState extends State<LocationViewerPage> {
 
   Future<void> _fetchGPSLocation() async {
     try {
-      // Check if location services are enabled
+      //check location services 
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         if (!mounted) return;
@@ -43,7 +45,7 @@ class _LocationViewerPageState extends State<LocationViewerPage> {
         return;
       }
 
-      // Check location permissions
+      // check location permissions
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
@@ -60,12 +62,12 @@ class _LocationViewerPageState extends State<LocationViewerPage> {
         return;
       }
 
-      // Get current GPS position
+      //current position
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      // Convert coordinates to address with more precise details
+      //convert coordinates to address
       String locationLabel;
       try {
         final placemarks = await placemarkFromCoordinates(
@@ -76,7 +78,7 @@ class _LocationViewerPageState extends State<LocationViewerPage> {
           final place = placemarks.first;
           final parts = <String>[];
           
-          // Add street address if available (most precise)
+          //add street address 
           if ((place.street ?? '').isNotEmpty) {
             parts.add(place.street!);
           } else if ((place.subThoroughfare ?? '').isNotEmpty || 
@@ -93,34 +95,30 @@ class _LocationViewerPageState extends State<LocationViewerPage> {
             }
           }
           
-          // Add sub-locality (neighborhood/district) if available
+          //sub-locality
           if ((place.subLocality ?? '').isNotEmpty) {
             parts.add(place.subLocality!);
           }
-          
-          // Add locality (city)
+          //city
           if ((place.locality ?? '').isNotEmpty) {
             parts.add(place.locality!);
           }
-          
-          // Add postal code if available
+          //postal code
           if ((place.postalCode ?? '').isNotEmpty) {
             parts.add(place.postalCode!);
           }
-          
-          // Add administrative area (state/province)
+          //state
           if ((place.administrativeArea ?? '').isNotEmpty) {
             parts.add(place.administrativeArea!);
           }
-          
-          // Add country
+          //country
           if ((place.country ?? '').isNotEmpty) {
             parts.add(place.country!);
           }
           
           locationLabel = parts.where((p) => p.trim().isNotEmpty).join(', ');
           
-          // If we still don't have a good address, use formatted address
+          //use formatted address
           if (locationLabel.isEmpty && (place.name ?? '').isNotEmpty) {
             locationLabel = place.name!;
           }
@@ -129,7 +127,7 @@ class _LocationViewerPageState extends State<LocationViewerPage> {
               '${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}';
         }
       } catch (_) {
-        // Fallback to coordinates if geocoding fails
+        //used coordinates if geocoding fails
         locationLabel =
             '${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}';
       }
@@ -169,7 +167,6 @@ class _LocationViewerPageState extends State<LocationViewerPage> {
       ),
       body: Column(
         children: [
-          // Location Name Card
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -222,7 +219,6 @@ class _LocationViewerPageState extends State<LocationViewerPage> {
               ],
             ),
           ),
-          // Map View
           Expanded(
             child: _isLoading
                 ? const Center(

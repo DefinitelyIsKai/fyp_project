@@ -21,9 +21,7 @@ import 'dart:async';
 
 class PostCreatePage extends StatefulWidget {
   const PostCreatePage({super.key, this.existing});
-
   final Post? existing;
-
   @override
   State<PostCreatePage> createState() => _PostCreatePageState();
 }
@@ -44,7 +42,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
   DateTime? _eventEndDate;
   TimeOfDay? _workTimeStart;
   TimeOfDay? _workTimeEnd;
-  String? _selectedGender; // "male", "female", or "any"
+  String? _selectedGender;
   final TextEditingController _minAgeController = TextEditingController();
   final TextEditingController _maxAgeController = TextEditingController();
   final TextEditingController _quotaController = TextEditingController();
@@ -55,7 +53,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
   final TagService _tagService = TagService();
   final AuthService _authService = AuthService();
   bool _saving = false;
-  bool _hasPopped = false; // Track if we've already navigated away
+  bool _hasPopped = false;
   final StorageService _storage = StorageService();
   final List<String> _attachments = <String>[];
   List<Category> _categories = <Category>[];
@@ -67,32 +65,27 @@ class _PostCreatePageState extends State<PostCreatePage> {
   final FocusNode _eventFocusNode = FocusNode();
   bool _jobTypeFocused = false;
   bool _eventFocused = false;
-  late String _postId; // Generated upfront for new posts to avoid temp document
+  late String _postId;
   final GlobalKey<FormFieldState<String>> _budgetMinKey = GlobalKey<FormFieldState<String>>();
   final GlobalKey<FormFieldState<String>> _budgetMaxKey = GlobalKey<FormFieldState<String>>();
   final GlobalKey<FormFieldState<String>> _minAgeKey = GlobalKey<FormFieldState<String>>();
   final GlobalKey<FormFieldState<String>> _maxAgeKey = GlobalKey<FormFieldState<String>>();
   final GlobalKey<FormFieldState<String>> _quotaKey = GlobalKey<FormFieldState<String>>();
-  // Track which fields have been focused/clicked
+  //tracking
   final Set<TextEditingController> _focusedFields = {};
-  bool _genderFieldTouched = false; // Track if gender field has been interacted with
-  bool _workTimeStartTouched = false; // Track if work time start has been interacted with
-  bool _workTimeEndTouched = false; // Track if work time end has been interacted with
-  
-  // Real-time update related variables
+  bool _genderFieldTouched = false;
+  bool _workTimeStartTouched = false;
+  bool _workTimeEndTouched = false;
+
   StreamSubscription<Post?>? _postStreamSubscription;
   Post? _latestPostFromFirestore;
-  bool _hasExternalUpdate = false; // Track if there's an external update
-  bool _isUserEditing = false; // Track if user is actively editing
+  bool _hasExternalUpdate = false;
+  bool _isUserEditing = false;
 
   @override
   void initState() {
     super.initState();
-    // Generate post ID upfront for new posts to avoid creating temp document
-    // For existing posts, use the existing ID
-    _postId = widget.existing?.id ?? 
-        FirebaseFirestore.instance.collection('posts').doc().id;
-    
+    _postId = widget.existing?.id ?? FirebaseFirestore.instance.collection('posts').doc().id;
     _loadCategories();
     _loadTags();
     _jobTypeFocusNode.addListener(() {
@@ -119,76 +112,61 @@ class _PostCreatePageState extends State<PostCreatePage> {
       _selectedEvent = p.event.isEmpty ? null : p.event;
       _eventStartDate = p.eventStartDate;
       _eventEndDate = p.eventEndDate;
-      // Parse work time from string format "HH:mm"
+      //time parsing
       if (p.workTimeStart != null) {
         final parts = p.workTimeStart!.split(':');
         if (parts.length == 2) {
-          _workTimeStart = TimeOfDay(
-            hour: int.tryParse(parts[0]) ?? 9,
-            minute: int.tryParse(parts[1]) ?? 0,
-          );
+          _workTimeStart = TimeOfDay(hour: int.tryParse(parts[0]) ?? 9, minute: int.tryParse(parts[1]) ?? 0);
         }
       }
       if (p.workTimeEnd != null) {
         final parts = p.workTimeEnd!.split(':');
         if (parts.length == 2) {
-          _workTimeEnd = TimeOfDay(
-            hour: int.tryParse(parts[0]) ?? 17,
-            minute: int.tryParse(parts[1]) ?? 0,
-          );
+          _workTimeEnd = TimeOfDay(hour: int.tryParse(parts[0]) ?? 17, minute: int.tryParse(parts[1]) ?? 0);
         }
       }
       _minAgeController.text = p.minAgeRequirement?.toString() ?? '';
       _maxAgeController.text = p.maxAgeRequirement?.toString() ?? '';
       _quotaController.text = p.applicantQuota?.toString() ?? '';
-      // Validate gender requirement - must be one of the valid values
       final validGenders = ['any', 'male', 'female'];
       _selectedGender = (p.genderRequirement != null && validGenders.contains(p.genderRequirement))
           ? p.genderRequirement
           : null;
       _jobType = p.jobType;
-      
-      // Load existing attachments from Firestore (similar to post_details_page.dart)
       _loadExistingAttachments(p.id);
-      
-      // Start real-time listener for existing posts
       _startRealtimeListener(p.id);
     }
-    
-    // Add listeners to update button state when fields change
+
     _titleController.addListener(_onFieldChanged);
     _descriptionController.addListener(_onFieldChanged);
     _locationController.addListener(_onFieldChanged);
+
     _budgetMinController.addListener(() {
       _onFieldChanged();
-      // Re-validate max budget when min budget changes
       if (_formKey.currentState != null) {
         _formKey.currentState!.validate();
       }
-      // Also validate max budget FormField directly
       _budgetMaxKey.currentState?.validate();
     });
     _budgetMaxController.addListener(_onFieldChanged);
+
     _minAgeController.addListener(() {
       _onFieldChanged();
-      // Re-validate max age when min age changes
       if (_formKey.currentState != null) {
         _formKey.currentState!.validate();
       }
-      // Also validate max age FormField directly
       _maxAgeKey.currentState?.validate();
     });
     _maxAgeController.addListener(_onFieldChanged);
+
     _quotaController.addListener(_onFieldChanged);
   }
-  
+
   void _onFieldChanged() {
     if (mounted) {
       setState(() {
         _isUserEditing = true;
-        // Trigger rebuild to update button state
       });
-      // Reset editing flag after a delay
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) {
           setState(() {
@@ -198,51 +176,44 @@ class _PostCreatePageState extends State<PostCreatePage> {
       });
     }
   }
-  
-  /// Start real-time listener for post updates from Firestore
+
   void _startRealtimeListener(String postId) {
-    _postStreamSubscription = _service.streamPostById(postId).listen(
-      (Post? updatedPost) {
-        if (!mounted || updatedPost == null) return;
-        
-        // Store the latest post from Firestore
-        _latestPostFromFirestore = updatedPost;
-        
-        // Only update UI if user is not actively editing
-        // This prevents overwriting user's current input
-        if (!_isUserEditing && !_saving) {
-          _syncWithFirestoreData(updatedPost);
-        } else {
-          // Mark that there's an external update available
-          if (mounted) {
-            setState(() {
-              _hasExternalUpdate = true;
-            });
-          }
-        }
-      },
-      onError: (error) {
-        debugPrint('Error in real-time post stream: $error');
-      },
-    );
+    _postStreamSubscription = _service
+        .streamPostById(postId)
+        .listen(
+          (Post? updatedPost) {
+            if (!mounted || updatedPost == null) return;
+            //store new data
+            _latestPostFromFirestore = updatedPost;
+            if (!_isUserEditing && !_saving) {
+              _syncWithFirestoreData(updatedPost);
+            } else {
+              if (mounted) {
+                setState(() {
+                  _hasExternalUpdate = true;
+                });
+              }
+            }
+          },
+          onError: (error) {
+            debugPrint('Error in real-time post stream: $error');
+          },
+        );
   }
-  
-  /// Sync UI with Firestore data (only updates fields user is not editing)
+
+  //sync UI
   void _syncWithFirestoreData(Post updatedPost) {
     if (!mounted) return;
-    
     setState(() {
-      // Update title
+      //title
       if (_titleController.text != updatedPost.title) {
         _titleController.text = updatedPost.title;
       }
-      
-      // Update description
+      //description
       if (_descriptionController.text != updatedPost.description) {
         _descriptionController.text = updatedPost.description;
       }
-      
-      // Update budget
+      //budget
       final currentMinBudget = _parseDouble(_budgetMinController.text);
       if (currentMinBudget != updatedPost.budgetMin) {
         _budgetMinController.text = (updatedPost.budgetMin ?? '').toString();
@@ -251,35 +222,28 @@ class _PostCreatePageState extends State<PostCreatePage> {
       if (currentMaxBudget != updatedPost.budgetMax) {
         _budgetMaxController.text = (updatedPost.budgetMax ?? '').toString();
       }
-      
-      // Update location
+      //location
       if (_locationController.text != updatedPost.location) {
         _locationController.text = updatedPost.location;
         _latitude = updatedPost.latitude;
         _longitude = updatedPost.longitude;
       }
-      
-      // Update event type
+      //event type
       if (_selectedEvent != updatedPost.event && updatedPost.event.isNotEmpty) {
         _selectedEvent = updatedPost.event;
       }
-      
-      // Update dates
+      //dates
       if (_eventStartDate != updatedPost.eventStartDate) {
         _eventStartDate = updatedPost.eventStartDate;
       }
       if (_eventEndDate != updatedPost.eventEndDate) {
         _eventEndDate = updatedPost.eventEndDate;
       }
-      
-      // Update work times
+      //work times
       if (updatedPost.workTimeStart != null) {
         final parts = updatedPost.workTimeStart!.split(':');
         if (parts.length == 2) {
-          final newTime = TimeOfDay(
-            hour: int.tryParse(parts[0]) ?? 9,
-            minute: int.tryParse(parts[1]) ?? 0,
-          );
+          final newTime = TimeOfDay(hour: int.tryParse(parts[0]) ?? 9, minute: int.tryParse(parts[1]) ?? 0);
           if (_workTimeStart != newTime) {
             _workTimeStart = newTime;
           }
@@ -288,17 +252,13 @@ class _PostCreatePageState extends State<PostCreatePage> {
       if (updatedPost.workTimeEnd != null) {
         final parts = updatedPost.workTimeEnd!.split(':');
         if (parts.length == 2) {
-          final newTime = TimeOfDay(
-            hour: int.tryParse(parts[0]) ?? 17,
-            minute: int.tryParse(parts[1]) ?? 0,
-          );
+          final newTime = TimeOfDay(hour: int.tryParse(parts[0]) ?? 17, minute: int.tryParse(parts[1]) ?? 0);
           if (_workTimeEnd != newTime) {
             _workTimeEnd = newTime;
           }
         }
       }
-      
-      // Update age requirements
+      //age
       final currentMinAge = _parseInt(_minAgeController.text);
       if (currentMinAge != updatedPost.minAgeRequirement) {
         _minAgeController.text = updatedPost.minAgeRequirement?.toString() ?? '';
@@ -307,58 +267,37 @@ class _PostCreatePageState extends State<PostCreatePage> {
       if (currentMaxAge != updatedPost.maxAgeRequirement) {
         _maxAgeController.text = updatedPost.maxAgeRequirement?.toString() ?? '';
       }
-      
-      // Update quota
+      //quota
       final currentQuota = _parseInt(_quotaController.text);
       if (currentQuota != updatedPost.applicantQuota) {
         _quotaController.text = updatedPost.applicantQuota?.toString() ?? '';
       }
-      
-      // Update gender - validate it's a valid value
+
+      //gender
       final validGenders = ['any', 'male', 'female'];
       if (_selectedGender != updatedPost.genderRequirement) {
-        _selectedGender = (updatedPost.genderRequirement != null && 
-                          validGenders.contains(updatedPost.genderRequirement))
+        _selectedGender =
+            (updatedPost.genderRequirement != null && validGenders.contains(updatedPost.genderRequirement))
             ? updatedPost.genderRequirement
             : null;
       }
-      
-      // Update job type
+      //job type
       if (_jobType != updatedPost.jobType) {
         _jobType = updatedPost.jobType;
       }
-      
-      // Update tags
+      //tags
       if (updatedPost.tags.isNotEmpty) {
         _mapExistingTagsToCategories(updatedPost.tags);
       }
-      
-      // Update attachments
+      //attachments
       if (updatedPost.attachments.isNotEmpty && _attachments != updatedPost.attachments) {
         _attachments.clear();
         _attachments.addAll(updatedPost.attachments);
       }
-      
       _hasExternalUpdate = false;
     });
   }
-  
-  /// Refresh UI with latest Firestore data
-  void _refreshFromFirestore() {
-    if (_latestPostFromFirestore != null) {
-      _syncWithFirestoreData(_latestPostFromFirestore!);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('已同步最新数据'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    }
-  }
 
-  // Load attachments from Firestore (similar to post_details_page.dart)
   Future<void> _loadExistingAttachments(String postId) async {
     try {
       final doc = await FirebaseFirestore.instance.collection('posts').doc(postId).get();
@@ -366,17 +305,15 @@ class _PostCreatePageState extends State<PostCreatePage> {
       if (data != null && data['attachments'] != null) {
         final attachments = data['attachments'] as List?;
         if (attachments != null && attachments.isNotEmpty) {
-          // Extract base64 strings from attachments (supports both old and new format)
+          //extract base64 strings
           final List<String> base64Strings = [];
           for (final a in attachments) {
             if (a is Map) {
-              // Old format: object with base64 field
               final base64 = a['base64'] as String?;
               if (base64 != null && base64.isNotEmpty) {
                 base64Strings.add(base64);
               }
             } else if (a is String) {
-              // New format: direct base64 string
               if (a.isNotEmpty) {
                 base64Strings.add(a);
               }
@@ -409,8 +346,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
           if (categories.isEmpty) {
             _categoriesError = 'No event types available. Please contact support.';
           } else {
-            // Validate that _selectedEvent exists in the loaded categories
-            // If not, reset it to null to avoid DropdownButton assertion error
+            //validate event categories- dropdown
             if (_selectedEvent != null && _selectedEvent!.isNotEmpty) {
               final categoryNames = categories.map((c) => c.name).toList();
               if (!categoryNames.contains(_selectedEvent)) {
@@ -438,7 +374,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
           _tagCategoriesWithTags = tagsData;
           _tagsLoading = false;
         });
-        // If editing an existing post, map existing tags to categories
         if (widget.existing != null && widget.existing!.tags.isNotEmpty) {
           _mapExistingTagsToCategories(widget.existing!.tags);
         }
@@ -452,11 +387,8 @@ class _PostCreatePageState extends State<PostCreatePage> {
     }
   }
 
-  /// Maps existing tag names to their category IDs
   void _mapExistingTagsToCategories(List<String> existingTagNames) {
     final Map<String, List<String>> mappedTags = {};
-    
-    // Create a map of tag name -> category ID for quick lookup
     final Map<String, String> tagNameToCategoryId = {};
     for (final entry in _tagCategoriesWithTags.entries) {
       final category = entry.key;
@@ -465,8 +397,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
         tagNameToCategoryId[tag.name] = category.id;
       }
     }
-    
-    // Group existing tags by their category
+    //tags group by category
     for (final tagName in existingTagNames) {
       final categoryId = tagNameToCategoryId[tagName];
       if (categoryId != null) {
@@ -478,7 +409,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
         }
       }
     }
-    
+
     setState(() {
       _selectedTags = mappedTags;
     });
@@ -486,9 +417,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
 
   @override
   void dispose() {
-    // Cancel real-time stream subscription
     _postStreamSubscription?.cancel();
-    
     _titleController.removeListener(_onFieldChanged);
     _descriptionController.removeListener(_onFieldChanged);
     _locationController.removeListener(_onFieldChanged);
@@ -506,53 +435,41 @@ class _PostCreatePageState extends State<PostCreatePage> {
     super.dispose();
   }
 
-  /// Validates all required fields for publishing
   String? _validateRequiredFieldsForPublish() {
-    // Validate form fields (title, description)
+    //title and desc
     final formState = _formKey.currentState;
     if (formState == null || !formState.validate()) {
       return 'Please fill in all required form fields';
     }
-    
-    // Validate location
+    //location
     if (_locationController.text.trim().isEmpty) {
       return 'Location is required';
     }
     if (_latitude == null || _longitude == null) {
       return 'Please select a valid location from the suggestions';
     }
-    
-    // Validate event type
+    //event type
     if (_selectedEvent == null || _selectedEvent!.isEmpty) {
       return 'Event type is required';
     }
-    
-    // Validate event dates (required fields)
+    //event dates
     if (_eventStartDate == null) {
       return 'Event start date is required';
     }
     if (_eventEndDate == null) {
       return 'Event end date is required';
     }
-    
-    // Validate that event start date cannot be today
+    //prevent event start date from now day
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final eventStartDateOnly = DateTime(
-      _eventStartDate!.year,
-      _eventStartDate!.month,
-      _eventStartDate!.day,
-    );
-    // Event start date cannot be today
+    final eventStartDateOnly = DateTime(_eventStartDate!.year, _eventStartDate!.month, _eventStartDate!.day);
     if (eventStartDateOnly.isAtSameMomentAs(today)) {
       return 'Event start date cannot be today';
     }
-    
     if (_eventEndDate!.isBefore(_eventStartDate!)) {
       return 'Event end date cannot be before start date';
     }
-    
-    // Validate budget (required fields)
+    //budget
     if (_budgetMinController.text.trim().isEmpty) {
       return 'Minimum budget is required';
     }
@@ -567,8 +484,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
     if (maxBudget < minBudget) {
       return 'Maximum budget cannot be lower than minimum budget';
     }
-    
-    // Validate age requirements (required fields)
+    //age
     if (_minAgeController.text.trim().isEmpty) {
       return 'Minimum age is required';
     }
@@ -595,8 +511,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
     if (maxAge < minAge) {
       return 'Maximum age cannot be lower than minimum age';
     }
-    
-    // Validate applicant quota (required field)
+    //applicant quota
     if (_quotaController.text.trim().isEmpty) {
       return 'Applicant quota is required';
     }
@@ -604,163 +519,119 @@ class _PostCreatePageState extends State<PostCreatePage> {
     if (quota == null || quota <= 0) {
       return 'Please enter a valid applicant quota (must be greater than 0)';
     }
-    
-    // Validate work time (required fields)
+    //work time
     if (_workTimeStart == null) {
       return 'Work start time is required';
     }
     if (_workTimeEnd == null) {
       return 'Work end time is required';
     }
-    // Check if end time is after start time
-    // If the job post spans multiple days (including overnight), allow end time to be before or equal to start time
+    //check if end time is after start time and allow overnight time equals
     final startMinutes = _workTimeStart!.hour * 60 + _workTimeStart!.minute;
     final endMinutes = _workTimeEnd!.hour * 60 + _workTimeEnd!.minute;
-    
-    // Calculate the duration between start and end dates
+
     if (_eventStartDate != null && _eventEndDate != null) {
       final duration = _eventEndDate!.difference(_eventStartDate!);
       final daysDifference = duration.inDays;
-      
-      // Only validate end time > start time if it's the same day (daysDifference == 0)
-      // If the job spans multiple days (daysDifference >= 1), allow overnight shifts
+
       if (daysDifference == 0 && endMinutes <= startMinutes) {
         return 'Work end time must be after start time';
       }
     } else {
-      // If dates are not set, use the original validation
       if (endMinutes <= startMinutes) {
         return 'Work end time must be after start time';
       }
     }
-    
-    // Validate gender requirement (required field)
+    //gender
     if (_selectedGender == null || _selectedGender!.isEmpty) {
       return 'Gender requirement is required';
     }
-    
-    return null; // All validations passed
+    return null;
   }
 
-  /// Checks if all required fields are filled (for button state)
   bool _canPublish() {
     if (_saving) return false;
-    
-    // Check if form is initialized
     final formState = _formKey.currentState;
     if (formState == null) return false;
-    
-    // Check title (required field)
+
     if (_titleController.text.trim().isEmpty) {
       return false;
     }
-    
-    // Check description (required field)
     if (_descriptionController.text.trim().isEmpty) {
       return false;
     }
-    
-    // Check location (required field with coordinates)
-    if (_locationController.text.trim().isEmpty || 
-        _latitude == null || 
-        _longitude == null) {
+    if (_locationController.text.trim().isEmpty || _latitude == null || _longitude == null) {
       return false;
     }
-    
-    // Check event type (required field)
     if (_selectedEvent == null || _selectedEvent!.isEmpty) {
       return false;
     }
-    
-    // Check event dates (required fields)
     if (_eventStartDate == null || _eventEndDate == null) {
       return false;
     }
-    
-    // Check budget (required fields)
-    if (_budgetMinController.text.trim().isEmpty || 
-        _budgetMaxController.text.trim().isEmpty) {
+    if (_budgetMinController.text.trim().isEmpty || _budgetMaxController.text.trim().isEmpty) {
       return false;
     }
-    
-    // Check age requirements (required fields)
-    if (_minAgeController.text.trim().isEmpty || 
-        _maxAgeController.text.trim().isEmpty) {
+    if (_minAgeController.text.trim().isEmpty || _maxAgeController.text.trim().isEmpty) {
       return false;
     }
-    
-    // Check applicant quota (required field)
     if (_quotaController.text.trim().isEmpty) {
       return false;
     }
-    
-    // Check work time (required fields)
     if (_workTimeStart == null || _workTimeEnd == null) {
       return false;
     }
-    
-    // Check gender requirement (required field)
     if (_selectedGender == null || _selectedGender!.isEmpty) {
       return false;
     }
-    
     return true;
   }
 
   Future<void> _save({required bool publish}) async {
-    // Prevent multiple simultaneous save operations - check and set atomically
+    //prevent many button clicks
     if (_saving) return;
     _saving = true;
     if (mounted) {
-      setState(() {}); // Trigger rebuild to disable buttons
+      setState(() {}); //disable button
     }
-    
-      // For publishing, validate all required fields
-      if (publish) {
-        // Mark all budget and age fields as focused to show errors after validation
-        // Also mark gender and time fields as touched
-        if (mounted) {
-          setState(() {
-            _focusedFields.add(_budgetMinController);
-            _focusedFields.add(_budgetMaxController);
-            _focusedFields.add(_minAgeController);
-            _focusedFields.add(_maxAgeController);
-            _focusedFields.add(_quotaController);
-            _genderFieldTouched = true;
-            _workTimeStartTouched = true;
-            _workTimeEndTouched = true;
-          });
-        }
-      
-      // Trigger validation on all FormFields
+
+    //validate
+    if (publish) {
+      if (mounted) {
+        setState(() {
+          _focusedFields.add(_budgetMinController);
+          _focusedFields.add(_budgetMaxController);
+          _focusedFields.add(_minAgeController);
+          _focusedFields.add(_maxAgeController);
+          _focusedFields.add(_quotaController);
+          _genderFieldTouched = true;
+          _workTimeStartTouched = true;
+          _workTimeEndTouched = true;
+        });
+      }
       _budgetMinKey.currentState?.validate();
       _budgetMaxKey.currentState?.validate();
       _minAgeKey.currentState?.validate();
       _maxAgeKey.currentState?.validate();
       _quotaKey.currentState?.validate();
-      
+
       final formState = _formKey.currentState;
       if (formState != null && !formState.validate()) {
         if (mounted) setState(() => _saving = false);
         return;
       }
-      
+
       final validationError = _validateRequiredFieldsForPublish();
       if (validationError != null) {
         if (mounted) setState(() => _saving = false);
-        DialogUtils.showWarningMessage(
-          context: context,
-          message: validationError,
-        );
+        DialogUtils.showWarningMessage(context: context, message: validationError);
         return;
       }
     } else {
-      // For drafts, check if post is already published
-      // If post is already published (not draft and status is active/pending), cannot save as draft
-      if (widget.existing != null && 
-          !widget.existing!.isDraft && 
-          (widget.existing!.status == PostStatus.active || 
-           widget.existing!.status == PostStatus.pending)) {
+      //disable drafting for published posts
+      if (widget.existing != null &&
+          !widget.existing!.isDraft &&
+          (widget.existing!.status == PostStatus.active || widget.existing!.status == PostStatus.pending)) {
         if (mounted) {
           setState(() => _saving = false);
           DialogUtils.showWarningMessage(
@@ -770,70 +641,62 @@ class _PostCreatePageState extends State<PostCreatePage> {
         }
         return;
       }
-      
+
       // For drafts, validate title field and event start date
       // Description and other fields are optional for drafts
       // But event start date cannot be today
       if (_eventStartDate != null) {
         final now = DateTime.now();
         final today = DateTime(now.year, now.month, now.day);
-        final eventStartDateOnly = DateTime(
-          _eventStartDate!.year,
-          _eventStartDate!.month,
-          _eventStartDate!.day,
-        );
+        final eventStartDateOnly = DateTime(_eventStartDate!.year, _eventStartDate!.month, _eventStartDate!.day);
         // Event start date cannot be today
         if (eventStartDateOnly.isAtSameMomentAs(today)) {
           if (mounted) {
             setState(() => _saving = false);
-            DialogUtils.showWarningMessage(
-              context: context,
-              message: 'Event start date cannot be today',
-            );
+            DialogUtils.showWarningMessage(context: context, message: 'Event start date cannot be today');
           }
           return;
         }
       }
-      
+
       final formState = _formKey.currentState;
       if (formState == null) {
         if (mounted) setState(() => _saving = false);
         return;
       }
-      
+
       // Only validate title field for drafts
       if (_titleController.text.trim().isEmpty) {
         if (mounted) {
           setState(() => _saving = false);
-          // Scroll to first field (Job Title) if validation fails
           _scrollToFirstField();
         }
         return;
       }
     }
-    
+
     if (!mounted) {
       _saving = false;
       return;
     }
-    
-    final String id = widget.existing?.id ?? _postId; // Use generated ID for new posts
+
+    final String id = widget.existing?.id ?? _postId;
     final selectedTags = _selectedTags.values.expand((list) => list).toList();
-    
     final minAge = _parseInt(_minAgeController.text);
     final maxAge = _parseInt(_maxAgeController.text);
     final quota = _parseInt(_quotaController.text);
-    
-    // Convert TimeOfDay to string format "HH:mm"
+
     String? workTimeStartStr;
     String? workTimeEndStr;
     if (_workTimeStart != null) {
-      workTimeStartStr = '${_workTimeStart!.hour.toString().padLeft(2, '0')}:${_workTimeStart!.minute.toString().padLeft(2, '0')}';
+      workTimeStartStr =
+          '${_workTimeStart!.hour.toString().padLeft(2, '0')}:${_workTimeStart!.minute.toString().padLeft(2, '0')}';
     }
     if (_workTimeEnd != null) {
-      workTimeEndStr = '${_workTimeEnd!.hour.toString().padLeft(2, '0')}:${_workTimeEnd!.minute.toString().padLeft(2, '0')}';
+      workTimeEndStr =
+          '${_workTimeEnd!.hour.toString().padLeft(2, '0')}:${_workTimeEnd!.minute.toString().padLeft(2, '0')}';
     }
-    
+
     final Post post = Post(
       id: id,
       ownerId: widget.existing?.ownerId ?? _authService.currentUserId,
@@ -863,7 +726,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
       views: widget.existing?.views ?? 0,
       applicants: widget.existing?.applicants ?? 0,
     );
-    
+
     try {
       if (widget.existing == null) {
         await _service.create(post);
@@ -871,27 +734,26 @@ class _PostCreatePageState extends State<PostCreatePage> {
         await _service.update(post);
       }
       if (!mounted || _hasPopped) return;
-      // Return publish status: true if published, false if draft
       // Only pop once to prevent "Future already completed" error
       _hasPopped = true;
       Navigator.pop(context, publish);
     } catch (e) {
       if (!mounted || _hasPopped) return;
-      
+
       String errorMessage = 'Failed to save: $e';
       final errorString = e.toString();
-      
-      // Check if it's a document size limit error
-      final isSizeError = errorString.contains('exceeds the maximum allowed size') ||
+
+      final isSizeError =
+          errorString.contains('exceeds the maximum allowed size') ||
           errorString.contains('cannot be written because its size') ||
           errorString.contains('invalid-argument') ||
           errorString.contains('INVALID_ARGUMENT');
-      
+
       if (isSizeError) {
         // Try to extract size information
         RegExpMatch? sizeMatch = RegExp(r'size \((\d+(?:,\d+)*) bytes\)').firstMatch(errorString);
         RegExpMatch? maxSizeMatch = RegExp(r'maximum allowed size of (\d+(?:,\d+)*) bytes').firstMatch(errorString);
-        
+
         // Fallback: try without commas
         if (sizeMatch == null) {
           sizeMatch = RegExp(r'size \((\d+) bytes\)').firstMatch(errorString);
@@ -899,7 +761,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
         if (maxSizeMatch == null) {
           maxSizeMatch = RegExp(r'maximum.*?(\d+) bytes').firstMatch(errorString);
         }
-        
+
         // Fallback: extract large numbers
         if (sizeMatch == null || maxSizeMatch == null) {
           final allLargeNumbers = RegExp(r'\d{6,}').allMatches(errorString).toList();
@@ -910,7 +772,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
               final actualSize = numbers[0];
               final maxSize = 1048576;
               final exceededSize = actualSize - maxSize;
-              
+
               errorMessage = _buildSizeErrorMessage(actualSize, maxSize, exceededSize);
             } else {
               errorMessage = _buildGenericSizeErrorMessage();
@@ -919,26 +781,27 @@ class _PostCreatePageState extends State<PostCreatePage> {
             errorMessage = _buildGenericSizeErrorMessage();
           }
         } else {
-          // Parse sizes from matches
+          //pasing size
           try {
             String actualSizeStr = sizeMatch.groupCount > 0 && sizeMatch.group(1) != null
                 ? sizeMatch.group(1)!.replaceAll(',', '').trim()
                 : sizeMatch.group(0)!.replaceAll(RegExp(r'[^\d]'), '').trim();
-            
+
             String maxSizeStr = maxSizeMatch.groupCount > 0 && maxSizeMatch.group(1) != null
                 ? maxSizeMatch.group(1)!.replaceAll(',', '').trim()
                 : maxSizeMatch.group(0)!.replaceAll(RegExp(r'[^\d]'), '').trim();
-            
+
             final actualSize = int.parse(actualSizeStr);
             final maxSize = int.parse(maxSizeStr);
             final exceededSize = actualSize - maxSize;
-            
+
             errorMessage = _buildSizeErrorMessage(actualSize, maxSize, exceededSize);
           } catch (_) {
-            // Fallback to extracting large numbers
+            //alternative to extarct large numbers
             final allLargeNumbers = RegExp(r'\d{6,}').allMatches(errorString).toList();
             if (allLargeNumbers.isNotEmpty) {
-              final numbers = allLargeNumbers.map((m) => int.parse(m.group(0)!)).toList()..sort((a, b) => b.compareTo(a));
+              final numbers = allLargeNumbers.map((m) => int.parse(m.group(0)!)).toList()
+                ..sort((a, b) => b.compareTo(a));
               if (numbers.isNotEmpty && numbers[0] > 1000000) {
                 errorMessage = _buildSizeErrorMessage(numbers[0], 1048576, numbers[0] - 1048576);
               } else {
@@ -950,12 +813,8 @@ class _PostCreatePageState extends State<PostCreatePage> {
           }
         }
       }
-      
-      DialogUtils.showWarningMessage(
-        context: context,
-        message: errorMessage,
-        duration: const Duration(seconds: 8),
-      );
+
+      DialogUtils.showWarningMessage(context: context, message: errorMessage, duration: const Duration(seconds: 8));
     } finally {
       if (mounted && !_hasPopped) {
         setState(() => _saving = false);
@@ -965,7 +824,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
     }
   }
 
-  // Helper function to format bytes to readable string
+  //format bytes to readable string
   String _formatBytes(int bytes) {
     if (bytes >= 1024 * 1024) {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
@@ -974,14 +833,14 @@ class _PostCreatePageState extends State<PostCreatePage> {
     }
   }
 
-  // Helper function to build size error message
+  //size error message
   String _buildSizeErrorMessage(int actualSize, int maxSize, int exceededSize) {
     final actualSizeReadable = _formatBytes(actualSize);
     final maxSizeReadable = _formatBytes(maxSize);
     final exceededSizeReadable = _formatBytes(exceededSize);
     final recommendedMax = (maxSize * 0.9).round();
     final recommendedMaxReadable = _formatBytes(recommendedMax);
-    
+
     return 'Image Size exceeds the limit!\n\n'
         'Current size: $actualSizeReadable\n'
         'Maximum allowed: $maxSizeReadable\n'
@@ -991,7 +850,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
         'Recommended total size: less than $recommendedMaxReadable.';
   }
 
-  // Helper function to build generic size error message
+  //generic size error message
   String _buildGenericSizeErrorMessage() {
     return 'Image Size exceeds the limit!\n\n'
         'Document size exceeds the 1MB limit.\n\n'
@@ -1011,16 +870,13 @@ class _PostCreatePageState extends State<PostCreatePage> {
     return int.tryParse(t);
   }
 
-  /// Checks if the post is already published
   bool _isPostPublished() {
     if (widget.existing == null) return false;
-    // Post is considered published if it's not a draft and status is active or pending
-    return !widget.existing!.isDraft && 
-           (widget.existing!.status == PostStatus.active || 
-            widget.existing!.status == PostStatus.pending);
+    return !widget.existing!.isDraft &&
+        (widget.existing!.status == PostStatus.active || widget.existing!.status == PostStatus.pending);
   }
 
-  /// Scrolls to the first field (Job Title) when validation fails for draft
+  //scrolls to the first field when draft
   void _scrollToFirstField() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_titleFieldKey.currentContext != null && _scrollController.hasClients) {
@@ -1033,22 +889,12 @@ class _PostCreatePageState extends State<PostCreatePage> {
           );
         } catch (e) {
           debugPrint('Error scrolling to first field: $e');
-          // Fallback: scroll to top
           if (_scrollController.hasClients) {
-            _scrollController.animateTo(
-              0,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-            );
+            _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
           }
         }
       } else if (_scrollController.hasClients) {
-        // Fallback: scroll to top if field key not found
-        _scrollController.animateTo(
-          0,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        );
+        _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
       }
     });
   }
@@ -1072,39 +918,10 @@ class _PostCreatePageState extends State<PostCreatePage> {
       appBar: AppBar(
         title: Text(
           widget.existing == null ? 'Create New Post' : 'Edit Post',
-          style: const TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600),
         ),
         backgroundColor: Colors.white,
         elevation: 1,
-        iconTheme: const IconThemeData(color: Colors.black),
-        actions: [
-          // Show refresh button if there's an external update
-          if (widget.existing != null && _hasExternalUpdate)
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.refresh, color: Colors.black),
-                  onPressed: _refreshFromFirestore,
-                ),
-                Positioned(
-                  right: 6,
-                  top: 6,
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-        ],
       ),
       body: SingleChildScrollView(
         controller: _scrollController,
@@ -1114,18 +931,13 @@ class _PostCreatePageState extends State<PostCreatePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
+                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2)),
                   ],
                 ),
                 child: Column(
@@ -1142,43 +954,30 @@ class _PostCreatePageState extends State<PostCreatePage> {
                         Expanded(
                           child: Text(
                             widget.existing == null ? 'Create New Job Post' : 'Edit Job Post',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black,
-                            ),
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      widget.existing == null 
+                      widget.existing == null
                           ? 'Fill in the details to create a new job posting'
                           : 'Update your job post information',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
-                      ),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
                     ),
                   ],
                 ),
               ),
-              
               const SizedBox(height: 20),
-              
-              // Basic Information Card
+
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
+                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2)),
                   ],
                 ),
                 child: Column(
@@ -1190,40 +989,37 @@ class _PostCreatePageState extends State<PostCreatePage> {
                         const SizedBox(width: 8),
                         const Text(
                           'Basic Information',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black,
-                          ),
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black),
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
-                    _buildTextField(_titleController, 'Job Title*', 
+                    _buildTextField(
+                      _titleController,
+                      'Job Title*',
                       key: _titleFieldKey,
-                      validator: (v) => InputValidators.required(v, errorMessage: 'Required')),
+                      validator: (v) => InputValidators.required(v, errorMessage: 'Required'),
+                    ),
                     const SizedBox(height: 16),
-                    _buildTextField(_descriptionController, 'Description*', 
-                      maxLines: 5, 
-                      validator: (v) => InputValidators.required(v, errorMessage: 'Required')),
+                    _buildTextField(
+                      _descriptionController,
+                      'Description*',
+                      maxLines: 5,
+                      validator: (v) => InputValidators.required(v, errorMessage: 'Required'),
+                    ),
                   ],
                 ),
               ),
-              
               const SizedBox(height: 16),
-              
-              // Budget & Location Card
+
+              //budget  location
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
+                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2)),
                   ],
                 ),
                 child: Column(
@@ -1235,11 +1031,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                         const SizedBox(width: 8),
                         const Text(
                           'Budget & Location',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black,
-                          ),
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black),
                         ),
                       ],
                     ),
@@ -1247,37 +1039,43 @@ class _PostCreatePageState extends State<PostCreatePage> {
                     Row(
                       children: [
                         Expanded(
-                          child: _buildTextField(_budgetMinController, 'Min Budget*',
+                          child: _buildTextField(
+                            _budgetMinController,
+                            'Min Budget*',
                             prefixText: '\$ ',
                             keyboardType: TextInputType.number,
                             showErrorBelow: true,
-                            validator: (v) => InputValidators.required(v, errorMessage: 'Required')),
+                            validator: (v) => InputValidators.required(v, errorMessage: 'Required'),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: _buildTextField(_budgetMaxController, 'Max Budget*',
+                          child: _buildTextField(
+                            _budgetMaxController,
+                            'Max Budget*',
                             prefixText: '\$ ',
                             keyboardType: TextInputType.number,
                             showErrorBelow: true,
                             validator: (v) {
                               final requiredError = InputValidators.required(v, errorMessage: 'Required');
                               if (requiredError != null) return requiredError;
-                              
+
                               if (v == null || v.trim().isEmpty) return null; // Already handled by required
-                              
+
                               final maxBudget = _parseDouble(v);
                               final minBudget = _parseDouble(_budgetMinController.text);
-                              
+
                               if (maxBudget == null) {
                                 return 'Please enter a valid number';
                               }
-                              
+
                               if (minBudget != null && maxBudget < minBudget) {
                                 return 'Max budget cannot be lower than min budget';
                               }
-                              
+
                               return null;
-                            }),
+                            },
+                          ),
                         ),
                       ],
                     ),
@@ -1298,21 +1096,16 @@ class _PostCreatePageState extends State<PostCreatePage> {
                   ],
                 ),
               ),
-              
               const SizedBox(height: 16),
-              
-              // Job Details Card
+
+              //job details
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
+                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2)),
                   ],
                 ),
                 child: Column(
@@ -1324,11 +1117,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                         const SizedBox(width: 8),
                         const Text(
                           'Job Details',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black,
-                          ),
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black),
                         ),
                       ],
                     ),
@@ -1374,7 +1163,11 @@ class _PostCreatePageState extends State<PostCreatePage> {
                               });
                               _onFieldChanged();
                             },
-                            firstDate: _eventStartDate ?? DateTime.now().add(const Duration(days: 1)), // Must be at least tomorrow if no start date
+                            firstDate:
+                                _eventStartDate ??
+                                DateTime.now().add(
+                                  const Duration(days: 1),
+                                ), // Must be at least tomorrow if no start date
                             lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
                             required: true,
                           ),
@@ -1414,7 +1207,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                     const SizedBox(height: 16),
                     _buildGenderDropdown(),
                     const SizedBox(height: 16),
-                    
+
                     TagSelectionSection(
                       selections: _selectedTags,
                       onCategoryChanged: _onTagCategoryChanged,
@@ -1424,24 +1217,16 @@ class _PostCreatePageState extends State<PostCreatePage> {
                   ],
                 ),
               ),
-              
-              const SizedBox(height: 16),
-              
-              // Attachments Card
               const SizedBox(height: 16),
 
-              // Candidate Requirements Card
+              //candidate
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
+                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2)),
                   ],
                 ),
                 child: Column(
@@ -1453,11 +1238,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                         const SizedBox(width: 8),
                         const Text(
                           'Candidate Requirements',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black,
-                          ),
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black),
                         ),
                       ],
                     ),
@@ -1473,22 +1254,17 @@ class _PostCreatePageState extends State<PostCreatePage> {
                             validator: (v) {
                               final requiredError = InputValidators.required(v, errorMessage: 'Required');
                               if (requiredError != null) return requiredError;
-                              
-                              if (v == null || v.trim().isEmpty) return null; // Already handled by required
-                              
+                              if (v == null || v.trim().isEmpty) return null;
                               final minAge = _parseInt(v);
                               if (minAge == null) {
                                 return 'Please enter a valid number';
                               }
-                              
                               if (minAge < 18) {
                                 return 'Minimum age must be 18 or above';
                               }
-                              
                               if (minAge > 50) {
                                 return 'Minimum age must be 50 or below';
                               }
-                              
                               return null;
                             },
                           ),
@@ -1503,28 +1279,25 @@ class _PostCreatePageState extends State<PostCreatePage> {
                             validator: (v) {
                               final requiredError = InputValidators.required(v, errorMessage: 'Required');
                               if (requiredError != null) return requiredError;
-                              
-                              if (v == null || v.trim().isEmpty) return null; // Already handled by required
-                              
+
+                              if (v == null || v.trim().isEmpty) return null;
+
                               final maxAge = _parseInt(v);
                               final minAge = _parseInt(_minAgeController.text);
-                              
+
                               if (maxAge == null) {
                                 return 'Please enter a valid number';
                               }
-                              
                               if (maxAge < 18) {
                                 return 'Maximum age must be 18 or above';
                               }
-                              
                               if (maxAge > 50) {
                                 return 'Maximum age must be 50 or below';
                               }
-                              
                               if (minAge != null && maxAge < minAge) {
                                 return 'Max age cannot be lower than min age';
                               }
-                              
+
                               return null;
                             },
                           ),
@@ -1542,25 +1315,23 @@ class _PostCreatePageState extends State<PostCreatePage> {
                       validator: (v) {
                         final requiredError = InputValidators.required(v, errorMessage: 'Required');
                         if (requiredError != null) return requiredError;
-                        
-                        if (v == null || v.trim().isEmpty) return null; // Already handled by required
-                        
+
+                        if (v == null || v.trim().isEmpty) return null;
+
                         final quota = _parseInt(v);
                         if (quota == null) {
                           return 'Please enter a valid number';
                         }
-                        
                         if (quota <= 0) {
                           return 'Applicant quota must be greater than 0';
                         }
-                        
+
                         return null;
                       },
                     ),
                   ],
                 ),
               ),
-
               const SizedBox(height: 16),
 
               Container(
@@ -1569,11 +1340,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
+                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2)),
                   ],
                 ),
                 child: ImageUploadSection(
@@ -1600,10 +1367,8 @@ class _PostCreatePageState extends State<PostCreatePage> {
                   maxImages: 3, // Maximum 3 images allowed
                 ),
               ),
-              
               const SizedBox(height: 24),
-              
-              // Action Buttons
+
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
@@ -1615,17 +1380,9 @@ class _PostCreatePageState extends State<PostCreatePage> {
                           foregroundColor: Colors.black,
                           side: const BorderSide(color: Colors.black),
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        child: const Text(
-                          'Save as Draft',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
+                        child: const Text('Save as Draft', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -1636,34 +1393,22 @@ class _PostCreatePageState extends State<PostCreatePage> {
                           backgroundColor: const Color(0xFF00C8A0),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           elevation: 2,
                           shadowColor: const Color(0xFF00C8A0).withOpacity(0.3),
                         ),
                         child: _saving
                             ? const SizedBox(
-                                height: 20, 
-                                width: 20, 
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2, 
-                                  color: Colors.white
-                                ),
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                               )
-                            : const Text(
-                                'Publish Post',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 16,
-                                ),
-                              ),
+                            : const Text('Publish Post', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
                       ),
                     ),
                   ],
                 ),
               ),
-              
               const SizedBox(height: 20),
             ],
           ),
@@ -1678,11 +1423,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
       children: [
         Text(
           'Availability*',
-          style: TextStyle(
-            color: Colors.grey[700],
-            fontWeight: FontWeight.w500,
-            fontSize: 14,
-          ),
+          style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w500, fontSize: 14),
         ),
         const SizedBox(height: 8),
         Focus(
@@ -1694,9 +1435,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
           child: Container(
             decoration: BoxDecoration(
               border: Border.all(
-                color: _jobTypeFocused 
-                    ? const Color(0xFF00C8A0) 
-                    : Colors.grey[400]!,
+                color: _jobTypeFocused ? const Color(0xFF00C8A0) : Colors.grey[400]!,
                 width: _jobTypeFocused ? 2 : 1,
               ),
               borderRadius: BorderRadius.circular(8),
@@ -1711,21 +1450,17 @@ class _PostCreatePageState extends State<PostCreatePage> {
                   icon: Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
                   iconSize: 24,
                   dropdownColor: Colors.white,
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontSize: 16,
-                  ),
+                  style: const TextStyle(color: Colors.black, fontSize: 16),
                   items: JobType.values
-                      .map((jt) => DropdownMenuItem<JobType>(
-                            value: jt,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Text(
-                                jt.label,
-                                style: const TextStyle(color: Colors.black),
-                              ),
-                            ),
-                          ))
+                      .map(
+                        (jt) => DropdownMenuItem<JobType>(
+                          value: jt,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Text(jt.label, style: const TextStyle(color: Colors.black)),
+                          ),
+                        ),
+                      )
                       .toList(),
                   onChanged: (v) {
                     setState(() => _jobType = v ?? JobType.weekdays);
@@ -1741,13 +1476,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                     return JobType.values.map((jt) {
                       return Container(
                         alignment: Alignment.centerLeft,
-                        child: Text(
-                          jt.label,
-                          style: const TextStyle(
-                            color: Colors.black,
-                            fontSize: 16,
-                          ),
-                        ),
+                        child: Text(jt.label, style: const TextStyle(color: Colors.black, fontSize: 16)),
                       );
                     }).toList();
                   },
@@ -1766,19 +1495,13 @@ class _PostCreatePageState extends State<PostCreatePage> {
       children: [
         Text(
           'Event Type*',
-          style: TextStyle(
-            color: Colors.grey[700],
-            fontWeight: FontWeight.w500,
-            fontSize: 14,
-          ),
+          style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w500, fontSize: 14),
         ),
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
             border: Border.all(
-              color: _eventFocused 
-                  ? const Color(0xFF00C8A0) 
-                  : Colors.grey[400]!,
+              color: _eventFocused ? const Color(0xFF00C8A0) : Colors.grey[400]!,
               width: _eventFocused ? 2 : 1,
             ),
             borderRadius: BorderRadius.circular(8),
@@ -1786,156 +1509,120 @@ class _PostCreatePageState extends State<PostCreatePage> {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: DropdownButtonHideUnderline(
-                child: _categoriesLoading
-                    ? Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  const Color(0xFF00C8A0),
-                                ),
-                              ),
+              child: _categoriesLoading
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(const Color(0xFF00C8A0)),
                             ),
-                            const SizedBox(width: 12),
-                            Flexible(
-                              child: Text(
-                                'Loading event types...',
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 14,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                          ),
+                          const SizedBox(width: 12),
+                          Flexible(
+                            child: Text(
+                              'Loading event types...',
+                              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          ],
-                        ),
-                      )
-                    : _categoriesError != null
-                        ? Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: Row(
-                              children: [
-                                Icon(Icons.error_outline, size: 16, color: Colors.red[400]),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    _categoriesError!,
-                                    style: TextStyle(
-                                      color: Colors.red[600],
-                                      fontSize: 13,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                TextButton(
-                                  onPressed: _loadCategories,
-                                  style: TextButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    minimumSize: Size.zero,
-                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                  child: Text(
-                                    'Retry',
-                                    style: TextStyle(
-                                      color: const Color(0xFF00C8A0),
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                          ),
+                        ],
+                      ),
+                    )
+                  : _categoriesError != null
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Row(
+                        children: [
+                          Icon(Icons.error_outline, size: 16, color: Colors.red[400]),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _categoriesError!,
+                              style: TextStyle(color: Colors.red[600], fontSize: 13),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _loadCategories,
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: Text('Retry', style: TextStyle(color: const Color(0xFF00C8A0), fontSize: 12)),
+                          ),
+                        ],
+                      ),
+                    )
+                  : _categories.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 16, color: Colors.orange[400]),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'No event types available. Please contact support or try again later.',
+                              style: TextStyle(color: Colors.orange[600], fontSize: 13),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _loadCategories,
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: Text('Retry', style: TextStyle(color: const Color(0xFF00C8A0), fontSize: 12)),
+                          ),
+                        ],
+                      ),
+                    )
+                  : DropdownButton<String>(
+                      value: _selectedEvent != null && _categories.any((c) => c.name == _selectedEvent)
+                          ? _selectedEvent
+                          : null,
+                      focusNode: _eventFocusNode,
+                      hint: Text('Select event', style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+                      isExpanded: true,
+                      icon: Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
+                      iconSize: 24,
+                      dropdownColor: Colors.white,
+                      style: const TextStyle(color: Colors.black, fontSize: 16),
+                      items: _categories
+                          .map(
+                            (category) => DropdownMenuItem<String>(
+                              value: category.name,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                child: Text(category.name, style: const TextStyle(color: Colors.black)),
+                              ),
                             ),
                           )
-                        : _categories.isEmpty
-                            ? Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.info_outline, size: 16, color: Colors.orange[400]),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        'No event types available. Please contact support or try again later.',
-                                        style: TextStyle(
-                                          color: Colors.orange[600],
-                                          fontSize: 13,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: _loadCategories,
-                                      style: TextButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        minimumSize: Size.zero,
-                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                      ),
-                                      child: Text(
-                                        'Retry',
-                                        style: TextStyle(
-                                          color: const Color(0xFF00C8A0),
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : DropdownButton<String>(
-                                value: _selectedEvent != null && 
-                                       _categories.any((c) => c.name == _selectedEvent)
-                                    ? _selectedEvent
-                                    : null,
-                                focusNode: _eventFocusNode,
-                                hint: Text(
-                                  'Select event',
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                isExpanded: true,
-                                icon: Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
-                                iconSize: 24,
-                                dropdownColor: Colors.white,
-                                style: const TextStyle(
-                                  color: Colors.black,
-                                  fontSize: 16,
-                                ),
-                                items: _categories
-                                    .map(
-                                      (category) => DropdownMenuItem<String>(
-                                        value: category.name,
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(vertical: 8),
-                                          child: Text(
-                                            category.name,
-                                            style: const TextStyle(color: Colors.black),
-                                          ),
-                                        ),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    setState(() {
-                                      _selectedEvent = value;
-                                      _eventFocused = false;
-                                    });
-                                    _eventFocusNode.unfocus();
-                                    _onFieldChanged(); // Update button state
-                                  }
-                                },
-                                onTap: () {
-                                  setState(() {
-                                    _eventFocused = true;
-                                  });
-                                },
-                              ),
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() {
+                            _selectedEvent = value;
+                            _eventFocused = false;
+                          });
+                          _eventFocusNode.unfocus();
+                          _onFieldChanged(); // Update button state
+                        }
+                      },
+                      onTap: () {
+                        setState(() {
+                          _eventFocused = true;
+                        });
+                      },
+                    ),
             ),
           ),
         ),
@@ -1943,9 +1630,8 @@ class _PostCreatePageState extends State<PostCreatePage> {
     );
   }
 
-
   Widget _buildTextField(
-    TextEditingController controller, 
+    TextEditingController controller,
     String label, {
     Key? key,
     int maxLines = 1,
@@ -1954,23 +1640,19 @@ class _PostCreatePageState extends State<PostCreatePage> {
     String? helperText,
     String? prefixText,
     TextInputType? keyboardType,
-    bool showErrorBelow = false, // New parameter to control error display
+    bool showErrorBelow = false, 
   }) {
-    // If showErrorBelow is true, use FormField to control error display
     if (showErrorBelow) {
-      // Create a unique key based on controller identity
-      final fieldKey = controller == _budgetMinController 
+      final fieldKey = controller == _budgetMinController
           ? _budgetMinKey
-          : (controller == _budgetMaxController 
-              ? _budgetMaxKey
-              : (controller == _minAgeController 
-                  ? _minAgeKey
-                  : (controller == _maxAgeController 
-                      ? _maxAgeKey
-                      : (controller == _quotaController
-                          ? _quotaKey
-                          : GlobalKey<FormFieldState<String>>()))));
-      
+          : (controller == _budgetMaxController
+                ? _budgetMaxKey
+                : (controller == _minAgeController
+                      ? _minAgeKey
+                      : (controller == _maxAgeController
+                            ? _maxAgeKey
+                            : (controller == _quotaController ? _quotaKey : GlobalKey<FormFieldState<String>>()))));
+
       return FormField<String>(
         key: fieldKey,
         initialValue: controller.text,
@@ -1981,11 +1663,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
             children: [
               Text(
                 label,
-                style: TextStyle(
-                  color: Colors.grey[700],
-                  fontWeight: FontWeight.w500,
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w500, fontSize: 14),
               ),
               const SizedBox(height: 8),
               TextFormField(
@@ -2003,7 +1681,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
                 },
                 onChanged: (value) {
                   field.didChange(value);
-                  // Only validate if field has been focused
                   if (_focusedFields.contains(controller)) {
                     field.validate();
                   }
@@ -2012,21 +1689,19 @@ class _PostCreatePageState extends State<PostCreatePage> {
                   hintText: hintText,
                   helperText: helperText,
                   prefixText: prefixText,
-                  errorText: null, // Don't show error in decoration
-                  errorStyle: const TextStyle(height: 0), // Hide default error text
+                  errorText: null,
+                  errorStyle: const TextStyle(height: 0), 
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide(
-                      color: (field.hasError && _focusedFields.contains(controller)) 
-                          ? Colors.red 
-                          : Colors.grey[400]!,
+                      color: (field.hasError && _focusedFields.contains(controller)) ? Colors.red : Colors.grey[400]!,
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide(
-                      color: (field.hasError && _focusedFields.contains(controller)) 
-                          ? Colors.red 
+                      color: (field.hasError && _focusedFields.contains(controller))
+                          ? Colors.red
                           : const Color(0xFF00C8A0),
                     ),
                   ),
@@ -2038,24 +1713,15 @@ class _PostCreatePageState extends State<PostCreatePage> {
                     borderRadius: BorderRadius.circular(8),
                     borderSide: const BorderSide(color: Colors.red),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
               ),
-              // Only show error if field has been focused
+              //show error when focused
               if (field.hasError && _focusedFields.contains(controller)) ...[
                 const SizedBox(height: 4),
                 Padding(
                   padding: const EdgeInsets.only(left: 12),
-                  child: Text(
-                    field.errorText ?? '',
-                    style: const TextStyle(
-                      color: Colors.red,
-                      fontSize: 12,
-                    ),
-                  ),
+                  child: Text(field.errorText ?? '', style: const TextStyle(color: Colors.red, fontSize: 12)),
                 ),
               ],
             ],
@@ -2063,18 +1729,13 @@ class _PostCreatePageState extends State<PostCreatePage> {
         },
       );
     }
-    
-    // Default behavior - show error in decoration
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: TextStyle(
-            color: Colors.grey[700],
-            fontWeight: FontWeight.w500,
-            fontSize: 14,
-          ),
+          style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w500, fontSize: 14),
         ),
         const SizedBox(height: 8),
         TextFormField(
@@ -2094,10 +1755,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
               borderRadius: BorderRadius.circular(8),
               borderSide: const BorderSide(color: Color(0xFF00C8A0)),
             ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 12,
-            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           ),
           validator: validator,
         ),
@@ -2106,22 +1764,15 @@ class _PostCreatePageState extends State<PostCreatePage> {
   }
 
   Widget _buildGenderDropdown() {
-    // Validate that _selectedGender is a valid value to prevent DropdownButton assertion error
     const validGenders = ['any', 'male', 'female'];
-    final String? safeSelectedGender = (_selectedGender != null && validGenders.contains(_selectedGender))
-        ? _selectedGender
-        : null;
-    
+    final String? safeSelectedGender = (_selectedGender != null && validGenders.contains(_selectedGender))? _selectedGender : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           'Gender Requirement*',
-          style: TextStyle(
-            color: Colors.grey[700],
-            fontWeight: FontWeight.w500,
-            fontSize: 14,
-          ),
+          style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w500, fontSize: 14),
         ),
         const SizedBox(height: 8),
         Container(
@@ -2137,42 +1788,24 @@ class _PostCreatePageState extends State<PostCreatePage> {
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
                 value: safeSelectedGender,
-                hint: Text(
-                  'Select gender requirement',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 16,
-                  ),
-                ),
+                hint: Text('Select gender requirement', style: TextStyle(color: Colors.grey[600], fontSize: 16)),
                 isExpanded: true,
                 icon: Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
                 iconSize: 24,
                 dropdownColor: Colors.white,
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontSize: 16,
-                ),
+                style: const TextStyle(color: Colors.black, fontSize: 16),
                 items: [
                   DropdownMenuItem<String>(
                     value: 'any',
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Text('Any'),
-                    ),
+                    child: Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Any')),
                   ),
                   DropdownMenuItem<String>(
                     value: 'male',
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Text('Male'),
-                    ),
+                    child: Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Male')),
                   ),
                   DropdownMenuItem<String>(
                     value: 'female',
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Text('Female'),
-                    ),
+                    child: Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Female')),
                   ),
                 ],
                 onChanged: (value) {
@@ -2197,13 +1830,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
           const SizedBox(height: 4),
           Padding(
             padding: const EdgeInsets.only(left: 12),
-            child: Text(
-              'Required',
-              style: const TextStyle(
-                color: Colors.red,
-                fontSize: 12,
-              ),
-            ),
+            child: Text('Required', style: const TextStyle(color: Colors.red, fontSize: 12)),
           ),
         ],
       ],
@@ -2220,11 +1847,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
       children: [
         Text(
           label,
-          style: TextStyle(
-            color: Colors.grey[700],
-            fontWeight: FontWeight.w500,
-            fontSize: 14,
-          ),
+          style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w500, fontSize: 14),
         ),
         const SizedBox(height: 8),
         InkWell(
@@ -2239,7 +1862,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                 _workTimeEndTouched = true;
               });
             }
-            
+
             final TimeOfDay? picked = await showTimePicker(
               context: context,
               initialTime: time ?? TimeOfDay(hour: 9, minute: 0),
@@ -2265,42 +1888,27 @@ class _PostCreatePageState extends State<PostCreatePage> {
               final isStartTime = label.contains('Start');
               final isTouched = isStartTime ? _workTimeStartTouched : _workTimeEndTouched;
               final showError = time == null && isTouched;
-              
+
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  border: Border.all(
-                    color: showError ? Colors.red : Colors.grey[400]!,
-                    width: 1,
-                  ),
+                  border: Border.all(color: showError ? Colors.red : Colors.grey[400]!, width: 1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.access_time,
-                  color: showError ? Colors.red : Colors.grey[600],
-                  size: 20,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    time == null
-                        ? 'time'
-                        : time.format(context),
-                    style: TextStyle(
-                      color: time == null ? Colors.grey[400] : Colors.black,
-                      fontSize: 16,
+                child: Row(
+                  children: [
+                    Icon(Icons.access_time, color: showError ? Colors.red : Colors.grey[600], size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        time == null ? 'time' : time.format(context),
+                        style: TextStyle(color: time == null ? Colors.grey[400] : Colors.black, fontSize: 16),
+                      ),
                     ),
-                  ),
+                    Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
+                  ],
                 ),
-                Icon(
-                  Icons.arrow_drop_down,
-                  color: Colors.grey[600],
-                ),
-              ],
-            ),
-          );
+              );
             },
           ),
         ),
@@ -2314,13 +1922,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                   const SizedBox(height: 4),
                   Padding(
                     padding: const EdgeInsets.only(left: 12),
-                    child: Text(
-                      'Required',
-                      style: const TextStyle(
-                        color: Colors.red,
-                        fontSize: 12,
-                      ),
-                    ),
+                    child: Text('Required', style: const TextStyle(color: Colors.red, fontSize: 12)),
                   ),
                 ],
               );

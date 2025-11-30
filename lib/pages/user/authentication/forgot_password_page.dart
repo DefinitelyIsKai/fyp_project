@@ -70,7 +70,6 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Back Button
                   Align(
                     alignment: Alignment.centerLeft,
                     child: IconButton(
@@ -90,7 +89,6 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  // Lock Icon
                   Container(
                     width: 100,
                     height: 100,
@@ -125,7 +123,6 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                     ),
                   ),
                   const SizedBox(height: 40),
-                  // Email Field
                   Text(
                     'Email',
                     style: TextStyle(
@@ -167,7 +164,6 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                     validator: InputValidators.requiredEmail,
                   ),
                   const SizedBox(height: 32),
-                  // Send Reset Link Button
                   SizedBox(
                     height: 52,
                     child: ElevatedButton(
@@ -190,7 +186,6 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  // Back to Login
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [

@@ -4,11 +4,11 @@ class AvailabilitySlot {
   final String id;
   final String recruiterId;
   final DateTime date;
-  final String startTime; // Format: "HH:mm" (e.g., "09:00")
-  final String endTime; // Format: "HH:mm" (e.g., "10:00")
+  final String startTime;
+  final String endTime;
   final bool isAvailable;
-  final String? bookedBy; // jobseekerId if booked
-  final String? matchId; // jobMatchId if booked
+  final String? bookedBy;
+  final String? matchId;
   final DateTime createdAt;
 
   AvailabilitySlot({

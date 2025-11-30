@@ -52,7 +52,7 @@ class _LoginPageState extends State<LoginPage> {
           password: _passwordController.text,
         );
         if (!mounted) return;
-        // Block access if email not verified
+        // Block email not verified
         await credential.user?.reload();
         if (!(credential.user?.emailVerified ?? false)) {
           DialogUtils.showWarningMessage(
@@ -61,13 +61,12 @@ class _LoginPageState extends State<LoginPage> {
           );
           return;
         }
-        // Decide destination based on profileCompleted; default to home if unknown
         bool goToSetup = false;
         try {
           final completed = await _authService.isProfileCompleted();
           goToSetup = completed == false;
         } catch (_) {
-          // If we cannot determine, prefer not to block the user
+      
         }
         DialogUtils.showSuccessMessage(
           context: context,
@@ -82,11 +81,8 @@ class _LoginPageState extends State<LoginPage> {
         // Admin login flow
         admin_auth.AuthService adminAuthService;
         try {
-          // Try to get from Provider first (if available in widget tree)
           adminAuthService = Provider.of<admin_auth.AuthService>(context, listen: false);
         } catch (e) {
-          // If Provider is not available, create a new instance
-          // Note: This instance won't be available to other widgets via Provider
           adminAuthService = admin_auth.AuthService();
         }
 
@@ -102,12 +98,9 @@ class _LoginPageState extends State<LoginPage> {
             context: context,
             message: 'Admin login successful',
           );
-          // Navigate to admin dashboard
-          // Try named route first, fallback to direct navigation
           try {
             Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
           } catch (e) {
-            // If named route doesn't work, navigate directly
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(builder: (_) => const DashboardPage()),
             );
@@ -149,7 +142,6 @@ class _LoginPageState extends State<LoginPage> {
       canPop: false,
       onPopInvoked: (didPop) {
         if (!didPop) {
-          // Exit the app when trying to go back from login page
           SystemNavigator.pop();
         }
       },
@@ -165,7 +157,6 @@ class _LoginPageState extends State<LoginPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 20),
-                  // Logo
                   Container(
                     width: 80,
                     height: 80,
@@ -206,7 +197,6 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                   const SizedBox(height: 40),
-                  // Email Field
                   Text(
                     'Email',
                     style: TextStyle(
@@ -248,7 +238,6 @@ class _LoginPageState extends State<LoginPage> {
                     validator: InputValidators.requiredEmail,
                   ),
                   const SizedBox(height: 20),
-                  // Password Field
                   Text(
                     'Password',
                     style: TextStyle(
@@ -352,7 +341,6 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                     ),
                   ),
-                  // Only show sign up link for user mode
                   if (_loginMode == LoginMode.user) ...[
                     const SizedBox(height: 24),
                     // Sign Up Link
@@ -387,7 +375,8 @@ class _LoginPageState extends State<LoginPage> {
                     const SizedBox(height: 24),
                     Divider(thickness: 1, color: Colors.grey[300]),
                     const SizedBox(height: 16),
-                    // Switch to Admin Login
+
+                    //Admin Login
                     Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -439,7 +428,6 @@ class _LoginPageState extends State<LoginPage> {
                       ],
                     ),
                   ],
-                  // Admin info message
                   if (_loginMode == LoginMode.admin) ...[
                     const SizedBox(height: 16),
                     Container(
