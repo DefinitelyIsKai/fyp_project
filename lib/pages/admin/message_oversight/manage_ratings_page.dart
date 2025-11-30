@@ -12,7 +12,9 @@ class ManageRatingsPage extends StatefulWidget {
 
 class _ManageRatingsPageState extends State<ManageRatingsPage> {
   final RatingService _ratingService = RatingService();
+  final GlobalKey<RefreshIndicatorState> _refreshIndicatorKey = GlobalKey<RefreshIndicatorState>();
   String _searchQuery = '';
+  int? _selectedStarFilter; // null = all, 1-5 = specific star rating
 
   @override
   Widget build(BuildContext context) {
@@ -21,15 +23,6 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
         title: const Text('Manage Ratings'),
         backgroundColor: Colors.amber[700],
         foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              setState(() {});
-            },
-            tooltip: 'Refresh',
-          ),
-        ],
       ),
       body: Column(
         children: [
@@ -55,7 +48,7 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 0),
                 Text(
                   'View and manage user ratings and reviews',
                   style: TextStyle(
@@ -103,6 +96,60 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
                   onChanged: (value) {
                     setState(() => _searchQuery = value);
                   },
+                ),
+                // Star Rating Filter Chips
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            // All ratings chip
+                            FilterChip(
+                              label: const Text('All'),
+                              selected: _selectedStarFilter == null,
+                              onSelected: (selected) {
+                                setState(() {
+                                  _selectedStarFilter = null;
+                                });
+                              },
+                              selectedColor: Colors.amber[100],
+                              checkmarkColor: Colors.amber[900],
+                            ),
+                            const SizedBox(width: 8),
+                            // Star rating chips (1-5)
+                            ...List.generate(5, (index) {
+                              final starCount = index + 1;
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: FilterChip(
+                                  avatar: Icon(
+                                    Icons.star,
+                                    size: 18,
+                                    color: _selectedStarFilter == starCount 
+                                        ? Colors.amber[900] 
+                                        : Colors.amber[700],
+                                  ),
+                                  label: Text('$starCount Star${starCount > 1 ? 's' : ''}'),
+                                  selected: _selectedStarFilter == starCount,
+                                  onSelected: (selected) {
+                                    setState(() {
+                                      _selectedStarFilter = selected ? starCount : null;
+                                    });
+                                  },
+                                  selectedColor: Colors.amber[100],
+                                  checkmarkColor: Colors.amber[900],
+                                ),
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -186,15 +233,24 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
                       ),
                     ),
 
-                    // Ratings List
+                    // Ratings List with Pull to Refresh
                     Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: filteredRatings.length,
-                        itemBuilder: (context, index) {
-                          final rating = filteredRatings[index];
-                          return _buildRatingCard(rating);
+                      child: RefreshIndicator(
+                        key: _refreshIndicatorKey,
+                        onRefresh: () async {
+                          // Trigger a rebuild to refresh the stream
+                          setState(() {});
+                          // Wait a bit to show the refresh indicator
+                          await Future.delayed(const Duration(milliseconds: 500));
                         },
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: filteredRatings.length,
+                          itemBuilder: (context, index) {
+                            final rating = filteredRatings[index];
+                            return _buildRatingCard(rating);
+                          },
+                        ),
                       ),
                     ),
                   ],
@@ -217,7 +273,11 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
       final matchesSearch = _searchQuery.isEmpty ||
           (rating.comment?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
 
-      return matchesSearch;
+      // Filter by star rating
+      final matchesStarFilter = _selectedStarFilter == null ||
+          rating.rating.toInt() == _selectedStarFilter;
+
+      return matchesSearch && matchesStarFilter;
     }).toList();
   }
 

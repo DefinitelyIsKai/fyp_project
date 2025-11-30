@@ -1,10 +1,20 @@
+import 'dart:convert';
+import 'dart:typed_data';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:fyp_project/services/admin/auth_service.dart';
+import 'package:fyp_project/services/admin/profile_pic_service.dart';
+import 'package:fyp_project/services/admin/face_recognition_service.dart';
 import 'package:fyp_project/routes/app_routes.dart';
 import 'package:provider/provider.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 import 'package:fyp_project/pages/user/authentication/login_page.dart' as user_login;
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image/image.dart' as img;
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -14,69 +24,703 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  // Face recognition toggle - can be enabled/disabled via UI switch
+  bool _enableFaceRecognition = true;
+  
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _profilePicService = ProfilePicService();
+  final _faceService = FaceRecognitionService();
+  final CollectionReference<Map<String, dynamic>> _logsRef = 
+      FirebaseFirestore.instance.collection('logs');
   bool _isLoading = false;
   bool _obscurePassword = true;
+  String? _capturedImageBase64; // Base64 image after photo taken
+  Uint8List? _capturedImageBytes; // Used for preview display
+  bool _isDetectingFace = false; // Whether face detection is in progress
+  bool? _faceDetected; // Whether face is detected (null = not detected, true = detected, false = not detected)
+  Face? _detectedFace; // Detected face object (used for comparison)
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize face recognition service (async, don't wait)
+    _faceService.initialize().then((success) {
+      if (!success && mounted) {
+        print('Warning: Face recognition service initialization failed, login may fail');
+      }
+    });
+  }
 
   @override
   void dispose() {
+    // Clean up all state
+    _capturedImageBase64 = null;
+    _capturedImageBytes = null;
+    _faceDetected = null;
+    _detectedFace = null;
+    _isDetectingFace = false;
+    _isLoading = false;
+    
     _emailController.dispose();
     _passwordController.dispose();
+    _faceService.dispose();
     super.dispose();
   }
 
-  Future<void> _handleLogin() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
-      
-      try {
-        final authService = Provider.of<AuthService>(context, listen: false);
-        final result = await authService.login(
-          _emailController.text.trim(),
-          _passwordController.text,
+  /// Take photo (camera only, gallery not supported)
+  Future<void> _takePhoto() async {
+    try {
+      final result = await _profilePicService.pickImageBase64(fromCamera: true);
+      if (result != null && mounted) {
+        setState(() {
+          _capturedImageBase64 = result['base64'];
+          _capturedImageBytes = base64Decode(_capturedImageBase64!);
+          _faceDetected = null; // Reset detection status
+          _detectedFace = null; // Reset detected face
+        });
+        
+        // Real-time face detection
+        await _detectFaceInImage();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _faceDetected = false;
+          _isDetectingFace = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error taking photo: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
+      }
+    }
+  }
 
-        if (mounted) {
-          if (result.success) {
-            // Show success message
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Welcome, ${authService.currentAdmin?.name ?? "Admin"}!'),
-                backgroundColor: Colors.green,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-            // Navigate to dashboard
-            Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
-          } else {
-            // Show specific error message
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(result.error ?? 'Login failed. Please try again.'),
-                backgroundColor: Colors.red,
-                behavior: SnackBarBehavior.floating,
-                duration: const Duration(seconds: 4),
-              ),
-            );
-          }
-        }
+  /// Detect faces in image
+  Future<void> _detectFaceInImage() async {
+    if (_capturedImageBytes == null) return;
+    
+    setState(() {
+      _isDetectingFace = true;
+      _faceDetected = null;
+    });
+    
+    try {
+      // Save image to temporary file, then use file path for detection (more reliable)
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File('${tempDir.path}/face_detection_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      await tempFile.writeAsBytes(_capturedImageBytes!);
+      
+      // Create InputImage using file path (more reliable method)
+      final inputImage = InputImage.fromFilePath(tempFile.path);
+      
+      final faces = await _faceService.detectFaces(inputImage);
+      
+      // Clean up temporary file
+      try {
+        await tempFile.delete();
       } catch (e) {
-        if (mounted) {
+        debugPrint('Failed to delete temp file: $e');
+      }
+      
+      if (mounted) {
+        setState(() {
+          _faceDetected = faces.isNotEmpty;
+          _isDetectingFace = false;
+          // Save first detected face (if any)
+          _detectedFace = faces.isNotEmpty ? faces.first : null;
+        });
+        
+        if (faces.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No face detected. Please take another photo with your face clearly visible.'),
+              backgroundColor: Colors.orange,
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Unexpected error: $e'),
-              backgroundColor: Colors.red,
+              content: Text('Face detected! ${faces.length} face(s) found.'),
+              backgroundColor: Colors.green,
               behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 2),
             ),
           );
         }
-      } finally {
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _faceDetected = false;
+          _isDetectingFace = false;
+        });
+        debugPrint('Error detecting face: $e');
+      }
+    }
+  }
+
+  /// Remove selected image
+  void _removeImage() {
+    setState(() {
+      _capturedImageBase64 = null;
+      _capturedImageBytes = null;
+      _faceDetected = null;
+      _detectedFace = null;
+      _isDetectingFace = false;
+    });
+  }
+
+  Future<void> _handleLogin() async {
+    if (!_formKey.currentState!.validate()) return;
+    
+    // Check if photo has been taken (only required when face recognition is enabled)
+    if (_enableFaceRecognition && (_capturedImageBase64 == null || _capturedImageBase64!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please take a photo for face verification'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final result = await authService.login(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
+
+      if (!mounted) return;
+
+      if (result.success) {
+        // Check if face recognition is enabled
+        if (!_enableFaceRecognition) {
+          // Face recognition is disabled, directly navigate to dashboard
+          print('Face recognition is disabled, skipping verification');
+          if (mounted) {
+            Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
+          }
+          return;
+        }
+        
+        // Login successful, proceed with face verification
+        final currentUser = authService.currentAdmin;
+        if (currentUser != null) {
+          try {
+            // Get admin profile photo
+            final userDoc = await FirebaseFirestore.instance
+                .collection('users')
+                .doc(currentUser.id)
+                .get();
+            
+            final userData = userDoc.data();
+            print('User data: ${userData?.keys.toList()}');
+            
+            final imageData = userData?['image'] as Map<String, dynamic>?;
+            print('Image data: $imageData');
+            print('Image data type: ${imageData?.runtimeType}');
+            
+            final profileImageBase64 = imageData?['base64'] as String?;
+            print('Base64 string length: ${profileImageBase64?.length ?? 0}');
+            print('Base64 is empty: ${profileImageBase64?.isEmpty ?? true}');
+            
+            if (profileImageBase64 != null && profileImageBase64.isNotEmpty) {
+              print('Starting face verification, base64 length: ${profileImageBase64.length}');
+              // Perform face comparison
+              await _verifyFace(profileImageBase64);
+            } else {
+              // No profile photo, require upload
+              print('Error: Profile photo base64 field is empty or does not exist');
+              if (mounted) {
+                authService.logout();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('No profile photo found. Please upload a profile photo first. The image.base64 field is empty.'),
+                    backgroundColor: Colors.orange,
+                    behavior: SnackBarBehavior.floating,
+                    duration: Duration(seconds: 5),
+                  ),
+                );
+              }
+            }
+          } catch (e, stackTrace) {
+            final email = _emailController.text.trim();
+            final currentUser = authService.currentAdmin;
+            
+            // Log face verification preparation error to Firestore
+            _logFaceVerificationError(
+              email: email,
+              userId: currentUser?.id,
+              userName: currentUser?.name,
+              error: e.toString(),
+            );
+            
+            // Log to console
+            print('========== Face Verification Preparation Error ==========');
+            print('Reason: Error while getting profile photo or preparing verification');
+            print('Error Type: ${e.runtimeType}');
+            print('Error: $e');
+            print('Stack Trace: $stackTrace');
+            print('Time: ${DateTime.now()}');
+            print('========================================================');
+            
+            // Clean up all resources
+            _clearLoginResources();
+            
+            if (mounted) {
+              authService.logout();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Face verification preparation failed: ${e.toString().length > 100 ? e.toString().substring(0, 100) + "..." : e.toString()}'),
+                  backgroundColor: Colors.red,
+                  behavior: SnackBarBehavior.floating,
+                  duration: const Duration(seconds: 5),
+                ),
+              );
+            }
+          }
+        } else {
+          if (mounted) {
+            Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
+          }
+        }
+      } else {
+        // Login failed - password incorrect or other authentication issue
+        final errorMessage = result.error ?? 'Login failed. Please try again.';
+        final email = _emailController.text.trim();
+        
+        // Log detailed login failure to Firestore
+        _logLoginFailure(email: email, reason: errorMessage);
+        
+        // Log to console
+        print('========== Login Failed ==========');
+        print('Reason: Password incorrect or account verification failed');
+        print('Error: $errorMessage');
+        print('Email: $email');
+        print('Time: ${DateTime.now()}');
+        print('=================================');
+        
+        if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        }
+        
+        // Clean up login-related resources
+        _clearLoginResources();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Unexpected error: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  /// Verify face
+  Future<void> _verifyFace(String profileImageBase64) async {
+    if (!mounted) return;
+    
+    // Show blocking loading dialog (prevent all user interaction)
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Prevent user from closing by tapping outside
+      builder: (BuildContext dialogContext) => WillPopScope(
+        onWillPop: () async => false, // Prevent back button from closing
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 24),
+                const Text(
+                  'Verifying Face...',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Please Wait, It might take few seconds',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    
+    try {
+      // Ensure service is initialized (using Google ML Kit + image hashing method)
+      if (!_faceService.isModelLoaded) {
+        print('Service not initialized, starting initialization...');
+        final initialized = await _faceService.initialize()
+            .timeout(const Duration(seconds: 5), onTimeout: () {
+          print('Service initialization timeout');
+          return false;
+        });
+        if (!initialized) {
+          if (mounted) Navigator.of(context).pop(); // Close loading dialog
+          throw Exception('Failed to initialize face recognition service (using Google ML Kit)');
+        }
+        print('Service initialized successfully');
+      } else {
+        print('Service already initialized, skipping');
+      }
+
+      if (!mounted) {
+        Navigator.of(context).pop(); // 关闭加载对话框
+        return;
+      }
+
+      // Decode captured image
+      final capturedImage = img.decodeImage(_capturedImageBytes!);
+      if (capturedImage == null) {
+        if (mounted) Navigator.of(context).pop(); // Close loading dialog
+        throw Exception('Failed to decode captured image');
+      }
+
+      if (!mounted) {
+        Navigator.of(context).pop(); // Close loading dialog
+        return;
+      }
+
+      // Compare faces (with timeout mechanism)
+      print('Starting face comparison...');
+      // Use detected face information (if available)
+      final capturedFace = _detectedFace;
+      if (capturedFace != null) {
+        print('Using detected face information for comparison');
+      } else {
+        print('No face detected, using full image for comparison');
+      }
+      
+      final similarity = await _faceService.compareFaces(
+        profileImageBase64,
+        capturedImage,
+        capturedFace, // Use detected face information
+      ).timeout(
+        const Duration(seconds: 30), // 30 second timeout to prevent closure accumulation
+        onTimeout: () {
+          print('Face comparison timeout after 30 seconds - preventing closure accumulation');
+          return 0.0;
+        },
+      );
+
+      print('Similarity score: $similarity');
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      if (!mounted) return;
+
+      // Similarity threshold (increased to 0.95 for extremely strict matching)
+      // Very high threshold to prevent false positives (other faces being accepted)
+      // If legitimate users are rejected, lower this value slightly
+      const threshold = 0.95;
+
+      if (similarity >= threshold) {
+        // Verification successful
+        final email = _emailController.text.trim();
+          final authService = Provider.of<AuthService>(context, listen: false);
+          final currentUser = authService.currentAdmin;
+        
+        // Log login success to Firestore
+        _logLoginSuccess(
+          email: email,
+          userId: currentUser?.id,
+          userName: currentUser?.name,
+          similarity: similarity,
+        );
+        
+        // Log to console
+        print('========== Face Verification Success ==========');
+        print('Similarity Score: ${similarity.toStringAsFixed(4)}');
+        print('Threshold: $threshold');
+        print('Time: ${DateTime.now()}');
+        print('==============================================');
+        
+        // Clean up all resources
+        _clearLoginResources();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Welcome, ${currentUser?.name ?? 'Admin'}!'),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
+        }
+      } else {
+        // Verification failed - face mismatch
+        final email = _emailController.text.trim();
+          final authService = Provider.of<AuthService>(context, listen: false);
+        final currentUser = authService.currentAdmin;
+        
+        // Log face verification failure to Firestore
+        _logFaceVerificationFailure(
+          email: email,
+          userId: currentUser?.id,
+          userName: currentUser?.name,
+          similarity: similarity,
+          threshold: threshold,
+        );
+        
+        // Log to console
+        print('========== Face Verification Failed ==========');
+        print('Reason: Face mismatch');
+        print('Similarity Score: ${similarity.toStringAsFixed(4)}');
+        print('Threshold: $threshold');
+        print('Time: ${DateTime.now()}');
+        print('=============================================');
+        
+        // Clean up all resources
+        _clearLoginResources();
+        
         if (mounted) {
           setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Face verification failed. Similarity: ${similarity.toStringAsFixed(2)}. Please take a new photo and try again.'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'Retry',
+                textColor: Colors.white,
+                onPressed: () {
+                  // Clear current photo to allow user to retake
+                  _clearCapturedImage();
+                },
+              ),
+            ),
+          );
+          // Logout
+          authService.logout();
         }
       }
+    } catch (e, stackTrace) {
+      final email = _emailController.text.trim();
+        final authService = Provider.of<AuthService>(context, listen: false);
+      final currentUser = authService.currentAdmin;
+      
+      // Log face verification error to Firestore
+      _logFaceVerificationError(
+        email: email,
+        userId: currentUser?.id,
+        userName: currentUser?.name,
+        error: e.toString(),
+      );
+      
+      // Log to console
+      print('========== Face Verification Error ==========');
+      print('Reason: Verification process error');
+      print('Error Type: ${e.runtimeType}');
+      print('Error: $e');
+      print('Stack Trace: $stackTrace');
+      print('Time: ${DateTime.now()}');
+      print('============================================');
+      
+      // Clean up all resources
+      _clearLoginResources();
+      
+      // Ensure loading dialog is closed
+      if (mounted) {
+        Navigator.of(context).pop();
+        setState(() => _isLoading = false);
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Face verification error: ${e.toString().length > 100 ? e.toString().substring(0, 100) + "..." : e.toString()}. Please try again.'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () {
+                // Clear current photo to allow user to retake
+                _clearCapturedImage();
+              },
+            ),
+          ),
+        );
+        // Delay logout to avoid crash during error handling
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            try {
+              authService.logout();
+            } catch (logoutError) {
+              debugPrint('Error during logout: $logoutError');
+            }
+          }
+        });
+      }
+    }
+  }
+  
+  /// Clean up captured image resources
+  void _clearCapturedImage() {
+    if (mounted) {
+      setState(() {
+        _capturedImageBase64 = null;
+        _capturedImageBytes = null;
+        _faceDetected = null;
+        _detectedFace = null;
+        _isDetectingFace = false;
+      });
+    }
+  }
+  
+  /// Clean up all login-related resources
+  void _clearLoginResources() {
+    print('Cleaning up login resources...');
+    _clearCapturedImage();
+    // Reset loading state
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+    print('Login resources cleaned up');
+  }
+  
+  /// Log login success to Firestore
+  Future<void> _logLoginSuccess({
+    required String email,
+    String? userId,
+    String? userName,
+    double? similarity,
+  }) async {
+    try {
+      final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
+      await _logsRef.add({
+        'actionType': 'admin_login_success',
+        'email': email,
+        'userId': userId,
+        'userName': userName,
+        'faceSimilarity': similarity,
+        'createdAt': FieldValue.serverTimestamp(),
+        'createdBy': currentAdminId ?? userId,
+      });
+    } catch (e) {
+      print('Error creating login success log entry: $e');
+      // Don't fail the operation if logging fails
+    }
+  }
+  
+  /// Log login failure to Firestore (password incorrect)
+  Future<void> _logLoginFailure({
+    required String email,
+    required String reason,
+  }) async {
+    try {
+      await _logsRef.add({
+        'actionType': 'admin_login_failed',
+        'email': email,
+        'reason': reason,
+        'failureType': 'password_incorrect',
+        'createdAt': FieldValue.serverTimestamp(),
+        'createdBy': null, // No user logged in yet
+      });
+    } catch (e) {
+      print('Error creating login failure log entry: $e');
+      // Don't fail the operation if logging fails
+    }
+  }
+  
+  /// Log face verification failure to Firestore
+  Future<void> _logFaceVerificationFailure({
+    required String email,
+    String? userId,
+    String? userName,
+    required double similarity,
+    required double threshold,
+  }) async {
+    try {
+      final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
+      await _logsRef.add({
+        'actionType': 'admin_face_verification_failed',
+        'email': email,
+        'userId': userId,
+        'userName': userName,
+        'similarity': similarity,
+        'threshold': threshold,
+        'reason': 'Face mismatch - similarity below threshold',
+        'createdAt': FieldValue.serverTimestamp(),
+        'createdBy': currentAdminId ?? userId,
+      });
+    } catch (e) {
+      print('Error creating face verification failure log entry: $e');
+      // Don't fail the operation if logging fails
+    }
+  }
+  
+  /// Log face verification error to Firestore
+  Future<void> _logFaceVerificationError({
+    required String email,
+    String? userId,
+    String? userName,
+    required String error,
+  }) async {
+    try {
+      final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
+      await _logsRef.add({
+        'actionType': 'admin_face_verification_error',
+        'email': email,
+        'userId': userId,
+        'userName': userName,
+        'error': error,
+        'reason': 'Face verification process error',
+        'createdAt': FieldValue.serverTimestamp(),
+        'createdBy': currentAdminId ?? userId,
+      });
+    } catch (e) {
+      print('Error creating face verification error log entry: $e');
+      // Don't fail the operation if logging fails
     }
   }
 
@@ -195,6 +839,246 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
                         const SizedBox(height: 16),
+                        // Face Recognition Toggle Switch
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey[300]!),
+                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.grey[50],
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.face, size: 24, color: Colors.blue),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Enable Face Recognition',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _enableFaceRecognition
+                                          ? 'Face verification required for login'
+                                          : 'Login without face verification',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Switch(
+                                value: _enableFaceRecognition,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _enableFaceRecognition = value;
+                                    // Clear captured image when disabling face recognition
+                                    if (!value) {
+                                      _capturedImageBase64 = null;
+                                      _capturedImageBytes = null;
+                                      _faceDetected = null;
+                                      _detectedFace = null;
+                                    }
+                                  });
+                                },
+                                activeColor: Colors.blue,
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Photo capture/selection area (only shown when face recognition is enabled)
+                        if (_enableFaceRecognition) ...[
+                          const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey[300]!),
+                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.grey[50],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Face Verification Photo',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              if (_capturedImageBytes != null) ...[
+                                // Display circular preview
+                                Center(
+                                  child: Stack(
+                                  children: [
+                                    Container(
+                                        width: 200,
+                                      height: 200,
+                                      decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: _faceDetected == true 
+                                                ? Colors.green 
+                                                : _faceDetected == false 
+                                                    ? Colors.red 
+                                                    : Colors.grey[300]!,
+                                            width: 3,
+                                          ),
+                                      ),
+                                        child: ClipOval(
+                                          child: Stack(
+                                            children: [
+                                              Image.memory(
+                                          _capturedImageBytes!,
+                                          fit: BoxFit.cover,
+                                                width: 200,
+                                                height: 200,
+                                              ),
+                                              if (_isDetectingFace)
+                                                Container(
+                                                  color: Colors.black54,
+                                                  child: const Center(
+                                                    child: Column(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        CircularProgressIndicator(color: Colors.white),
+                                                        SizedBox(height: 8),
+                                                        Text(
+                                                          'Detecting face...',
+                                                          style: TextStyle(color: Colors.white),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                        top: 0,
+                                        right: 0,
+                                        child: GestureDetector(
+                                          onTap: _removeImage,
+                                          child: Container(
+                                            width: 32,
+                                            height: 32,
+                                            decoration: const BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: Colors.red,
+                                            ),
+                                            child: const Icon(
+                                              Icons.close,
+                                              color: Colors.white,
+                                              size: 18,
+                                        ),
+                                          ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                ),
+                                // Face detection status indicator (displayed below circular preview)
+                                if (_faceDetected != null && !_isDetectingFace) ...[
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: _faceDetected == true 
+                                          ? Colors.green 
+                                          : Colors.red,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          _faceDetected == true 
+                                              ? Icons.check_circle 
+                                              : Icons.error,
+                                          color: Colors.white,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          _faceDetected == true 
+                                              ? 'Face detected ✓' 
+                                              : 'No face detected',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 8),
+                                if (_faceDetected == false)
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange[50],
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.orange[200]!),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.warning_amber, color: Colors.orange[700], size: 20),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'No face detected. Please take another photo with your face clearly visible.',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.orange[900],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ] else ...[
+                                // Take photo button (camera only)
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    onPressed: _takePhoto,
+                                    icon: const Icon(Icons.camera_alt),
+                                    label: const Text('Take Photo for Verification'),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Please take a live photo for face verification',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        ],
+                        const SizedBox(height: 24),
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(

@@ -7,6 +7,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 import 'package:fyp_project/services/user/wallet_service.dart';
 import 'package:fyp_project/services/user/notification_service.dart';
+import 'package:fyp_project/widgets/admin/common/tab_button.dart';
+import 'package:fyp_project/widgets/admin/cards/posts_list.dart';
 
 class ApproveRejectPostsPage extends StatefulWidget {
   const ApproveRejectPostsPage({super.key});
@@ -22,7 +24,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   final PageController _tabPageController = PageController();
   int _currentTabIndex = 0;
 
-  // Store posts data
   List<JobPostModel> _allPosts = [];
   List<JobPostModel> _pendingPosts = [];
   List<JobPostModel> _activePosts = [];
@@ -30,23 +31,12 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   List<JobPostModel> _rejectedPosts = [];
   bool _isLoading = true;
   
-  // Cache for user names
   final Map<String, String> _userNameCache = {};
-  
-  // Track processing posts to prevent rapid clicks
   final Set<String> _processingPostIds = {};
-  
-  // Global loading state to prevent all interactions
   bool _isProcessingGlobal = false;
-  
-  // Debounce timer for search
   Timer? _searchDebounce;
-  
-  // Throttle timer for stream updates
   Timer? _streamThrottle;
   List<JobPostModel>? _pendingPostsUpdate;
-  
-  // Stream subscription for manual refresh
   StreamSubscription<List<JobPostModel>>? _postsSubscription;
   final StreamController<List<JobPostModel>> _postsStreamController = StreamController<List<JobPostModel>>.broadcast();
 
@@ -58,7 +48,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   }
   
   void _initializeStream() {
-    // Subscribe to the posts stream and forward to our controller
     _postsSubscription = _postService.streamAllPosts().listen(
       (posts) {
         _postsStreamController.add(posts);
@@ -69,11 +58,35 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
     );
   }
   
-  // Immediately update UI and refresh from Firestore
+  Future<void> _refreshAllPosts() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('posts')
+          .get();
+      
+      if (!mounted || _postsStreamController.isClosed) return;
+      
+      final posts = snapshot.docs
+          .map((doc) => JobPostModel.fromFirestore(doc))
+          .toList();
+      
+      _postsStreamController.add(posts);
+    } catch (e) {
+      debugPrint('Error refreshing posts from Firestore: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error refreshing posts: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   void _immediatelyRefreshPost(JobPostModel post) {
     if (!mounted) return;
     
-    // Remove post immediately from all lists so it disappears instantly
     setState(() {
       _allPosts.removeWhere((p) => p.id == post.id);
       _pendingPosts.removeWhere((p) => p.id == post.id);
@@ -82,7 +95,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
       _rejectedPosts.removeWhere((p) => p.id == post.id);
     });
     
-    // Immediately fetch latest posts from Firestore (no delay)
     FirebaseFirestore.instance
         .collection('posts')
         .get()
@@ -93,7 +105,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
               .map((doc) => JobPostModel.fromFirestore(doc))
               .toList();
           
-          // Trigger immediate stream update
           _postsStreamController.add(posts);
         })
         .catchError((e) {
@@ -114,11 +125,10 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   }
   
   void _onSearchChanged() {
-    // Debounce search to avoid excessive rebuilds
     _searchDebounce?.cancel();
     _searchDebounce = Timer(const Duration(milliseconds: 300), () {
       if (mounted) {
-        setState(() {}); // Trigger rebuild for search
+        setState(() {});
       }
     });
   }
@@ -140,7 +150,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   }
 
   Future<void> _approvePost(JobPostModel post) async {
-    // Prevent multiple clicks on the same post or if already processing globally
     if (_processingPostIds.contains(post.id) || _isProcessingGlobal) return;
     
     setState(() {
@@ -149,10 +158,8 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
     });
     
     try {
-      // Approve the post first
       await _postService.approvePost(post.id);
       
-      // Deduct credits from post owner (deduct both balance and heldCredits)
       final ownerId = post.ownerId;
       if (ownerId != null && ownerId.isNotEmpty) {
         try {
@@ -164,7 +171,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
           );
           
           if (success) {
-            // Send notification to post owner about credit deduction
             try {
               await _notificationService.notifyWalletDebit(
                 userId: ownerId,
@@ -189,7 +195,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
       
       if (!mounted) return;
       
-      // Immediately remove post and refresh from Firestore
       _immediatelyRefreshPost(post);
       
       ScaffoldMessenger.of(context).showSnackBar(
@@ -211,7 +216,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   }
 
   Future<void> _rejectPost(JobPostModel post) async {
-    // Prevent multiple clicks on the same post or if already processing globally
     if (_processingPostIds.contains(post.id) || _isProcessingGlobal) return;
     
     final reason = await showDialog<String>(
@@ -226,10 +230,8 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
       });
       
       try {
-        // Reject the post first
         await _postService.rejectPost(post.id, reason);
         
-        // Release held credits for post owner (deduct from heldCredits only, not balance)
         final ownerId = post.ownerId;
         if (ownerId != null && ownerId.isNotEmpty) {
           try {
@@ -241,7 +243,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
             );
             
             if (success) {
-              // Send notification to post owner about credit release
               try {
                 await _notificationService.notifyWalletCredit(
                   userId: ownerId,
@@ -267,7 +268,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
         
         if (!mounted) return;
         
-        // Immediately remove post and refresh from Firestore
         _immediatelyRefreshPost(post);
         
         ScaffoldMessenger.of(context).showSnackBar(
@@ -291,7 +291,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
 
 
   void _viewPost(JobPostModel post) {
-    // Prevent multiple navigation pushes or navigation during processing
     if (!mounted || _isProcessingGlobal) return;
     Navigator.push(
       context,
@@ -316,36 +315,29 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   }
 
   void _handlePostsUpdate(List<JobPostModel> posts) {
-    // Filter out draft posts first (only show isDraft: false or null)
     final nonDraftPosts = posts.where((p) => p.isDraft != true).toList();
     
     _pendingPostsUpdate = nonDraftPosts;
     
     _streamThrottle?.cancel();
-    // Minimal throttle delay for faster updates
     _streamThrottle = Timer(const Duration(milliseconds: 50), () {
       if (!mounted || _pendingPostsUpdate == null) return;
       
       final postsToProcess = _pendingPostsUpdate!;
       _pendingPostsUpdate = null;
       
-      // Batch fetch user names for all unique owner IDs (async, non-blocking)
       _batchFetchUserNames(postsToProcess);
       
-      // Update immediately without waiting for postFrameCallback for faster response
       if (!mounted) return;
       
-      // Check if data actually changed to avoid unnecessary rebuilds
       bool hasChanged = false;
       if (_allPosts.length != postsToProcess.length) {
         hasChanged = true;
       } else if (_allPosts.isNotEmpty && postsToProcess.isNotEmpty) {
-        // Check if first or last post changed (quick check)
         if (_allPosts.first.id != postsToProcess.first.id ||
             _allPosts.last.id != postsToProcess.last.id) {
           hasChanged = true;
         } else {
-          // Check a few more posts in the middle for accuracy
           final checkIndices = [
             _allPosts.length ~/ 4,
             _allPosts.length ~/ 2,
@@ -383,7 +375,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   }
   
   Future<void> _batchFetchUserNames(List<JobPostModel> posts) async {
-    // Collect all unique owner IDs that aren't cached
     final uncachedIds = <String>{};
     for (final post in posts) {
       final ownerId = post.ownerId ?? post.submitterName;
@@ -398,9 +389,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
     
     final idsToFetch = uncachedIds.take(20).toList();
     
-    // Batch fetch user names with delay to prevent blocking
     try {
-      // Process in smaller batches to avoid blocking
       for (var i = 0; i < idsToFetch.length; i += 10) {
         final batch = idsToFetch.skip(i).take(10);
         final futures = batch.map((id) async {
@@ -427,7 +416,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
           });
         }
         
-        // Small delay between batches to yield to UI thread
         if (i + 10 < idsToFetch.length) {
           await Future.delayed(const Duration(milliseconds: 50));
         }
@@ -460,7 +448,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
             ),
             body: Column(
         children: [
-          // Search bar
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -498,7 +485,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
             ),
           ),
 
-          // Tabs
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
@@ -508,25 +494,25 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
             ),
             child: Row(
               children: [
-                _TabButton(
+                AdminTabButton(
                   label: 'Pending',
                   count: _pendingPosts.length,
                   isSelected: _currentTabIndex == 0,
                   onTap: () => _switchTab(0),
                 ),
-                _TabButton(
+                AdminTabButton(
                   label: 'Active',
                   count: _activePosts.length,
                   isSelected: _currentTabIndex == 1,
                   onTap: () => _switchTab(1),
                 ),
-                _TabButton(
+                AdminTabButton(
                   label: 'Completed',
                   count: _completedPosts.length,
                   isSelected: _currentTabIndex == 2,
                   onTap: () => _switchTab(2),
                 ),
-                _TabButton(
+                AdminTabButton(
                   label: 'Rejected',
                   count: _rejectedPosts.length,
                   isSelected: _currentTabIndex == 3,
@@ -536,7 +522,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
             ),
           ),
 
-          // Stream posts and swipable content area
           Expanded(
             child: StreamBuilder<List<JobPostModel>>(
               stream: _postsStreamController.stream,
@@ -591,8 +576,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                       ? const NeverScrollableScrollPhysics() 
                       : const PageScrollPhysics(),
                   children: [
-                    // Pending Tab
-                    _PostsList(
+                    PostsList(
                       posts: _filterPosts(_pendingPosts),
                       status: 'pending',
                       onApprove: _approvePost,
@@ -602,9 +586,9 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                       onView: _viewPost,
                       getUserName: _getUserName,
                       processingPostIds: _processingPostIds,
+                      onRefresh: _refreshAllPosts,
                     ),
-                    // Active Tab
-                    _PostsList(
+                    PostsList(
                       posts: _filterPosts(_activePosts),
                       status: 'active',
                       onApprove: null,
@@ -614,9 +598,9 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                       onView: _viewPost,
                       getUserName: _getUserName,
                       processingPostIds: _processingPostIds,
+                      onRefresh: _refreshAllPosts,
                     ),
-                    // Completed Tab
-                    _PostsList(
+                    PostsList(
                       posts: _filterPosts(_completedPosts),
                       status: 'completed',
                       onApprove: null,
@@ -626,9 +610,9 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                       onView: _viewPost,
                       getUserName: _getUserName,
                       processingPostIds: _processingPostIds,
+                      onRefresh: _refreshAllPosts,
                     ),
-                    // Rejected Tab
-                    _PostsList(
+                    PostsList(
                       posts: _filterPosts(_rejectedPosts),
                       status: 'rejected',
                       onApprove: null,
@@ -638,6 +622,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                       onView: _viewPost,
                       getUserName: _getUserName,
                       processingPostIds: _processingPostIds,
+                      onRefresh: _refreshAllPosts,
                     ),
                   ],
                 );
@@ -647,7 +632,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
           ],
           ),
           ),
-          // Loading overlay to block all interactions (covers entire screen including AppBar)
           if (_isProcessingGlobal)
             Positioned.fill(
               child: AbsorbPointer(
@@ -711,7 +695,6 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
 
 }
 
-// Reject Post Dialog
 class _RejectPostDialog extends StatefulWidget {
   final JobPostModel post;
 
@@ -768,7 +751,6 @@ class _RejectPostDialogState extends State<_RejectPostDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -817,7 +799,6 @@ class _RejectPostDialogState extends State<_RejectPostDialog> {
               ),
             ),
 
-            // Post Preview
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -862,14 +843,12 @@ class _RejectPostDialogState extends State<_RejectPostDialog> {
               ),
             ),
 
-            // Content
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Common Reasons Section
                     Text(
                       'Select a reason',
                       style: TextStyle(
@@ -925,7 +904,6 @@ class _RejectPostDialogState extends State<_RejectPostDialog> {
 
                     const SizedBox(height: 20),
 
-                    // Custom Reason Option
                     _CustomReasonCard(
                       isSelected: _isCustomReason,
                       controller: _reasonController,
@@ -945,7 +923,6 @@ class _RejectPostDialogState extends State<_RejectPostDialog> {
               ),
             ),
 
-            // Actions
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -1198,562 +1175,6 @@ class _CustomReasonCard extends StatelessWidget {
                 ),
               ],
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-// Posts List for each tab
-class _PostsList extends StatelessWidget {
-  final List<JobPostModel> posts;
-  final String status;
-  final Function(JobPostModel)? onApprove;
-  final Function(JobPostModel)? onReject;
-  final Function(JobPostModel)? onComplete;
-  final Function(JobPostModel)? onReopen;
-  final Function(JobPostModel) onView;
-  final String Function(String?) getUserName;
-  final Set<String> processingPostIds;
-
-  const _PostsList({
-    required this.posts,
-    required this.status,
-    this.onApprove,
-    this.onReject,
-    this.onComplete,
-    this.onReopen,
-    required this.onView,
-    required this.getUserName,
-    required this.processingPostIds,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Return a scrollable widget that can be wrapped by RefreshIndicator
-    if (posts.isEmpty) {
-      return _buildEmptyState(status);
-    }
-    
-    return CustomScrollView(
-      slivers: [
-        // Header with post count
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Row(
-              children: [
-                Text(
-                  '${posts.length} post${posts.length == 1 ? '' : 's'} found',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        // Posts list
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final post = posts[index];
-                return _PostCard(
-                  post: post,
-                  onApprove: onApprove,
-                  onReject: onReject,
-                  onComplete: onComplete,
-                  onReopen: onReopen,
-                  onView: onView,
-                  getUserName: getUserName,
-                  isProcessing: processingPostIds.contains(post.id),
-                );
-              },
-              childCount: posts.length,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildEmptyState(String status) {
-    final emptyMessages = {
-      'pending': 'No pending posts to review',
-      'active': 'No active posts',
-      'completed': 'No completed posts',
-      'rejected': 'No rejected posts'
-    };
-    final emptyIcons = {
-      'pending': Icons.pending_actions,
-      'active': Icons.play_arrow,
-      'completed': Icons.check_circle,
-      'rejected': Icons.cancel
-    };
-
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            emptyIcons[status] ?? Icons.article,
-            size: 80,
-            color: Colors.grey[300],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            emptyMessages[status] ?? 'No posts found',
-            style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Posts will appear here once available',
-            style: TextStyle(
-              color: Colors.grey[500],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-//  Widgets
-
-class _TabButton extends StatelessWidget {
-  final String label;
-  final int count;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _TabButton({
-    required this.label,
-    required this.count,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  Color getTabColor() {
-    switch (label) {
-      case 'Pending':
-        return Colors.orange;
-      case 'Active':
-        return Colors.green;
-      case 'Completed':
-        return Colors.blue;
-      case 'Rejected':
-        return Colors.red;
-      default:
-        return Colors.blue;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Material(
-        color: isSelected ? getTabColor() : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: isSelected ? Colors.white : Colors.grey[600],
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: isSelected 
-                        ? Colors.white.withOpacity(0.3) 
-                        : Colors.grey[300],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    count.toString(),
-                    style: TextStyle(
-                      color: isSelected ? Colors.white : Colors.grey[700],
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PostCard extends StatelessWidget {
-  final JobPostModel post;
-  final Function(JobPostModel)? onApprove;
-  final Function(JobPostModel)? onReject;
-  final Function(JobPostModel)? onComplete;
-  final Function(JobPostModel)? onReopen;
-  final Function(JobPostModel) onView;
-  final String Function(String?) getUserName;
-  final bool isProcessing;
-
-  const _PostCard({
-    required this.post,
-    this.onApprove,
-    this.onReject,
-    this.onComplete,
-    this.onReopen,
-    required this.onView,
-    required this.getUserName,
-    this.isProcessing = false,
-  });
-
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'pending':
-        return Colors.orange;
-      case 'active':
-        return Colors.green;
-      case 'completed':
-        return Colors.blue;
-      case 'rejected':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  String _getStatusText(String status) {
-    switch (status) {
-      case 'pending':
-        return 'Pending Review';
-      case 'active':
-        return 'Active';
-      case 'completed':
-        return 'Completed';
-      case 'rejected':
-        return 'Rejected';
-      default:
-        return status;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    List<Widget> actionButtons = [];
-
-    // Build action buttons based on current status
-    switch (post.status) {
-      case 'pending':
-        actionButtons = [
-          if (onApprove != null)
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: isProcessing ? null : () => onApprove!(post),
-                icon: isProcessing 
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Icon(Icons.check, size: 18),
-                label: Text(isProcessing ? 'Processing...' : 'Approve'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.green.withOpacity(0.6),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-            ),
-          if (onApprove != null && onReject != null) const SizedBox(width: 8),
-          if (onReject != null)
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: isProcessing ? null : () => onReject!(post),
-                icon: isProcessing 
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Icon(Icons.close, size: 18),
-                label: Text(isProcessing ? 'Processing...' : 'Reject'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.red.withOpacity(0.6),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-            ),
-        ];
-        break;
-      case 'active':
-        actionButtons = [
-          if (onComplete != null)
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: isProcessing ? null : () => onComplete!(post),
-                icon: isProcessing 
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Icon(Icons.done_all, size: 18),
-                label: Text(isProcessing ? 'Processing...' : 'Complete'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.blue.withOpacity(0.6),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-            ),
-          if (onComplete != null && onReject != null) const SizedBox(width: 8),
-          if (onReject != null)
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: isProcessing ? null : () => onReject!(post),
-                icon: isProcessing 
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Icon(Icons.close, size: 18),
-                label: Text(isProcessing ? 'Processing...' : 'Disable'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.red.withOpacity(0.6),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-            ),
-        ];
-        break;
-      case 'completed':
-        actionButtons = [
-          if (onReopen != null)
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: isProcessing ? null : () => onReopen!(post),
-                icon: isProcessing 
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Icon(Icons.replay, size: 18),
-                label: Text(isProcessing ? 'Processing...' : 'Reopen'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.orange.withOpacity(0.6),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-            ),
-        ];
-        break;
-      case 'rejected':
-        actionButtons = [
-          if (onApprove != null)
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: isProcessing ? null : () => onApprove!(post),
-                icon: isProcessing 
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Icon(Icons.check, size: 18),
-                label: Text(isProcessing ? 'Processing...' : 'Approve'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.green.withOpacity(0.6),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-            ),
-        ];
-        break;
-    }
-
-    // Add view button
-    actionButtons.add(const SizedBox(width: 8));
-    actionButtons.add(
-      Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: Colors.grey[100],
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: IconButton(
-          onPressed: () => onView(post),
-          icon: Icon(Icons.visibility, color: Colors.grey[600]),
-        ),
-      ),
-    );
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Card(
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: InkWell(
-          onTap: () => onView(post),
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header with status
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            post.title,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              Icon(Icons.category, size: 14, color: Colors.grey[500]),
-                              const SizedBox(width: 4),
-                              Text(
-                                post.category,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Icon(Icons.location_on, size: 14, color: Colors.grey[500]),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  post.location.split(',').first, // Show only first part of location
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey[600],
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _getStatusColor(post.status).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: _getStatusColor(post.status).withOpacity(0.3)),
-                      ),
-                      child: Text(
-                        _getStatusText(post.status),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: _getStatusColor(post.status),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // Author and date
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.blue[50],
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Icon(Icons.person_outline, size: 14, color: Colors.blue[700]),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        getUserName(post.ownerId ?? post.submitterName),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[700],
-                          fontWeight: FontWeight.w500,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[100],
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '${post.createdAt.day}/${post.createdAt.month}/${post.createdAt.year}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // Action buttons
-                Row(children: actionButtons),
-              ],
-            ),
           ),
         ),
       ),

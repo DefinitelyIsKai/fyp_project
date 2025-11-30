@@ -8,7 +8,6 @@ import 'package:fyp_project/utils/admin/app_colors.dart';
 class MonitoringPage extends StatelessWidget {
   const MonitoringPage({super.key});
 
-  // Real-time stream: counts total posts (excluding drafts)
   Stream<int> _totalPostsCountStream() {
     return FirebaseFirestore.instance
         .collection('posts')
@@ -143,7 +142,7 @@ class MonitoringPage extends StatelessWidget {
           crossAxisCount: 2,
           mainAxisSpacing: 16,
           crossAxisSpacing: 16,
-          childAspectRatio: 0.9,
+          childAspectRatio: 0.8,
         ),
         children: [
           // Search & Filter Card

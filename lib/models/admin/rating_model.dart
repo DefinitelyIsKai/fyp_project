@@ -10,8 +10,8 @@ enum RatingStatus {
 
 class RatingModel {
   final String id;
-  final String employerId;
-  final String employeeId;
+  final String recruiterId; // Changed from employerId
+  final String jobseekerId; // Changed from employeeId
   final String postId;
   final double rating;
   final String? comment;
@@ -25,8 +25,8 @@ class RatingModel {
 
   RatingModel({
     required this.id,
-    required this.employerId,
-    required this.employeeId,
+    required this.recruiterId,
+    required this.jobseekerId,
     required this.postId,
     required this.rating,
     this.comment,
@@ -41,10 +41,11 @@ class RatingModel {
 
   factory RatingModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
+    // Support both old (employerId/employeeId) and new (recruiterId/jobseekerId) field names
     return RatingModel(
       id: doc.id,
-      employerId: data['employerId'] ?? '',
-      employeeId: data['employeeId'] ?? '',
+      recruiterId: data['recruiterId'] ?? data['employerId'] ?? '',
+      jobseekerId: data['jobseekerId'] ?? data['employeeId'] ?? '',
       postId: data['postId'] ?? '',
       rating: (data['rating'] ?? 0.0).toDouble(),
       comment: data['comment'],
@@ -70,8 +71,8 @@ class RatingModel {
 
   Map<String, dynamic> toFirestore() {
     return {
-      'employerId': employerId,
-      'employeeId': employeeId,
+      'recruiterId': recruiterId,
+      'jobseekerId': jobseekerId,
       'postId': postId,
       'rating': rating,
       'comment': comment,

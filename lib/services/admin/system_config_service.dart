@@ -232,11 +232,6 @@ class SystemConfigService {
           .collection('report_categories')
           .get();
 
-      if (snapshot.docs.isEmpty) {
-        // Initialize default report categories
-        return _getDefaultReportCategories();
-      }
-
       final categories = snapshot.docs.map((doc) {
         return ReportCategoryModel.fromJson(doc.data(), doc.id);
       }).toList();
@@ -246,10 +241,30 @@ class SystemConfigService {
       
       return categories;
     } catch (e) {
-      // If error occurs, try to initialize and return defaults
       print('Error loading report categories: $e');
-      return _getDefaultReportCategories();
+      return [];
     }
+  }
+
+  Future<void> createReportCategory({
+    required String name,
+    required String description,
+    required int creditDeduction,
+    required String type,
+    bool isEnabled = true,
+    String? createdBy,
+  }) async {
+    final docRef = _firestore.collection('report_categories').doc();
+    
+    await docRef.set({
+      'name': name,
+      'description': description,
+      'creditDeduction': creditDeduction,
+      'type': type,
+      'isEnabled': isEnabled,
+      'updatedAt': FieldValue.serverTimestamp(),
+      if (createdBy != null) 'updatedBy': createdBy,
+    });
   }
 
   Future<void> updateReportCategory(ReportCategoryModel category, {String? updatedBy}) async {
@@ -260,65 +275,6 @@ class SystemConfigService {
     }
 
     await _firestore.collection('report_categories').doc(category.id).set(data, SetOptions(merge: true));
-  }
-
-  Future<void> initializeDefaultReportCategories() async {
-    final defaultCategories = _getDefaultReportCategories();
-    final batch = _firestore.batch();
-
-    for (final category in defaultCategories) {
-      final docRef = _firestore.collection('report_categories').doc(category.id);
-      // Use merge: true to update existing categories, or create if missing
-      // This ensures all categories exist even if some were already created
-      batch.set(docRef, category.toJson(), SetOptions(merge: true));
-    }
-
-    await batch.commit();
-  }
-
-  List<ReportCategoryModel> _getDefaultReportCategories() {
-    return [
-      ReportCategoryModel(
-        id: 'unprofessional_behavior',
-        name: 'Unprofessional Behavior',
-        description: 'Reports related to unprofessional conduct, inappropriate behavior, or violation of workplace standards',
-        isEnabled: true,
-        creditDeduction: 50,
-        updatedAt: DateTime.now(),
-      ),
-      ReportCategoryModel(
-        id: 'no_show_cancellation',
-        name: 'No Show / Cancellation',
-        description: 'Reports for users who fail to show up for scheduled appointments or cancel at the last minute',
-        isEnabled: true,
-        creditDeduction: 30,
-        updatedAt: DateTime.now(),
-      ),
-      ReportCategoryModel(
-        id: 'poor_work_quality',
-        name: 'Poor Work Quality',
-        description: 'Reports regarding substandard work performance, incomplete tasks, or quality issues',
-        isEnabled: true,
-        creditDeduction: 40,
-        updatedAt: DateTime.now(),
-      ),
-      ReportCategoryModel(
-        id: 'harassment',
-        name: 'Harassment',
-        description: 'Reports of harassment, discrimination, or any form of abusive behavior',
-        isEnabled: true,
-        creditDeduction: 100,
-        updatedAt: DateTime.now(),
-      ),
-      ReportCategoryModel(
-        id: 'other',
-        name: 'Other',
-        description: 'Other types of reports that do not fit into the above categories',
-        isEnabled: true,
-        creditDeduction: 20,
-        updatedAt: DateTime.now(),
-      ),
-    ];
   }
 }
 

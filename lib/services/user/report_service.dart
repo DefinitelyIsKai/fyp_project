@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/user/report.dart';
+import '../../models/admin/report_category_model.dart';
 import 'auth_service.dart';
 
 class ReportService {
@@ -153,6 +154,82 @@ class ReportService {
         .map((snapshot) => snapshot.docs
             .map((doc) => Report.fromFirestore(doc))
             .toList());
+  }
+
+  /// Get report categories based on current user's role
+  /// - If user is jobseeker: returns type='jobseeker' categories (for reporting posts)
+  /// - If user is recruiter: returns type='recruiter' categories (for reporting jobseekers)
+  Future<List<ReportCategoryModel>> getReportCategoriesByUserRole() async {
+    try {
+      final userDoc = await _authService.getUserDoc();
+      final userData = userDoc.data();
+      final role = userData?['role'] as String? ?? 'jobseeker';
+      
+      // Jobseekers report posts, so they need 'jobseeker' type categories
+      // Recruiters report jobseekers, so they need 'recruiter' type categories
+      final categoryType = role == 'jobseeker' ? 'jobseeker' : 'recruiter';
+      
+      return await getReportCategories(categoryType);
+    } catch (e) {
+      print('Error getting user role for report categories: $e');
+      return [];
+    }
+  }
+
+  /// Get report categories from Firebase by type
+  /// type: 'jobseeker' for jobseekers to report posts, 'recruiter' for recruiters to report jobseekers
+  Future<List<ReportCategoryModel>> getReportCategories(String type) async {
+    try {
+      // First, get all categories with the specified type
+      final snapshot = await _firestore
+          .collection('report_categories')
+          .where('type', isEqualTo: type)
+          .get();
+
+      // Filter enabled categories in memory (to avoid composite index requirement)
+      final categories = snapshot.docs
+          .map((doc) {
+            try {
+              return ReportCategoryModel.fromJson(doc.data(), doc.id);
+            } catch (e) {
+              return null;
+            }
+          })
+          .where((category) => category != null && category.isEnabled)
+          .cast<ReportCategoryModel>()
+          .toList();
+
+      // Sort by name alphabetically
+      categories.sort((a, b) => a.name.compareTo(b.name));
+
+      return categories;
+    } catch (e) {
+      print('Error loading report categories for type $type: $e');
+      // If query fails (e.g., missing index), try fetching all and filtering in memory
+      try {
+        final allSnapshot = await _firestore
+            .collection('report_categories')
+            .get();
+        
+        final allCategories = allSnapshot.docs
+            .map((doc) {
+              try {
+                return ReportCategoryModel.fromJson(doc.data(), doc.id);
+              } catch (e) {
+                return null;
+              }
+            })
+            .where((category) => category != null && category.type == type && category.isEnabled)
+            .cast<ReportCategoryModel>()
+            .toList();
+        
+        allCategories.sort((a, b) => a.name.compareTo(b.name));
+        return allCategories;
+      } catch (fallbackError) {
+        print('Fallback method also failed: $fallbackError');
+        return [];
+      }
+    }
   }
 }
 

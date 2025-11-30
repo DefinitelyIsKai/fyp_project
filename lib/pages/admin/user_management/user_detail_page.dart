@@ -7,6 +7,13 @@ import 'package:fyp_project/services/admin/user_service.dart';
 import 'package:fyp_project/services/admin/auth_service.dart';
 import 'package:intl/intl.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
+import 'package:fyp_project/widgets/admin/common/info_chip.dart';
+import 'package:fyp_project/widgets/admin/cards/user_stat_card.dart';
+import 'package:fyp_project/widgets/admin/common/user_detail_row.dart';
+import 'package:fyp_project/widgets/admin/common/user_detail_section.dart';
+import 'package:fyp_project/widgets/admin/common/editable_detail_row.dart';
+import 'package:fyp_project/widgets/admin/common/editable_detail_section.dart';
+import 'package:fyp_project/widgets/admin/tabs/credit_logs_tab.dart';
 
 class UserDetailPage extends StatefulWidget {
   final UserModel user;
@@ -17,12 +24,12 @@ class UserDetailPage extends StatefulWidget {
   State<UserDetailPage> createState() => _UserDetailPageState();
 }
 
-class _UserDetailPageState extends State<UserDetailPage> {
+class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProviderStateMixin {
   bool _isEditing = false;
   bool _isSaving = false;
   late UserModel _user;
+  late TabController _tabController;
   
-  // Text editing controllers
   late TextEditingController _fullNameController;
   late TextEditingController _phoneNumberController;
   late TextEditingController _locationController;
@@ -36,6 +43,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
     super.initState();
     _user = widget.user;
     _initializeControllers();
+    _tabController = TabController(length: 2, vsync: this);
   }
 
   void _initializeControllers() {
@@ -57,19 +65,18 @@ class _UserDetailPageState extends State<UserDetailPage> {
     _professionalProfileController.dispose();
     _workExperienceController.dispose();
     _seekingController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
   UserModel get user => _user;
 
-  /// Check if current user can edit this user's profile
   bool _canEditUser() {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentAdmin = authService.currentAdmin;
     
     if (currentAdmin == null) return false;
     
-    // Cannot edit your own profile
     if (currentAdmin.id == _user.id) {
       return false;
     }
@@ -77,36 +84,29 @@ class _UserDetailPageState extends State<UserDetailPage> {
     final currentRole = currentAdmin.role.toLowerCase();
     final targetRole = _user.role.toLowerCase();
     
-    // Staff and HR cannot edit Manager profiles
     if ((currentRole == 'staff' || currentRole == 'hr') && targetRole == 'manager') {
       return false;
     }
     
-    // Manager can edit all profiles (except their own)
     if (currentRole == 'manager') {
       return true;
     }
     
-    // Staff and HR can edit other roles (except their own)
     return true;
   }
 
-  /// Check if current user can access Account Management actions
   bool _canAccessAccountManagement() {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentAdmin = authService.currentAdmin;
     
     if (currentAdmin == null) return false;
     
-    // Cannot perform account management on yourself (view only)
     if (currentAdmin.id == _user.id) {
       return false;
     }
     
     final currentRole = currentAdmin.role.toLowerCase();
     
-    // Only Manager can access Account Management
-    // HR and Staff cannot access Account Management
     return currentRole == 'manager';
   }
 
@@ -258,13 +258,11 @@ class _UserDetailPageState extends State<UserDetailPage> {
   void _cancelEdit() {
     setState(() {
       _isEditing = false;
-      // Reset controllers to original values
       _initializeControllers();
     });
   }
 
   Future<void> _saveUserInfo() async {
-    // Check permission before saving
     if (!_canEditUser()) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -304,7 +302,6 @@ class _UserDetailPageState extends State<UserDetailPage> {
       if (!mounted) return;
 
       if (result['success'] == true) {
-        // Fetch updated user data
         final userDoc = await FirebaseFirestore.instance
             .collection('users')
             .doc(_user.id)
@@ -316,7 +313,6 @@ class _UserDetailPageState extends State<UserDetailPage> {
             _isEditing = false;
             _isSaving = false;
           });
-          // Reinitialize controllers with new data
           _initializeControllers();
         }
 
@@ -328,7 +324,6 @@ class _UserDetailPageState extends State<UserDetailPage> {
               behavior: SnackBarBehavior.floating,
             ),
           );
-          // Return true to refresh parent page
           Navigator.pop(context, true);
         }
       } else {
@@ -363,7 +358,6 @@ class _UserDetailPageState extends State<UserDetailPage> {
 
   void _showStatusConfirmationDialog(BuildContext context, UserService userService, String action) {
     if (action == 'delete') {
-      // For delete, show a dialog with reason input
       _showDeleteDialog(context, userService);
       return;
     }
@@ -412,7 +406,6 @@ class _UserDetailPageState extends State<UserDetailPage> {
   }
 
   Future<void> _performStatusAction(BuildContext context, UserService userService, String action) async {
-    // Show loading dialog
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -526,45 +519,62 @@ class _UserDetailPageState extends State<UserDetailPage> {
               tooltip: 'Edit',
             ),
         ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // Profile Header Card
-            _buildProfileHeader(context),
-            const SizedBox(height: 20),
-
-            // Quick Stats Row
-            _buildQuickStats(),
-            const SizedBox(height: 20),
-
-            // Wallet Balance Card
-            _buildWalletCard(),
-            const SizedBox(height: 20),
-
-            // User Information Card
-            _buildUserInfoCard(),
-            const SizedBox(height: 20),
-
-            // Professional Information Card (if available)
-            if (user.professionalSummary.isNotEmpty || user.workExperience.isNotEmpty || user.seeking.isNotEmpty || user.professionalProfile.isNotEmpty)
-              _buildProfessionalInfoCard(),
-            if (user.professionalSummary.isNotEmpty || user.workExperience.isNotEmpty || user.seeking.isNotEmpty || user.professionalProfile.isNotEmpty)
-              const SizedBox(height: 20),
-
-            // Tags Card (if available)
-            if (user.tags != null && user.tags!.isNotEmpty)
-              _buildTagsCard(),
-            if (user.tags != null && user.tags!.isNotEmpty)
-              const SizedBox(height: 20),
-
-            // Account Actions Card (hidden in edit mode and for HR/Staff roles)
-            if (!_isEditing && _canAccessAccountManagement())
-              _buildActionsCard(context, userService, statusColor, statusText),
-            const SizedBox(height: 20),
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.white,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          labelStyle: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 14,
+          ),
+          tabs: const [
+            Tab(text: 'Profile'),
+            Tab(text: 'Credit Logs'),
           ],
         ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                _buildProfileHeader(context),
+                const SizedBox(height: 20),
+
+                _buildQuickStats(),
+                const SizedBox(height: 20),
+
+                _buildWalletCard(),
+                const SizedBox(height: 20),
+
+                _buildUserInfoCard(),
+                const SizedBox(height: 20),
+
+                if (user.professionalSummary.isNotEmpty || user.workExperience.isNotEmpty || user.seeking.isNotEmpty || user.professionalProfile.isNotEmpty)
+                  _buildProfessionalInfoCard(),
+                if (user.professionalSummary.isNotEmpty || user.workExperience.isNotEmpty || user.seeking.isNotEmpty || user.professionalProfile.isNotEmpty)
+                  const SizedBox(height: 20),
+
+                if (user.tags != null && user.tags!.isNotEmpty)
+                  _buildTagsCard(),
+                if (user.tags != null && user.tags!.isNotEmpty)
+                  const SizedBox(height: 20),
+
+                if (!_isEditing && _canAccessAccountManagement())
+                  _buildActionsCard(context, userService, statusColor, statusText),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+          CreditLogsTab(userId: _user.id),
+        ],
       ),
     );
   }
@@ -577,12 +587,10 @@ class _UserDetailPageState extends State<UserDetailPage> {
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            // Avatar with online status
             Stack(
               alignment: Alignment.bottomRight,
               children: [
                 _buildProfileAvatar(),
-                // Status indicator
                 Container(
                   width: 24,
                   height: 24,
@@ -601,7 +609,6 @@ class _UserDetailPageState extends State<UserDetailPage> {
             ),
             const SizedBox(height: 20),
 
-            // Name and basic info
             Column(
               children: [
                 Text(
@@ -623,24 +630,23 @@ class _UserDetailPageState extends State<UserDetailPage> {
                 ),
                 const SizedBox(height: 16),
 
-                // Status and Role badges
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   alignment: WrapAlignment.center,
                   children: [
-                    _InfoChip(
+                    InfoChip(
                       text: _getStatusText(user.isActive, user.isSuspended),
                       color: _getStatusColor(user.isActive, user.isSuspended),
                       icon: _getStatusIcon(user.isActive, user.isSuspended),
                     ),
-                    _InfoChip(
+                    InfoChip(
                       text: _getRoleDisplayName(user.role),
                       color: _getRoleColor(user.role),
                       icon: Icons.work,
                     ),
                     if (user.reportCount > 0)
-                      _InfoChip(
+                      InfoChip(
                         text: '${user.reportCount} Report${user.reportCount == 1 ? '' : 's'}',
                         color: Colors.orange,
                         icon: Icons.flag,
@@ -659,7 +665,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
     return Row(
       children: [
         Expanded(
-          child: _StatCard(
+          child: UserStatCard(
             title: 'Joined',
             value: _formatDate(user.createdAt),
             icon: Icons.calendar_today,
@@ -668,7 +674,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: _StatCard(
+          child: UserStatCard(
             title: 'Status',
             value: _getStatusText(user.isActive, user.isSuspended),
             icon: _getStatusIcon(user.isActive, user.isSuspended),
@@ -677,7 +683,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: _StatCard(
+          child: UserStatCard(
             title: 'Role',
             value: _getRoleDisplayName(user.role),
             icon: Icons.work,
@@ -802,105 +808,101 @@ class _UserDetailPageState extends State<UserDetailPage> {
             ),
             const SizedBox(height: 16),
             if (_isEditing) ...[
-              _EditableDetailRow(
+              EditableDetailRow(
                 label: 'Full Name',
                 controller: _fullNameController,
                 icon: Icons.person,
                 enabled: !_isSaving,
               ),
-              _DetailRow(
+              UserDetailRow(
                 label: 'Email Address',
                 value: user.email,
                 icon: Icons.email,
               ),
-              _DetailRow(
+              UserDetailRow(
                 label: 'User Role',
                 value: _getRoleDisplayName(user.role),
                 icon: Icons.work,
                 valueColor: _getRoleColor(user.role),
               ),
-              _EditableDetailRow(
+              EditableDetailRow(
                 label: 'Phone Number',
                 controller: _phoneNumberController,
                 icon: Icons.phone,
                 enabled: !_isSaving,
                 keyboardType: TextInputType.phone,
               ),
-              _EditableDetailRow(
+              EditableDetailRow(
                 label: 'Location',
                 controller: _locationController,
                 icon: Icons.location_on,
                 enabled: !_isSaving,
               ),
             ] else ...[
-              _DetailRow(
+              UserDetailRow(
                 label: 'Full Name',
                 value: user.fullName,
                 icon: Icons.person,
               ),
-              _DetailRow(
+              UserDetailRow(
                 label: 'Email Address',
                 value: user.email,
                 icon: Icons.email,
               ),
-              _DetailRow(
+              UserDetailRow(
                 label: 'User Role',
                 value: _getRoleDisplayName(user.role),
                 icon: Icons.work,
                 valueColor: _getRoleColor(user.role),
               ),
               if (user.phoneNumber != null && user.phoneNumber!.isNotEmpty)
-                _DetailRow(
+                UserDetailRow(
                   label: 'Phone Number',
                   value: user.phoneNumber!,
                   icon: Icons.phone,
                 ),
-              _DetailRow(
+              UserDetailRow(
                 label: 'Location',
                 value: user.location.isNotEmpty ? user.location : 'Not specified',
                 icon: Icons.location_on,
               ),
             ],
-            // Age field
             if (user.age != null)
-              _DetailRow(
+              UserDetailRow(
                 label: 'Age',
                 value: user.age.toString(),
                 icon: Icons.cake,
               ),
-            // Gender field
             if (user.gender != null && user.gender!.isNotEmpty)
-              _DetailRow(
+              UserDetailRow(
                 label: 'Gender',
                 value: user.gender![0].toUpperCase() + user.gender!.substring(1).toLowerCase(),
                 icon: Icons.person,
               ),
-            // Email Verified
-            _DetailRow(
+            UserDetailRow(
               label: 'Email Verified',
               value: user.emailVerified ? 'Yes' : 'No',
               icon: Icons.verified,
               valueColor: user.emailVerified ? Colors.green : Colors.orange,
             ),
-            // Coordinates (if available)
             if (user.latitude != null && user.longitude != null)
-              _DetailRow(
+              UserDetailRow(
                 label: 'Coordinates',
                 value: '${user.latitude!.toStringAsFixed(6)}, ${user.longitude!.toStringAsFixed(6)}',
                 icon: Icons.map,
               ),
-            _DetailRow(
+            UserDetailRow(
               label: 'Account Created',
               value: _formatDateTime(user.createdAt),
               icon: Icons.calendar_today,
             ),
-            _DetailRow(
+            UserDetailRow(
               label: 'Profile Completed',
               value: user.profileCompleted ? 'Yes' : 'No',
               icon: Icons.check_circle,
               valueColor: user.profileCompleted ? Colors.green : Colors.orange,
             ),
-            _DetailRow(
+            UserDetailRow(
               label: 'Accepted Terms',
               value: user.acceptedTerms ? 'Yes' : 'No',
               icon: Icons.description,
@@ -937,28 +939,28 @@ class _UserDetailPageState extends State<UserDetailPage> {
             ),
             const SizedBox(height: 16),
             if (_isEditing) ...[
-              _EditableDetailSection(
+              EditableDetailSection(
                 label: 'Professional Summary',
                 controller: _professionalSummaryController,
                 icon: Icons.description,
                 enabled: !_isSaving,
                 maxLines: 5,
               ),
-              _EditableDetailSection(
+              EditableDetailSection(
                 label: 'Professional Profile',
                 controller: _professionalProfileController,
                 icon: Icons.description,
                 enabled: !_isSaving,
                 maxLines: 5,
               ),
-              _EditableDetailSection(
+              EditableDetailSection(
                 label: 'Work Experience',
                 controller: _workExperienceController,
                 icon: Icons.business_center,
                 enabled: !_isSaving,
                 maxLines: 5,
               ),
-              _EditableDetailSection(
+              EditableDetailSection(
                 label: 'Currently Seeking',
                 controller: _seekingController,
                 icon: Icons.search,
@@ -967,25 +969,25 @@ class _UserDetailPageState extends State<UserDetailPage> {
               ),
             ] else ...[
               if (user.professionalSummary.isNotEmpty)
-                _DetailSection(
+                UserDetailSection(
                   label: 'Professional Summary',
                   value: user.professionalSummary,
                   icon: Icons.description,
                 ),
               if (user.professionalProfile.isNotEmpty)
-                _DetailSection(
+                UserDetailSection(
                   label: 'Professional Profile',
                   value: user.professionalProfile,
                   icon: Icons.description,
                 ),
               if (user.workExperience.isNotEmpty)
-                _DetailSection(
+                UserDetailSection(
                   label: 'Work Experience',
                   value: user.workExperience,
                   icon: Icons.business_center,
                 ),
               if (user.seeking.isNotEmpty)
-                _DetailSection(
+                UserDetailSection(
                   label: 'Currently Seeking',
                   value: user.seeking,
                   icon: Icons.search,
@@ -1029,12 +1031,10 @@ class _UserDetailPageState extends State<UserDetailPage> {
               final categoryId = entry.key;
               final tagsList = entry.value;
               
-              // Skip if not a list
               if (tagsList is! List) {
                 return const SizedBox.shrink();
               }
               
-              // Get category name (try to infer from tag content)
               String categoryName = _getTagCategoryName(categoryId, tagsList);
               
               return Padding(
@@ -1085,10 +1085,8 @@ class _UserDetailPageState extends State<UserDetailPage> {
   }
 
   String _getTagCategoryName(String categoryId, List<dynamic> tagsList) {
-    // Try to infer category name from tag content
     if (tagsList.isEmpty) return 'Tags';
     
-    // Check first few tags to infer category
     final firstTags = tagsList.take(3).join(' ').toLowerCase();
     
     if (firstTags.contains('license') || firstTags.contains('vaccinated') || 
@@ -1104,7 +1102,6 @@ class _UserDetailPageState extends State<UserDetailPage> {
       return 'Skills';
     }
     
-    // Default fallback
     return 'Tags';
   }
 
@@ -1147,7 +1144,6 @@ class _UserDetailPageState extends State<UserDetailPage> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  // Warning Button
                   if (!user.isSuspended)
                     ActionButton(
                       text: 'Warning',
@@ -1161,7 +1157,6 @@ class _UserDetailPageState extends State<UserDetailPage> {
                       onPressed: () => _showStatusConfirmationDialog(context, userService, 'activate'),
                     ),
 
-                  // Suspend Button (only show if not suspended)
                   if (!user.isSuspended) ...[
                     const SizedBox(width: 8),
                     ActionButton(
@@ -1171,7 +1166,6 @@ class _UserDetailPageState extends State<UserDetailPage> {
                     ),
                   ],
 
-                  // Delete Button
                   const SizedBox(width: 8),
                   ActionButton(
                     text: 'Delete',
@@ -1190,7 +1184,6 @@ class _UserDetailPageState extends State<UserDetailPage> {
   Future<void> _showWarningDialog(BuildContext context, UserService userService) async {
     final violationController = TextEditingController();
 
-    // Get current strike count
     final currentStrikes = await userService.getStrikeCount(user.id);
     final strikesRemaining = 3 - currentStrikes;
 
@@ -1578,11 +1571,9 @@ class _UserDetailPageState extends State<UserDetailPage> {
                     final suspensionReason = reasonController.text.trim();
                     final durationText = durationController.text.trim();
 
-                    // Reset errors
                     reasonError = null;
                     durationError = null;
 
-                    // Validate reason
                     if (suspensionReason.isEmpty) {
                       setDialogState(() {
                         reasonError = 'Please provide a suspension reason';
@@ -1590,7 +1581,6 @@ class _UserDetailPageState extends State<UserDetailPage> {
                       return;
                     }
 
-                    // Validate duration - cannot be empty
                     if (durationText.isEmpty) {
                       setDialogState(() {
                         durationError = 'Please enter suspension duration';
@@ -1777,10 +1767,8 @@ class _UserDetailPageState extends State<UserDetailPage> {
                   : () async {
                       final deletionReason = reasonController.text.trim();
 
-                      // Reset errors
                       reasonError = null;
 
-                      // Validate reason
                       if (deletionReason.isEmpty) {
                         setDialogState(() {
                           reasonError = 'Please provide a deletion reason';
@@ -1803,12 +1791,10 @@ class _UserDetailPageState extends State<UserDetailPage> {
                           if (result['success'] == true) {
                             final userName = result['userName'];
                             
-                            // Navigate back to view_users_page first
                             if (context.mounted) {
                               Navigator.pop(context, true);
                             }
                             
-                            // Show success message after navigation
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
@@ -1863,216 +1849,6 @@ class _UserDetailPageState extends State<UserDetailPage> {
   }
 }
 
-// Helper Widgets
-class _InfoChip extends StatelessWidget {
-  final String text;
-  final Color color;
-  final IconData icon;
-
-  const _InfoChip({
-    required this.text,
-    required this.color,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 6),
-          Text(
-            text,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w500,
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final String title;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _StatCard({
-    required this.title,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Icon(icon, size: 24, color: color),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color? valueColor;
-
-  const _DetailRow({
-    required this.label,
-    required this.value,
-    required this.icon,
-    this.valueColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.grey[50],
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              icon,
-              size: 18,
-              color: Colors.grey[600],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: valueColor ?? Colors.black87,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DetailSection extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-
-  const _DetailSection({
-    required this.label,
-    required this.value,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 18, color: Colors.grey[600]),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.grey[50],
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Colors.black87,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class ActionButton extends StatelessWidget {
   final String text;
   final Color color;
@@ -2102,143 +1878,6 @@ class ActionButton extends StatelessWidget {
   }
 }
 
-// Editable Detail Row Widget
-class _EditableDetailRow extends StatelessWidget {
-  final String label;
-  final TextEditingController controller;
-  final IconData icon;
-  final bool enabled;
-  final TextInputType? keyboardType;
-
-  const _EditableDetailRow({
-    required this.label,
-    required this.controller,
-    required this.icon,
-    this.enabled = true,
-    this.keyboardType,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.grey[50],
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              icon,
-              size: 18,
-              color: Colors.grey[600],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                TextField(
-                  controller: controller,
-                  enabled: enabled,
-                  keyboardType: keyboardType,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 12,
-                    ),
-                    isDense: true,
-                  ),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// Editable Detail Section Widget
-class _EditableDetailSection extends StatelessWidget {
-  final String label;
-  final TextEditingController controller;
-  final IconData icon;
-  final bool enabled;
-  final int maxLines;
-
-  const _EditableDetailSection({
-    required this.label,
-    required this.controller,
-    required this.icon,
-    this.enabled = true,
-    this.maxLines = 3,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 18, color: Colors.grey[600]),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: controller,
-            enabled: enabled,
-            maxLines: maxLines,
-            decoration: InputDecoration(
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              contentPadding: const EdgeInsets.all(12),
-            ),
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.black87,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// Extension for string capitalization
 extension StringExtension on String {
   String capitalize() {
     return "${this[0].toUpperCase()}${substring(1).toLowerCase()}";

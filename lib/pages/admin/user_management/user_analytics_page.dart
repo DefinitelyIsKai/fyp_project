@@ -676,7 +676,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
           }
         });
       } catch (shareError) {
-        // Handle MissingPluginException specifically
         if (shareError.toString().contains('MissingPluginException') || 
             shareError.toString().contains('missing plugin')) {
           if (mounted) {

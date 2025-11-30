@@ -97,14 +97,27 @@ class RatingService {
     });
   }
 
-  /// Get ratings for a specific employee
+  /// Get ratings for a specific jobseeker
   Future<List<RatingModel>> getRatingsForUser(String userId) async {
     try {
+      // Query using jobseekerId (new field name), fallback to employeeId for backward compatibility
       final snapshot = await _reviewsCollection
-          .where('employeeId', isEqualTo: userId)
+          .where('jobseekerId', isEqualTo: userId)
           .where('status', isEqualTo: 'active')
           .orderBy('createdAt', descending: true)
           .get();
+
+      // If no results found with jobseekerId, try employeeId for backward compatibility
+      if (snapshot.docs.isEmpty) {
+        final oldSnapshot = await _reviewsCollection
+            .where('employeeId', isEqualTo: userId)
+            .where('status', isEqualTo: 'active')
+            .orderBy('createdAt', descending: true)
+            .get();
+        return oldSnapshot.docs
+            .map((doc) => RatingModel.fromFirestore(doc))
+            .toList();
+      }
 
       return snapshot.docs
           .map((doc) => RatingModel.fromFirestore(doc))

@@ -929,7 +929,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           }
         });
       } catch (shareError) {
-        // Handle MissingPluginException specifically
         if (shareError.toString().contains('MissingPluginException') || 
             shareError.toString().contains('missing plugin')) {
           if (mounted) {

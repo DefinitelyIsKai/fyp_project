@@ -17,7 +17,6 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
   DateTime? _endDate;
   bool _isFiltersExpanded = true;
   
-  // Fixed list of available action types
   final List<String> _availableActionTypes = [
     'add_credit',
     'deduct_credit',
@@ -29,6 +28,11 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
     'user_suspended',
     'user_unsuspended',
     'warning_issued',
+    'admin_login_success',
+    'admin_login_failed',
+    'admin_face_verification_failed',
+    'report_resolved',
+    'user_info_updated',
   ];
 
   @override
@@ -62,7 +66,6 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
       ),
       body: Column(
         children: [
-          // Filter Section
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -78,7 +81,6 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
             ),
             child: Column(
               children: [
-                // Filter Header (Expandable)
                 InkWell(
                   onTap: () {
                     setState(() {
@@ -109,7 +111,6 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
                           ),
                         ),
                         const Spacer(),
-                        // Show active filter count
                         if (_hasActiveFilters())
                           Container(
                             margin: const EdgeInsets.only(right: 8),
@@ -137,7 +138,6 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
                     ),
                   ),
                 ),
-                // Expandable Filters Content
                 ClipRect(
                   child: AnimatedSize(
                     duration: const Duration(milliseconds: 300),
@@ -147,10 +147,8 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
                             padding: const EdgeInsets.only(top: 12),
                             child: Column(
                               children: [
-                                // Filter Chips Row
                                 Row(
                                   children: [
-                                    // Type Filter
                                     Expanded(
                                       child: _FilterChip(
                                         label: 'Type',
@@ -161,7 +159,6 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
                                       ),
                                     ),
                                     const SizedBox(width: 8),
-                                    // Date Range Filter
                                     Expanded(
                                       child: _FilterChip(
                                         label: 'Date Range',
@@ -171,7 +168,6 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
                                     ),
                                   ],
                                 ),
-                                // Active Filters Indicator
                                 if (_hasActiveFilters()) ...[
                                   const SizedBox(height: 12),
                                   Row(
@@ -210,7 +206,6 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
             ),
           ),
 
-          // Logs List
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: _buildLogsStream(),
@@ -318,28 +313,22 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
 
   Widget _buildLogCard(Map<String, dynamic> data) {
     final actionType = data['actionType'] as String? ?? 'unknown';
-    // Check for both userId and ownerId (for post-related logs)
     final userId = data['userId'] as String? ?? data['ownerId'] as String? ?? '';
     final userName = data['userName'] as String? ?? '';
     final createdAt = data['createdAt'] as Timestamp?;
     final reason = data['description'] as String? ?? data['reason'] as String? ?? data['rejectionReason'] as String? ?? data['violationReason'] as String? ?? '';
     final createdBy = data['createdBy'] as String? ?? '';
-    // Post-related fields
     final postTitle = data['postTitle'] as String? ?? '';
-    // User-related fields
     final userEmail = data['userEmail'] as String? ?? '';
     final previousStatus = data['previousStatus'] as String? ?? '';
     final newStatus = data['newStatus'] as String? ?? '';
     final previousStrikeCount = data['previousStrikeCount'] as int?;
     final newStrikeCount = data['newStrikeCount'] as int?;
-    // Warning-specific fields
     final strikeCount = data['strikeCount'] as int?;
     final wasSuspended = data['wasSuspended'] as bool? ?? false;
     final deductedMarks = data['deductedMarks'] as double?;
-    // Suspension-specific fields
     final durationDays = data['durationDays'] as int?;
 
-    // Format date
     String dateStr = 'Unknown date';
     if (createdAt != null) {
       try {
@@ -420,7 +409,6 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
                 ],
               ),
               const SizedBox(height: 12),
-              // Post information (for post-related actions)
               if (postTitle.isNotEmpty) ...[
                 Row(
                   children: [
@@ -440,7 +428,6 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
                 ),
                 const SizedBox(height: 6),
               ],
-              // User information fetch if not present
               if (userId.isNotEmpty) ...[
                 FutureBuilder<String>(
                   future: userName.isNotEmpty 
@@ -494,7 +481,6 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
                   },
                 ),
               ],
-              // Status change information
               if (previousStatus.isNotEmpty && newStatus.isNotEmpty) ...[
                 Row(
                   children: [
@@ -534,7 +520,6 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
                 ),
                 const SizedBox(height: 6),
               ],
-              // Warning-specific strike count (when previousStrikeCount is not available)
               if (strikeCount != null && previousStrikeCount == null) ...[
                 Row(
                   children: [
@@ -819,6 +804,36 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
           'icon': Icons.warning_amber_rounded,
           'color': Colors.orange,
         };
+      case 'admin_login_success':
+        return {
+          'name': 'Admin Login Success',
+          'icon': Icons.login,
+          'color': Colors.green,
+        };
+      case 'admin_login_failed':
+        return {
+          'name': 'Admin Login Failed',
+          'icon': Icons.login,
+          'color': Colors.red,
+        };
+      case 'admin_face_verification_failed':
+        return {
+          'name': 'Face Verification Failed',
+          'icon': Icons.face_retouching_off,
+          'color': Colors.red,
+        };
+      case 'report_resolved':
+        return {
+          'name': 'Report Resolved',
+          'icon': Icons.check_circle,
+          'color': Colors.green,
+        };
+      case 'user_info_updated':
+        return {
+          'name': 'User Info Updated',
+          'icon': Icons.edit,
+          'color': Colors.blue,
+        };
       default:
         return {
           'name': 'Unknown Action',
@@ -869,7 +884,6 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
   }
 
   List<QueryDocumentSnapshot> _filterLogs(List<QueryDocumentSnapshot> logs) {
-    // Filter by action type
     List<QueryDocumentSnapshot> filtered = logs;
     
     if (_selectedFilter != 'all') {
@@ -880,7 +894,6 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
       }).toList();
     }
     
-    // Filter by date range
     if (_startDate != null || _endDate != null) {
       filtered = filtered.where((log) {
         final data = log.data() as Map<String, dynamic>;
@@ -1028,6 +1041,16 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
         return 'User Unsuspended';
       case 'warning_issued':
         return 'Issue Warning';
+      case 'admin_login_success':
+        return 'Admin Login Success';
+      case 'admin_login_failed':
+        return 'Admin Login Failed';
+      case 'admin_face_verification_failed':
+        return 'Face Verification Failed';
+      case 'report_resolved':
+        return 'Report Resolved';
+      case 'user_info_updated':
+        return 'User Info Updated';
       default:
         return actionType;
     }

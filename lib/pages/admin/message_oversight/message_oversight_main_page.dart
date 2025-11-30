@@ -7,7 +7,6 @@ import 'package:fyp_project/utils/admin/app_colors.dart';
 class MessageOversightMainPage extends StatelessWidget {
   const MessageOversightMainPage({super.key});
 
-  // Real-time stream: counts total ratings/reviews
   Stream<int> _totalRatingsCountStream() {
     return FirebaseFirestore.instance
         .collection('reviews')
@@ -15,7 +14,6 @@ class MessageOversightMainPage extends StatelessWidget {
         .map((snap) => snap.size);
   }
 
-  // Real-time stream: counts pending reports
   Stream<int> _pendingReportsCountStream() {
     return FirebaseFirestore.instance
         .collection('reports')

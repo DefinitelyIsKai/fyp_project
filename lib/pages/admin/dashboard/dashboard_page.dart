@@ -33,7 +33,6 @@ class _DashboardPageState extends State<DashboardPage> {
   int _unresolvedReports = 0;
   bool _isLoading = true;
 
-  // Role-based page access
   final Map<String, List<String>> roleAccess = {
     'manager': [
       'Post Moderation',
@@ -65,12 +64,10 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   void _setupRealtimeUpdates() {
-    // Check if current user is staff - staff cannot see unresolved reports
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentRole = authService.currentAdmin?.role.toLowerCase() ?? '';
     final isStaff = currentRole == 'staff';
     
-    // Only listen to real-time updates for unresolved reports if not staff
     if (!isStaff) {
       _reportsSubscription = _dashboardService.streamUnresolvedReportsCount().listen(
         (count) {
@@ -81,7 +78,6 @@ class _DashboardPageState extends State<DashboardPage> {
           }
         },
         onError: (error) {
-          // Handle permission errors gracefully
           debugPrint('Error listening to reports stream: $error');
           if (mounted) {
             setState(() {
@@ -104,7 +100,6 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       },
       onError: (error) {
-        // Handle permission errors gracefully
         debugPrint('Error listening to pending posts stream: $error');
         if (mounted) {
           setState(() {
@@ -128,7 +123,6 @@ class _DashboardPageState extends State<DashboardPage> {
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      // Check and auto unsuspend expired suspensions (background task, don't wait)
       _userService.checkAndAutoUnsuspendExpiredUsers().catchError((e) {
         debugPrint('Error in auto unsuspend check: $e');
         return <String, dynamic>{
@@ -139,10 +133,7 @@ class _DashboardPageState extends State<DashboardPage> {
         };
       });
       
-      // Pending posts are now handled by real-time stream
       final users = await _dashboardService.getActiveUsersCount();
-      // Unresolved reports are also handled by real-time stream, but load initial value
-      // Staff cannot see unresolved reports
       final authService = Provider.of<AuthService>(context, listen: false);
       final currentRole = authService.currentAdmin?.role.toLowerCase() ?? '';
       final isStaff = currentRole == 'staff';
@@ -189,7 +180,6 @@ class _DashboardPageState extends State<DashboardPage> {
             .showSnackBar(SnackBar(content: Text('Error refreshing dashboard: $e')));
       }
     }
-    // Note: Pending posts are handled by real-time stream, so they update automatically
   }
 
   @override
@@ -199,7 +189,6 @@ class _DashboardPageState extends State<DashboardPage> {
     final role = rawRole.toLowerCase().trim();
     final allowedPages = roleAccess[role] ?? roleAccess['staff'] ?? [];
     
-    // Debug logging
     debugPrint('Dashboard - Raw role from authService: "$rawRole"');
     debugPrint('Dashboard - Normalized role: "$role"');
     debugPrint('Dashboard - Allowed pages for role "$role": $allowedPages');
@@ -207,7 +196,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
     return WillPopScope(
       onWillPop: () async {
-        // Show user profile when trying to go back from dashboard
         _showUserProfile(context, authService);
         return false; // Prevent default back navigation
       },
@@ -398,7 +386,6 @@ class _DashboardPageState extends State<DashboardPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -452,7 +439,6 @@ class _DashboardPageState extends State<DashboardPage> {
                   ],
                 ),
               ),
-              // Content
               Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
@@ -484,7 +470,6 @@ class _DashboardPageState extends State<DashboardPage> {
                   ],
                 ),
               ),
-              // Actions
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                 decoration: BoxDecoration(
@@ -685,7 +670,6 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
     ];
 
-    // Filter cards based on role
     final filteredCards = cards.where((c) => allowedPages.contains(c.title)).toList();
     
     // Debug logging

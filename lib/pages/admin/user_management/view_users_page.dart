@@ -73,7 +73,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
       
       try {
         final allAdminRoles = await _roleService.getAllRoles();
-        // Filter to only admin roles (manager, HR, staff, and any custom admin roles)
         adminRoles = allAdminRoles.where((role) {
           final roleName = role.name.toLowerCase();
           return roleName == 'manager' || 
@@ -245,11 +244,9 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
             ),
           ),
           
-          // Only show action buttons if canPerformActions is true
           if (canPerformActions) ...[
             const SizedBox(width: 6),
 
-            // If user is deleted, show only Activate button
             if (isDeleted) ...[
               ElevatedButton.icon(
                 onPressed: () async {
@@ -951,20 +948,17 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     final phoneNumberController = TextEditingController();
     final currentPasswordController = TextEditingController();
     
-    // Store state outside StatefulBuilder to persist across rebuilds
     String selectedRole = _adminRoles.isNotEmpty ? _adminRoles.first.name : 'staff';
     String? selectedGender;
     bool obscurePassword = true;
     bool obscureConfirmPassword = true;
     bool obscureCurrentPassword = true;
     
-    // Use ValueNotifier for image state to persist across rebuilds
     final selectedImageBase64Notifier = ValueNotifier<String?>(null);
     final selectedImageFileTypeNotifier = ValueNotifier<String?>(null);
     final isPickingImageNotifier = ValueNotifier<bool>(false);
     final isImageUploadedNotifier = ValueNotifier<bool>(false);
     
-    // Page controller for two-step process
     final pageController = PageController(initialPage: 0);
     final currentPageNotifier = ValueNotifier<int>(0);
     
@@ -1046,6 +1040,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                     // Step 2: Information Form
                     _buildInformationStep(
                       context,
+                      pageContext,
                       setDialogState,
                       nameController,
                       emailController,
@@ -1336,6 +1331,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   // Step 2: Information Form Page
   Widget _buildInformationStep(
     BuildContext context,
+    BuildContext pageContext,
     StateSetter setDialogState,
     TextEditingController nameController,
     TextEditingController emailController,
@@ -2083,7 +2079,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                       return;
                     }
                     
-                    // Use AdminUserService to create admin
                     final adminUserService = AdminUserService();
                     final form = AddAdminFormModel(
                       name: name,
@@ -2100,22 +2095,36 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                       imageFileType: selectedImageFileTypeNotifier.value,
                     );
                     
-                    // Close the add admin dialog first
                     Navigator.pop(context);
                     
-                    // Wait a moment for dialog to close
                     await Future.delayed(const Duration(milliseconds: 100));
                     
-                    // Create admin (this will show its own loading indicator)
-                    // Use the page's context (saved at the beginning of _showAddAdminDialog)
-                    final result = await adminUserService.createAdminUser(context, form);
+                    final result = await adminUserService.createAdminUser(pageContext, form);
+                    
+                    // Ensure loading dialog from createAdminUser is closed
+                    if (pageContext.mounted) {
+                      try {
+                        // Try to close any remaining dialogs
+                        Navigator.of(pageContext, rootNavigator: true).popUntil((route) {
+                          return route.isFirst || !route.willHandlePopInternally;
+                        });
+                      } catch (e) {
+                        debugPrint('Dialog already closed: $e');
+                      }
+                    }
+                    
+                    await Future.delayed(const Duration(milliseconds: 200));
                     
                     if (result.success) {
                       // Success - show success message and keep logged in
                       _showSnackBar(result.message ?? 'Admin user "$name" created successfully');
+                      
+                      // Wait a bit before refreshing to ensure UI is ready
                       await Future.delayed(const Duration(milliseconds: 300));
+                      
                       if (mounted) {
-                        _loadData();
+                        // Refresh data
+                        await _loadData();
                       }
                     } else {
                       // Failed - show error message

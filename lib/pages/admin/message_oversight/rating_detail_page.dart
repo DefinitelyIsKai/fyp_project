@@ -40,12 +40,12 @@ class _RatingDetailPageState extends State<RatingDetailPage> {
   Future<void> _loadUserInfo() async {
     try {
       final users = await _userService.getAllUsers();
-      final employer = users.firstWhere(
-        (u) => u.id == widget.rating.employerId,
+      final recruiter = users.firstWhere(
+        (u) => u.id == widget.rating.recruiterId,
         orElse: () => users.first,
       );
-      final employee = users.firstWhere(
-        (u) => u.id == widget.rating.employeeId,
+      final jobseeker = users.firstWhere(
+        (u) => u.id == widget.rating.jobseekerId,
         orElse: () => users.first,
       );
       
@@ -65,8 +65,8 @@ class _RatingDetailPageState extends State<RatingDetailPage> {
       
       if (mounted) {
         setState(() {
-          _raterName = employer.fullName;
-          _ratedUserName = employee.fullName;
+          _raterName = recruiter.fullName;
+          _ratedUserName = jobseeker.fullName;
           _postTitle = postTitle ?? widget.rating.postId;
           _loadingUserInfo = false;
         });
@@ -284,16 +284,16 @@ class _RatingDetailPageState extends State<RatingDetailPage> {
                     ),
                     const SizedBox(height: 12),
                     _DetailRow(
-                      label: 'Rated By (Employer)',
+                      label: 'Rated By (Recruiter)',
                       value: _loadingUserInfo
                           ? 'Loading...'
-                          : (_raterName ?? widget.rating.employerId),
+                          : (_raterName ?? widget.rating.recruiterId),
                     ),
                     _DetailRow(
-                      label: 'Rated User (Employee)',
+                      label: 'Rated User (Jobseeker)',
                       value: _loadingUserInfo
                           ? 'Loading...'
-                          : (_ratedUserName ?? widget.rating.employeeId),
+                          : (_ratedUserName ?? widget.rating.jobseekerId),
                     ),
                     _DetailRow(
                       label: 'Post Title',
