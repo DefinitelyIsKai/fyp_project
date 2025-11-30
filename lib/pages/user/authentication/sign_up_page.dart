@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../services/user/auth_service.dart';
 import '../../../utils/user/dialog_utils.dart';
 import '../../../utils/user/input_validators.dart';
-// import 'home_page.dart';
 
 import 'login_page.dart';
 import 'email_verification_loading_page.dart';
@@ -110,7 +109,6 @@ class _SignUpPageState extends State<SignUpPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 40),
-                  // Logo
                   Container(
                     width: 80,
                     height: 80,
@@ -144,7 +142,6 @@ class _SignUpPageState extends State<SignUpPage> {
                     ),
                   ),
                   const SizedBox(height: 40),
-                  // Name Field
                   Text(
                     'Full Name',
                     style: TextStyle(
@@ -161,7 +158,6 @@ class _SignUpPageState extends State<SignUpPage> {
                     validator: InputValidators.required,
                   ),
                   const SizedBox(height: 20),
-                  // Email Field
                   Text(
                     'Email',
                     style: TextStyle(
@@ -179,7 +175,6 @@ class _SignUpPageState extends State<SignUpPage> {
                     validator: InputValidators.requiredEmail,
                   ),
                   const SizedBox(height: 20),
-                  // Password Field
                   Text(
                     'Password',
                     style: TextStyle(
@@ -197,7 +192,6 @@ class _SignUpPageState extends State<SignUpPage> {
                     validator: (v) => InputValidators.password(v, minLength: 6),
                   ),
                   const SizedBox(height: 32),
-                  // Sign Up Button
                   SizedBox(
                     height: 52,
                     child: ElevatedButton(
@@ -229,7 +223,6 @@ class _SignUpPageState extends State<SignUpPage> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  // Login Link
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [

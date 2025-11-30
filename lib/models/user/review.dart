@@ -5,7 +5,7 @@ class Review {
   final String postId;
   final String recruiterId;
   final String jobseekerId;
-  final int rating; // 1-5
+  final int rating; 
   final String comment;
   final DateTime createdAt;
 

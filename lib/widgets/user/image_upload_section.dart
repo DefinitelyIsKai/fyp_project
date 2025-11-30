@@ -201,16 +201,9 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
         } else {
           widget.onImagesAdded(urls);
         }
-      } else if (urls.isEmpty && mounted) {
-        // Show error if no images were uploaded
-        if (mounted) {
-          DialogUtils.showWarningMessage(
-            context: context,
-            message: 'Failed to upload images. Please try again.',
-            duration: const Duration(seconds: 3),
-          );
-        }
       }
+      // Note: If urls.isEmpty, user likely cancelled the selection - this is not an error
+      // Only show error in catch block for actual exceptions
     } catch (e) {
       // Show error message to user
       if (mounted) {

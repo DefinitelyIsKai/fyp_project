@@ -129,11 +129,13 @@ class _MatchesTab extends StatefulWidget {
 class _MatchesTabState extends State<_MatchesTab> {
   final MatchingService _matchingService = MatchingService();
   bool _recomputing = false;
-  MatchingStrategy _selectedStrategy = MatchingStrategy.embeddingsAnn;
-
+  // Recruiter always uses ANN (embeddingsAnn), no strategy selection needed
+  static const MatchingStrategy _recruiterStrategy = MatchingStrategy.embeddingsAnn;
+  
+//refresh by updating state
   Future<void> _refreshData() async {
     setState(() {
-      // Force refresh by updating state
+      
     });
     await Future.delayed(const Duration(milliseconds: 100));
   }
@@ -143,17 +145,15 @@ class _MatchesTabState extends State<_MatchesTab> {
     setState(() => _recomputing = true);
     try {
       if (widget.isRecruiter) {
-        // For recruiters, run the matching algorithm
+        // For recruiters, run the matching algorithm (always using ANN)
         await _matchingService.recomputeMatches(
           role: 'recruiter',
-          strategy: _selectedStrategy,
+          strategy: _recruiterStrategy,
         );
         if (!mounted) return;
         DialogUtils.showSuccessMessage(
           context: context,
-          message: _selectedStrategy == MatchingStrategy.stableOptimal
-              ? 'Precise matching completed'
-              : 'Matching engine refreshed',
+          message: 'Matching engine refreshed',
         );
       } else {
         // For jobseekers, the stream will automatically refresh
@@ -179,123 +179,7 @@ class _MatchesTabState extends State<_MatchesTab> {
   }
 
 
-  /// Filter matches by selected strategy
-
-  void _showStrategySelector() {
-    MatchingStrategy tempStrategy = _selectedStrategy;
-    
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Select Matching Strategy',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.black,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Choose how you want to find candidates for your jobs',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                ),
-              ),
-              const SizedBox(height: 24),
-              _StrategyOption(
-                title: 'Quick Recommendation',
-                description: 'Fast matching with multiple candidates per job',
-                strategy: MatchingStrategy.embeddingsAnn,
-                selected: tempStrategy == MatchingStrategy.embeddingsAnn,
-                icon: Icons.auto_awesome,
-                onTap: () {
-                  setModalState(() {
-                    tempStrategy = MatchingStrategy.embeddingsAnn;
-                  });
-                },
-              ),
-              const SizedBox(height: 12),
-              _StrategyOption(
-                title: 'Precise Matching',
-                description: 'Optimal one-to-one assignment (Gale-Shapley + Hungarian)',
-                strategy: MatchingStrategy.stableOptimal,
-                selected: tempStrategy == MatchingStrategy.stableOptimal,
-                icon: Icons.precision_manufacturing,
-                onTap: () {
-                  setModalState(() {
-                    tempStrategy = MatchingStrategy.stableOptimal;
-                  });
-                },
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _recomputing
-                      ? null
-                      : () {
-                          Navigator.pop(context);
-                          setState(() {
-                            _selectedStrategy = tempStrategy;
-                          });
-                          _handleRecompute();
-                        },
-                  style: ButtonStyles.primaryFilled(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: Text(
-                    _recomputing
-                        ? 'Running...'
-                        : 'Run Matching with Selected Strategy',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              if (tempStrategy != _selectedStrategy)
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      setState(() {
-                        _selectedStrategy = tempStrategy;
-                      });
-                    },
-                    style: ButtonStyles.primaryOutlined(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: const Text(
-                      'Switch View (Show Existing Results)',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              if (tempStrategy != _selectedStrategy) const SizedBox(height: 12),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  /// Removed strategy selector - Recruiter now only uses ANN (embeddingsAnn)
 
   /// Build matches for jobseekers using real-time computation
   Widget _buildJobseekerMatches() {
@@ -497,6 +381,7 @@ class _MatchesTabState extends State<_MatchesTab> {
               final post = activePosts[index];
               return _RecruiterPostCard(
                 post: post,
+                strategy: _recruiterStrategy,
                 onTap: () => _showApplicantMatches(context, post),
               );
             },
@@ -526,7 +411,7 @@ class _MatchesTabState extends State<_MatchesTab> {
       final matches = await _matchingService.computeMatchesForRecruiterPost(
         postId: post.id,
         recruiterId: recruiterId,
-        strategy: _selectedStrategy,
+        strategy: _recruiterStrategy,
       );
 
       if (!context.mounted) return;
@@ -584,7 +469,7 @@ class _MatchesTabState extends State<_MatchesTab> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Recommended for You',
+                        'Optimal Matches for You',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
@@ -593,7 +478,7 @@ class _MatchesTabState extends State<_MatchesTab> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Based on your skills and preferences',
+                        'Powered by advanced matching algorithms for best recommendations',
                         style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                       ),
                     ],
@@ -620,29 +505,11 @@ class _MatchesTabState extends State<_MatchesTab> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          _selectedStrategy == MatchingStrategy.stableOptimal
-                              ? 'Precise Matching: One candidate per job'
-                              : 'Quick Recommendation: Multiple candidates per job',
+                          'Quick Recommendation: Multiple candidates per job',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.blue[900],
                             fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: _recomputing ? null : _showStrategySelector,
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        child: Text(
-                          'Change',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.blue[700],
-                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
@@ -915,103 +782,25 @@ class _ComputedMatchCard extends StatelessWidget {
   }
 }
 
-class _StrategyOption extends StatelessWidget {
-  final String title;
-  final String description;
-  final MatchingStrategy strategy;
-  final bool selected;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _StrategyOption({
-    required this.title,
-    required this.description,
-    required this.strategy,
-    required this.selected,
-    required this.icon,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFF00C8A0).withOpacity(0.1) : Colors.grey[50],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? const Color(0xFF00C8A0) : Colors.grey[300]!,
-            width: selected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: selected
-                    ? const Color(0xFF00C8A0).withOpacity(0.2)
-                    : Colors.grey[200],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                icon,
-                color: selected ? const Color(0xFF00C8A0) : Colors.grey[600],
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: selected ? const Color(0xFF00C8A0) : Colors.black,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    description,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (selected)
-              const Icon(
-                Icons.check_circle,
-                color: Color(0xFF00C8A0),
-                size: 24,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+/// Removed _StrategyOption widget - Recruiter no longer needs strategy selection
 
 /// Card widget for displaying recruiter's job posts
 class _RecruiterPostCard extends StatelessWidget {
   final Post post;
   final VoidCallback onTap;
+  final MatchingStrategy strategy;
 
   const _RecruiterPostCard({
     required this.post,
     required this.onTap,
+    required this.strategy,
   });
 
   @override
   Widget build(BuildContext context) {
+    final matchingService = MatchingService();
+    final recruiterId = AuthService().currentUserId;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: CardDecorations.standard(),
@@ -1050,26 +839,49 @@ class _RecruiterPostCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF00C8A0).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: const Color(0xFF00C8A0).withOpacity(0.3),
-                      ),
-                    ),
-                    child: Text(
-                      '${post.applicants} ${post.applicants == 1 ? 'applicant' : 'applicants'}',
-                      style: const TextStyle(
-                        color: Color(0xFF00C8A0),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                  FutureBuilder<int>(
+                    future: recruiterId.isNotEmpty
+                        ? matchingService.getMatchedApplicantCount(
+                            postId: post.id,
+                            recruiterId: recruiterId,
+                            strategy: strategy,
+                          )
+                        : Future.value(0),
+                    builder: (context, snapshot) {
+                      final matchedCount = snapshot.data ?? 0;
+                      final isLoading = snapshot.connectionState == ConnectionState.waiting;
+
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00C8A0).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: const Color(0xFF00C8A0).withOpacity(0.3),
+                          ),
+                        ),
+                        child: isLoading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Color(0xFF00C8A0),
+                                ),
+                              )
+                            : Text(
+                                '$matchedCount ${matchedCount == 1 ? 'matched applicant' : 'matched applicants'}',
+                                style: const TextStyle(
+                                  color: Color(0xFF00C8A0),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                      );
+                    },
                   ),
                 ],
               ),

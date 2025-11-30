@@ -271,7 +271,6 @@ class MessagingService {
       receiverId: receiverId,
       content: content,
       timestamp: DateTime.now(),
-      matchId: matchId,
     );
 
     // Add message to conversation

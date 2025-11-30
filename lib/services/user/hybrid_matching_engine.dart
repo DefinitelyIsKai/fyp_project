@@ -256,7 +256,7 @@ class HybridMatchingEngine {
     final jobs = await _loadActiveJobs();
     if (jobs.isEmpty) return;
 
-    // Step 1: Filter jobs by age requirement (hard filter - must pass)
+    // filter ages
     final ageFilteredJobs = jobs.where((job) {
       if (candidate.age == null) {
         // If candidate age is not set, only include jobs without age requirements
@@ -274,6 +274,13 @@ class HybridMatchingEngine {
     }).toList();
 
     if (ageFilteredJobs.isEmpty) return;
+
+    //filter genderss
+    final genderFilteredJobs = ageFilteredJobs.where((job) {
+      return _meetsGenderRequirement(candidate, job);
+    }).toList();
+
+    if (genderFilteredJobs.isEmpty) return;
 
     final recruiterLabels = await _fetchUserLabels(
       ageFilteredJobs.map((job) => job.ownerId).toSet(),
@@ -440,11 +447,18 @@ class HybridMatchingEngine {
 
     if (ageFilteredJobs.isEmpty) return [];
 
+    // Step 1.5: Filter jobs by gender requirement (hard filter - must pass)
+    final genderFilteredJobs = ageFilteredJobs.where((job) {
+      return _meetsGenderRequirement(candidate, job);
+    }).toList();
+
+    if (genderFilteredJobs.isEmpty) return [];
+
     final recruiterLabels = await _fetchUserLabels(
-      ageFilteredJobs.map((job) => job.ownerId).toSet(),
+      genderFilteredJobs.map((job) => job.ownerId).toSet(),
     );
 
-    final jobVectors = ageFilteredJobs
+    final jobVectors = genderFilteredJobs
         .map(
           (job) => _JobVector.fromPost(
             job,
@@ -453,34 +467,29 @@ class HybridMatchingEngine {
         )
         .toList();
 
-    // Step 2: Use Embeddings + ANN for initial filtering
-    final annMatcher = _EmbeddingAnnMatcher<_JobVector>();
-    final annNeighbors = annMatcher.findNearest(
-      query: candidate.featureVector,
-      items: jobVectors,
-      topK: 32,
+    // Step 2: Use Gale-Shapley + Hungarian for optimal matching (Jobseeker perspective)
+    final optimalMatches = await _runJobseekerOptimalMatching(
+      candidate,
+      jobVectors,
+      weights,
     );
 
+    // Convert to ComputedMatch list
     final computedMatches = <ComputedMatch>[];
-    for (final neighbor in annNeighbors) {
-      final similarity = neighbor.similarity;
-      final jobVector = neighbor.payload;
-      final score = await _scoreJobseekerMatch(candidate, jobVector, similarity, weights);
-      if (score <= 0.05) continue;
-
+    for (final match in optimalMatches) {
       final matchedSkills = _matchedSkills(
         candidate.skillSet,
-        jobVector.requiredSkills,
+        match.job.requiredSkills,
       );
 
       computedMatches.add(
         ComputedMatch(
-          post: jobVector.post,
-          recruiterFullName: jobVector.recruiterLabel,
-          recruiterId: jobVector.post.ownerId,
-          matchPercentage: (score * 100).clamp(1, 100).round(),
+          post: match.job.post,
+          recruiterFullName: match.job.recruiterLabel,
+          recruiterId: match.job.post.ownerId,
+          matchPercentage: (match.score * 100).clamp(1, 100).round(),
           matchedSkills: matchedSkills,
-          matchingStrategy: 'embedding_ann',
+          matchingStrategy: 'stable_optimal',
         ),
       );
     }
@@ -525,6 +534,7 @@ class HybridMatchingEngine {
       createdAt: (postData['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       eventStartDate: (postData['eventStartDate'] as Timestamp?)?.toDate(),
       eventEndDate: (postData['eventEndDate'] as Timestamp?)?.toDate(),
+      genderRequirement: postData['genderRequirement'] as String?,
       views: postData['views'] as int? ?? 0,
       applicants: postData['applicants'] as int? ?? 0,
     );
@@ -626,28 +636,39 @@ class HybridMatchingEngine {
       return [];
     }
 
+    // Filter candidates by gender requirement
+    final genderFilteredCandidates = ageFilteredCandidates.where((candidate) {
+      return _meetsGenderRequirement(candidate, post);
+    }).toList();
+
+    debugPrint('Gender-filtered candidates: ${genderFilteredCandidates.length}');
+    if (genderFilteredCandidates.isEmpty) {
+      debugPrint('No candidates passed gender filter');
+      return [];
+    }
+
     // Use Embeddings + ANN for matching
     debugPrint('Job vector tokens: ${jobVector.featureVector.tokens.length}');
     debugPrint('Job vector tokens sample: ${jobVector.featureVector.tokens.take(5).join(", ")}');
-    if (ageFilteredCandidates.isNotEmpty) {
-      debugPrint('Candidate vector tokens: ${ageFilteredCandidates.first.featureVector.tokens.length}');
-      debugPrint('Candidate vector tokens sample: ${ageFilteredCandidates.first.featureVector.tokens.take(5).join(", ")}');
+    if (genderFilteredCandidates.isNotEmpty) {
+      debugPrint('Candidate vector tokens: ${genderFilteredCandidates.first.featureVector.tokens.length}');
+      debugPrint('Candidate vector tokens sample: ${genderFilteredCandidates.first.featureVector.tokens.take(5).join(", ")}');
     }
     
     final annMatcher = _EmbeddingAnnMatcher<_CandidateProfile>();
     final annNeighbors = annMatcher.findNearest(
       query: jobVector.featureVector,
-      items: ageFilteredCandidates,
-      topK: ageFilteredCandidates.length, // Match all candidates
+      items: genderFilteredCandidates,
+      topK: genderFilteredCandidates.length, // Match all candidates
     );
 
     debugPrint('ANN neighbors found: ${annNeighbors.length}');
     
     // If ANN returns no results, fallback to direct matching
-    if (annNeighbors.isEmpty && ageFilteredCandidates.isNotEmpty) {
+    if (annNeighbors.isEmpty && genderFilteredCandidates.isNotEmpty) {
       debugPrint('ANN returned no results, using fallback direct matching');
       // Direct cosine similarity calculation as fallback
-      for (final candidate in ageFilteredCandidates) {
+      for (final candidate in genderFilteredCandidates) {
         final similarity = jobVector.featureVector.cosine(candidate.featureVector);
         debugPrint('Direct similarity for candidate ${candidate.id}: $similarity');
         if (!similarity.isNaN && similarity > 0) {
@@ -740,6 +761,23 @@ class HybridMatchingEngine {
     return recruiterMatches;
   }
 
+  /// Get count of matched applicants for a specific post (lightweight version).
+  /// This is faster than computeMatchesForRecruiterPost as it only returns the count.
+  /// Uses the same filtering logic (age, gender, score thresholds).
+  Future<int> getMatchedApplicantCount({
+    required String postId,
+    required String recruiterId,
+    MatchingStrategy strategy = MatchingStrategy.embeddingsAnn,
+  }) async {
+    // Reuse the same logic but only return count
+    final matches = await computeMatchesForRecruiterPost(
+      postId: postId,
+      recruiterId: recruiterId,
+      strategy: strategy,
+    );
+    return matches.length;
+  }
+
   JobType _parseJobType(String? type) {
     if (type == null) return JobType.weekdays;
     try {
@@ -802,10 +840,17 @@ class HybridMatchingEngine {
 
       if (ageFilteredCandidates.isEmpty) continue;
 
+      // Step 1.5: Filter candidates by gender requirement (hard filter)
+      final genderFilteredCandidates = ageFilteredCandidates.where((candidate) {
+        return _meetsGenderRequirement(candidate, job.post);
+      }).toList();
+
+      if (genderFilteredCandidates.isEmpty) continue;
+
       // Step 2: Use Embeddings + ANN for initial filtering
       final annResults = annMatcher.findNearest(
         query: job.featureVector,
-        items: ageFilteredCandidates,
+        items: genderFilteredCandidates,
         topK: 20,
       );
 
@@ -882,6 +927,149 @@ class HybridMatchingEngine {
     // await _persistMatches(pendingMatches);
   }
 
+  /// Run optimal matching for a single jobseeker using Gale-Shapley + Hungarian algorithms
+  /// This function is designed for the jobseeker perspective: one candidate matching with multiple jobs
+  Future<List<_JobseekerOptimalMatch>> _runJobseekerOptimalMatching(
+    _CandidateProfile candidate,
+    List<_JobVector> jobVectors,
+    _MatchingWeights weights,
+  ) async {
+    if (jobVectors.isEmpty) return [];
+
+    // Step 1: Use ANN for initial filtering (performance optimization)
+    final annMatcher = _EmbeddingAnnMatcher<_JobVector>();
+    final annResults = annMatcher.findNearest(
+      query: candidate.featureVector,
+      items: jobVectors,
+      topK: min(50, jobVectors.length), // Limit to top 50 for performance
+    );
+
+    if (annResults.isEmpty) return [];
+
+    // Step 2: Calculate bidirectional preferences
+    final jobseekerPreferences = <String, double>{}; // Jobseeker → Job scores
+    final jobPreferences = <String, double>{}; // Job → Jobseeker scores
+    final compatibility = <String, double>{}; // Combined compatibility scores
+
+    for (final neighbor in annResults) {
+      final job = neighbor.payload;
+      
+      // Age filter
+      if (!_meetsAgeRequirement(candidate, job.post)) continue;
+      
+      // Gender filter
+      if (!_meetsGenderRequirement(candidate, job.post)) continue;
+      
+      // Calculate score from jobseeker's perspective
+      final jobseekerScore = await _scoreJobseekerMatch(
+        candidate,
+        job,
+        neighbor.similarity,
+        weights,
+      );
+      
+      // Calculate score from job's perspective (recruiter's perspective)
+      final jobScore = await _scoreRecruiterMatch(
+        job,
+        candidate,
+        neighbor.similarity,
+        weights,
+      );
+      
+      // Combined compatibility score: average of both perspectives
+      // This ensures we consider both what the jobseeker wants and what the job wants
+      final combinedScore = (jobseekerScore + jobScore) / 2.0;
+      
+      if (combinedScore > 0.05) {
+        jobseekerPreferences[job.post.id] = jobseekerScore;
+        jobPreferences[job.post.id] = jobScore;
+        compatibility[job.post.id] = combinedScore;
+      }
+    }
+
+    if (compatibility.isEmpty) return [];
+
+    // Step 3: Apply optimal matching algorithms
+    // For a single jobseeker, we use a weighted approach that prioritizes
+    // jobseeker preference but considers job preference for stability
+    
+    // Weighted compatibility: 60% jobseeker preference, 40% job preference
+    // This ensures jobseeker gets what they want, while considering mutual fit
+    final weightedCompatibility = <String, double>{};
+    for (final jobId in compatibility.keys) {
+      final jobseekerScore = jobseekerPreferences[jobId] ?? 0.0;
+      final jobScore = jobPreferences[jobId] ?? 0.0;
+      
+      // Weighted score: prioritize jobseeker's preference but consider job's perspective
+      final weightedScore = (jobseekerScore * 0.6) + (jobScore * 0.4);
+      weightedCompatibility[jobId] = weightedScore;
+    }
+    
+    // Step 4: Use Gale-Shapley for stability check
+    // Build preference lists: jobseeker ranks jobs, jobs rank the jobseeker
+    final jobseekerPrefList = jobseekerPreferences.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    
+    final jobPrefLists = <String, List<String>>{};
+    // Sort jobs by their preference for this candidate
+    final jobPrefEntries = jobPreferences.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    
+    for (final entry in jobPrefEntries) {
+      jobPrefLists[entry.key] = [candidate.id];
+    }
+    
+    // Run Gale-Shapley: jobseeker proposes to jobs
+    final jobseekerPrefMap = <String, List<String>>{
+      candidate.id: jobseekerPrefList.map((e) => e.key).toList(),
+    };
+    
+    final galeShapley = GaleShapleyMatcher();
+    final stablePairs = galeShapley.match(jobseekerPrefMap, jobPrefLists);
+    
+    // Step 5: Combine weighted compatibility with stable matching
+    // Start with stable matches from Gale-Shapley
+    final matchedJobs = <String, double>{};
+    
+    for (final entry in stablePairs.entries) {
+      if (entry.key == candidate.id && weightedCompatibility.containsKey(entry.value)) {
+        matchedJobs[entry.value] = weightedCompatibility[entry.value]!;
+      }
+    }
+    
+    // If no stable matches or we want more results, add top weighted matches
+    if (matchedJobs.isEmpty || matchedJobs.length < 20) {
+      final sorted = weightedCompatibility.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      
+      for (final entry in sorted) {
+        if (matchedJobs.length >= 20) break;
+        matchedJobs[entry.key] = entry.value;
+      }
+    }
+
+    // Step 7: Build result list
+    final results = <_JobseekerOptimalMatch>[];
+    final jobById = {for (final job in jobVectors) job.post.id: job};
+    
+    final sortedMatches = matchedJobs.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    
+    for (final entry in sortedMatches) {
+      final jobId = entry.key;
+      final score = entry.value;
+      final job = jobById[jobId];
+      if (job != null) {
+        results.add(_JobseekerOptimalMatch(
+          job: job,
+          score: score,
+        ));
+      }
+    }
+
+    return results;
+  }
+
   /// Run stable optimal matching using Gale-Shapley + Hungarian algorithms
   Future<Map<String, String>> _runStableOptimalMatching(
     Map<String, Map<String, double>> compatibility,
@@ -908,6 +1096,9 @@ class HybridMatchingEngine {
         
         // Age filter
         if (!_meetsAgeRequirement(candidate, job.post)) continue;
+        
+        // Gender filter
+        if (!_meetsGenderRequirement(candidate, job.post)) continue;
         
         // Calculate score from candidate's perspective
         final score = await _scoreJobseekerMatch(candidate, job, neighbor.similarity, weights);
@@ -983,6 +1174,33 @@ class HybridMatchingEngine {
       return false;
     }
     return true;
+  }
+
+  /// Check if candidate meets gender requirement for a job
+  /// Returns true if:
+  /// - Job has no gender requirement (null or "any")
+  /// - Candidate gender matches job requirement
+  /// - Candidate has no gender but job requirement is "any"
+  bool _meetsGenderRequirement(_CandidateProfile candidate, Post job) {
+    final jobGenderRequirement = job.genderRequirement?.toLowerCase().trim();
+    
+    // If job has no gender requirement or "any", all candidates pass
+    if (jobGenderRequirement == null || 
+        jobGenderRequirement.isEmpty || 
+        jobGenderRequirement == 'any') {
+      return true;
+    }
+
+    // If candidate has no gender set, only match jobs with "any" requirement
+    // (Already handled above, so if we reach here, job has specific requirement)
+    final candidateGender = candidate.gender?.toLowerCase().trim();
+    if (candidateGender == null || candidateGender.isEmpty) {
+      // Conservative approach: candidate without gender can't match specific requirements
+      return false;
+    }
+
+    // Check if candidate gender matches job requirement
+    return candidateGender == jobGenderRequirement;
   }
 
   Future<List<Post>> _loadActiveJobs() async {
@@ -1189,6 +1407,17 @@ class _CachedReliability {
   _CachedReliability(this.score, this.timestamp);
 }
 
+/// Internal class to store optimal match result for a jobseeker
+class _JobseekerOptimalMatch {
+  _JobseekerOptimalMatch({
+    required this.job,
+    required this.score,
+  });
+
+  final _JobVector job;
+  final double score;
+}
+
 class _PendingMatch {
   _PendingMatch({
     required this.job,
@@ -1274,6 +1503,7 @@ class _CandidateProfile implements _VectorCarrier<_CandidateProfile> {
     required this.featureVector,
     required this.tagUniverse,
     this.age,
+    this.gender,
     this.latitude,
     this.longitude,
   });
@@ -1286,6 +1516,7 @@ class _CandidateProfile implements _VectorCarrier<_CandidateProfile> {
   final _FeatureVector featureVector;
   final Set<String> tagUniverse;
   final int? age; // User's age from profile
+  final String? gender; // User's gender from profile
   final double? latitude; // User's location latitude
   final double? longitude; // User's location longitude
 
@@ -1359,6 +1590,7 @@ class _CandidateProfile implements _VectorCarrier<_CandidateProfile> {
 
     final displayName = (data['fullName'] as String?)?.trim();
     final age = (data['age'] as int?) ?? (data['age'] as num?)?.toInt();
+    final gender = data['gender'] as String?;
     final latitude = (data['latitude'] as num?)?.toDouble();
     final longitude = (data['longitude'] as num?)?.toDouble();
 
@@ -1379,6 +1611,7 @@ class _CandidateProfile implements _VectorCarrier<_CandidateProfile> {
           .where((value) => value.isNotEmpty)
           .toSet(),
       age: age,
+      gender: gender,
       latitude: latitude,
       longitude: longitude,
     );

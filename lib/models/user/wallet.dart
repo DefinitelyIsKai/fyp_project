@@ -72,17 +72,17 @@ class WalletTransaction {
     required this.description,
     required this.createdAt,
     this.referenceId,
-    this.parentTxnId, // ID of the parent transaction (for tracking state changes)
+    this.parentTxnId, 
   });
 
   final String id;
   final String userId;
   final WalletTxnType type;
-  final int amount; // positive integer credits
+  final int amount; 
   final String description;
   final DateTime createdAt;
-  final String? referenceId; // e.g. postId, taskId, paymentIntentId
-  final String? parentTxnId; // ID of the parent transaction (for tracking state changes)
+  final String? referenceId; 
+  final String? parentTxnId; 
 
   Map<String, dynamic> toMap() {
     return <String, dynamic>{
@@ -98,7 +98,6 @@ class WalletTransaction {
   }
 
   factory WalletTransaction.fromMap(Map<String, dynamic> map) {
-    // Handle Firestore Timestamp conversion for createdAt
     DateTime createdAt = DateTime.now();
     final createdAtValue = map['createdAt'];
     if (createdAtValue != null) {
@@ -107,12 +106,11 @@ class WalletTransaction {
       } else if (createdAtValue is Timestamp) {
         createdAt = createdAtValue.toDate();
       } else if (createdAtValue is Map) {
-        // Handle server timestamp placeholder
         createdAt = DateTime.now();
       }
     }
     
-    // Helper function to safely parse int from Firestore (handles int, double, num)
+    //Parsing 
     int? _parseInt(dynamic value) {
       if (value == null) return null;
       if (value is int) return value;

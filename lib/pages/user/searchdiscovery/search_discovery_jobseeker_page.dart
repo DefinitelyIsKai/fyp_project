@@ -418,6 +418,30 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
     // Prevent multiple simultaneous executions
     if (_isApplying || !mounted) return;
     
+    // Check if event starts today or tomorrow (prevent applying on event day or one day before)
+    if (widget.post.eventStartDate != null) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final eventStartDate = widget.post.eventStartDate!;
+      final eventStartDateOnly = DateTime(
+        eventStartDate.year,
+        eventStartDate.month,
+        eventStartDate.day,
+      );
+      final tomorrow = DateTime(today.year, today.month, today.day + 1);
+      // Cannot apply if event starts today or tomorrow
+      if (eventStartDateOnly.isAtSameMomentAs(today) || 
+          eventStartDateOnly.isAtSameMomentAs(tomorrow) ||
+          eventStartDateOnly.isBefore(today)) {
+        if (!mounted) return;
+        DialogUtils.showWarningMessage(
+          context: context,
+          message: 'Applications are no longer accepted. The event has started or starts soon.',
+        );
+        return;
+      }
+    }
+    
     // Show confirmation dialog
     final confirmed = await DialogUtils.showConfirmationDialog(
       context: context,
@@ -720,12 +744,31 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                           final isQuotaReached = applicantQuota != null && 
                                                 approvedCount >= applicantQuota;
                           
+                          // Check if event starts today or tomorrow (cannot apply on event day or one day before)
+                          bool isEventStartingSoon = false;
+                          if (widget.post.eventStartDate != null) {
+                            final now = DateTime.now();
+                            final today = DateTime(now.year, now.month, now.day);
+                            final eventStartDate = widget.post.eventStartDate!;
+                            final eventStartDateOnly = DateTime(
+                              eventStartDate.year,
+                              eventStartDate.month,
+                              eventStartDate.day,
+                            );
+                            final tomorrow = DateTime(today.year, today.month, today.day + 1);
+                            // Cannot apply if event starts today or tomorrow
+                            isEventStartingSoon = eventStartDateOnly.isAtSameMomentAs(today) || 
+                                                 eventStartDateOnly.isAtSameMomentAs(tomorrow) ||
+                                                 eventStartDateOnly.isBefore(today);
+                          }
+                          
                           final bool isDisabled = hasApplied ||
                                                 _isApplying ||
                                                 widget.post.status == PostStatus.completed ||
                                                 widget.post.status == PostStatus.pending ||
                                                 isOwnPost ||
-                                                isQuotaReached;
+                                                isQuotaReached ||
+                                                isEventStartingSoon;
                           
                           // Determine button text based on application status
                           String buttonText = 'Apply (100 pts)'; // Default
@@ -753,6 +796,8 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                             buttonText = 'Pending Review';
                           } else if (isQuotaReached) {
                             buttonText = 'Quota Full';
+                          } else if (isEventStartingSoon) {
+                            buttonText = 'Event Starts';
                           }
                           
                           return ElevatedButton(
@@ -765,7 +810,8 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                                           widget.post.status == PostStatus.completed ||
                                           widget.post.status == PostStatus.pending ||
                                           isOwnPost ||
-                                          isQuotaReached)
+                                          isQuotaReached ||
+                                          isEventStartingSoon)
                                       ? Colors.grey
                                       : const Color(0xFF00C8A0),
                               foregroundColor: Colors.white,

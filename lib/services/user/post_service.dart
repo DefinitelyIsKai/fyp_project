@@ -36,7 +36,7 @@ class PostService {
   CollectionReference<Map<String, dynamic>> get _col =>
       _firestore.collection('posts');
 
-  Stream<List<Post>> streamMyPosts() {
+  Stream<List<Post>> streamMyPosts({bool includeRejected = false}) {
     final String? uid = _auth.currentUser?.uid;
     if (uid == null || uid.isEmpty) {
       return Stream.value(<Post>[]);
@@ -47,10 +47,12 @@ class PostService {
         .map((snap) {
           final posts = snap.docs
               .map((d) => _fromDoc(d))
-              .where((post) => 
-                post.status != PostStatus.deleted &&
-                post.status != PostStatus.rejected
-              )
+              .where((post) {
+                if (post.status == PostStatus.deleted) return false;
+                // Exclude rejected posts by default, unless includeRejected is true
+                if (!includeRejected && post.status == PostStatus.rejected) return false;
+                return true;
+              })
               .toList();
           posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           return posts;
@@ -514,6 +516,40 @@ class PostService {
         // Log error but continue with post deletion
         // This ensures post deletion isn't blocked by application cleanup failures
         debugPrint('Warning: Failed to cleanup applications for post $id: $e');
+      }
+    }
+    
+    // Release held credits if post is still pending (not yet approved) and not a draft
+    // Draft posts don't hold credits, so no need to release
+    // If post is active, credits have already been deducted, so no refund
+    if (ownerId != null && 
+        ownerId.isNotEmpty && 
+        post != null && 
+        !post.isDraft && 
+        post.status == PostStatus.pending) {
+      try {
+        final success = await WalletService.releasePostCreationCreditsForUser(
+          firestore: _firestore,
+          userId: ownerId,
+          postId: id,
+          feeCredits: 200,
+        );
+        if (success) {
+          // Send notification to recruiter about refund
+          try {
+            await _notificationService.notifyWalletCredit(
+              userId: ownerId,
+              amount: 200,
+              reason: 'Post creation fee (Released)',
+              metadata: {'postId': id, 'type': 'post_creation_fee_released'},
+            );
+          } catch (e) {
+            debugPrint('Error sending wallet credit notification: $e');
+          }
+        }
+      } catch (e) {
+        debugPrint('Error releasing post creation credits for deleted post $id: $e');
+        // Don't fail the deletion if credit release fails
       }
     }
     

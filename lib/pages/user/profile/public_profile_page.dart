@@ -107,8 +107,7 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
           final roleRaw = (data['role'] as String?)?.toLowerCase() ?? 'jobseeker';
           final role = roleRaw == 'recruiter' ? 'Recruiter' : 'Jobseeker';
           final tags = parseTagSelection(data['tags']);
-          final resume =
-              ResumeAttachment.fromMap(data['resume']) ?? ResumeAttachment.fromLegacyValue(data['cvUrl']);
+          final resume = ResumeAttachment.fromMap(data['resume']);
 
           return RefreshIndicator(
             onRefresh: () async {

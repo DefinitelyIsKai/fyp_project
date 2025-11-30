@@ -28,14 +28,13 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
 
   DateTime _selectedDate = DateTime.now();
   DateTime _currentMonth = DateTime.now();
-  String? _selectedRecruiterId; // Selected recruiter (Level 1 -> Level 2)
-  Application? _selectedApplication; // Selected application (Level 2 -> Level 3)
-  Map<String, Post> _postCache = {}; // Cache for post data
-  Map<String, String> _recruiterNameCache = {}; // Cache for recruiter names
-  int _refreshKey = 0; // Key to force refresh of FutureBuilder
-  bool _isLoadingSlots = false; // Loading state when date is selected
-  
-  // Cache for FutureBuilder futures to prevent infinite rebuilds
+  String? _selectedRecruiterId;
+  Application? _selectedApplication;
+  Map<String, Post> _postCache = {};
+  Map<String, String> _recruiterNameCache = {};
+  int _refreshKey = 0;
+  bool _isLoadingSlots = false;
+
   Future<Post?>? _cachedPostFuture;
   String? _cachedPostId;
   Future<Set<DateTime>>? _cachedBookedDatesFuture;
@@ -46,7 +45,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
   void _onMonthChanged(DateTime newMonth) {
     setState(() {
       _currentMonth = newMonth;
-      // Clear cached futures when month changes
       _cachedBookedDatesFuture = null;
       _cachedBookedDatesKey = null;
     });
@@ -55,16 +53,15 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
   void _onDateSelected(DateTime date) {
     setState(() {
       _selectedDate = date;
-      _isLoadingSlots = true; // Start loading when date changes
+      _isLoadingSlots = true;
     });
   }
 
   void _onDateTapped(DateTime date) => _onDateSelected(date);
-  
+
   Future<void> _refreshData() async {
     setState(() {
       _refreshKey++;
-      // Clear cached futures to force refresh
       _cachedPostFuture = null;
       _cachedPostId = null;
       _cachedBookedDatesFuture = null;
@@ -74,11 +71,9 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     });
     await Future.delayed(const Duration(milliseconds: 100));
   }
-  
+
   void _onSlotsLoaded() {
-    // Called when slots finish loading
-    // JobseekerSlotsList already handles preventing duplicate callbacks,
-    // so we can simply clear the loading state here
+    //clear the loading state here
     if (mounted && _isLoadingSlots) {
       setState(() {
         _isLoadingSlots = false;
@@ -91,49 +86,47 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     return DateTime(date.year, date.month, date.day);
   }
 
-  // Helper function to extract date from slot (normalized)
+  // normalized date from slot
   static DateTime _slotDate(AvailabilitySlot slot) {
     return _normalizeDate(slot.date);
   }
 
-  // Helper to get month date range
+  //month date range
   ({DateTime start, DateTime end}) _getMonthRange(DateTime month) {
-    return (
-      start: DateTime(month.year, month.month, 1),
-      end: DateTime(month.year, month.month + 1, 0),
-    );
+    return (start: DateTime(month.year, month.month, 1), end: DateTime(month.year, month.month + 1, 0));
   }
 
-  // Helper to get cached or create Post future
+  //cached or create post future
   Future<Post?> _getPostFuture(String? postId) {
     if (postId == null) {
       _cachedPostFuture = null;
       _cachedPostId = null;
       return Future<Post?>.value(null);
     }
-    
+
     if (_cachedPostFuture != null && _cachedPostId == postId) {
       return _cachedPostFuture!;
     }
-    
+
     _cachedPostId = postId;
     _cachedPostFuture = _postService.getById(postId);
     return _cachedPostFuture!;
   }
 
-  // Helper to get cached or create booked dates future
+  //cached or create booked dates future
   Future<Set<DateTime>> _getBookedDatesFuture(
     String userId,
     DateTime startDate,
     DateTime endDate,
     String? applicationId,
   ) {
-    final key = '${userId}_${startDate.toIso8601String()}_${endDate.toIso8601String()}_${applicationId ?? 'all'}_$_refreshKey';
-    
+    final key =
+        '${userId}_${startDate.toIso8601String()}_${endDate.toIso8601String()}_${applicationId ?? 'all'}_$_refreshKey';
+
     if (_cachedBookedDatesFuture != null && _cachedBookedDatesKey == key) {
       return _cachedBookedDatesFuture!;
     }
-    
+
     _cachedBookedDatesKey = key;
     _cachedBookedDatesFuture = _availabilityService.getBookedDatesForJobseeker(
       userId,
@@ -144,79 +137,59 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     return _cachedBookedDatesFuture!;
   }
 
-  // Helper to get cached or create pending slots future
-  Future<Set<String>> _getPendingSlotsFuture(
-    String userId,
-    String? applicationId,
-  ) {
+  //cached or create pending slots future
+  Future<Set<String>> _getPendingSlotsFuture(String userId, String? applicationId) {
     final key = '${userId}_${applicationId ?? 'all'}';
-    
+
     if (_cachedPendingSlotsFuture != null && _cachedPendingSlotsKey == key) {
       return _cachedPendingSlotsFuture!;
     }
-    
+
     _cachedPendingSlotsKey = key;
-    _cachedPendingSlotsFuture = _availabilityService.getRequestedSlotIdsForJobseeker(
-      userId,
-      matchId: applicationId,
-    );
+    _cachedPendingSlotsFuture = _availabilityService.getRequestedSlotIdsForJobseeker(userId, matchId: applicationId);
     return _cachedPendingSlotsFuture!;
   }
 
-  // Helper to process slots and prepare calendar data
-  ({
-    Set<DateTime> allDates,
-    Set<DateTime> availableDates,
-    Set<DateTime> bookedDates,
-  })
-  _processSlots(List<AvailabilitySlot> slots) {
+  //process slots and prepare calendar data
+  ({Set<DateTime> allDates, Set<DateTime> availableDates, Set<DateTime> bookedDates}) _processSlots(
+    List<AvailabilitySlot> slots,
+  ) {
     return (
       allDates: slots.map(_slotDate).toSet(),
       availableDates: slots.where((s) => s.isAvailable).map(_slotDate).toSet(),
-      bookedDates: slots
-          .where((s) => s.bookedBy != null)
-          .map(_slotDate)
-          .toSet(),
+      bookedDates: slots.where((s) => s.bookedBy != null).map(_slotDate).toSet(),
     );
   }
 
-  // Helper to prepare pending dates and exclude from available
-  ({Set<DateTime> pendingDates, Set<DateTime> availableDatesExcludingPending})
-  _preparePendingDates(
+  //prepare pending dates and exclude from available
+  ({Set<DateTime> pendingDates, Set<DateTime> availableDatesExcludingPending}) _preparePendingDates(
     List<AvailabilitySlot> slots,
     Set<String> pendingSlotIds,
     Set<DateTime> availableDates,
   ) {
-    final pendingDates = slots
-        .where((slot) => pendingSlotIds.contains(slot.id))
-        .map(_slotDate)
-        .toSet();
+    final pendingDates = slots.where((slot) => pendingSlotIds.contains(slot.id)).map(_slotDate).toSet();
     final normalizedPendingDates = pendingDates.map(_normalizeDate).toSet();
     final normalizedAvailableDates = availableDates.map(_normalizeDate).toSet();
     final availableDatesExcludingPending = normalizedAvailableDates
         .where((date) => !normalizedPendingDates.contains(date))
         .toSet();
-    return (
-      pendingDates: normalizedPendingDates,
-      availableDatesExcludingPending: availableDatesExcludingPending,
-    );
+    return (pendingDates: normalizedPendingDates, availableDatesExcludingPending: availableDatesExcludingPending);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Level 1: If no recruiter selected, show recruiter list
+    //recruiter list
     if (_selectedRecruiterId == null) {
       return _buildRecruiterList();
     }
 
-    // Level 2: If recruiter selected but no application, show application list
+    //applicantlist
     if (_selectedApplication == null) {
       return PopScope(
         canPop: false,
         onPopInvoked: (didPop) {
           if (!didPop) {
-            // Handle back button - navigate back to recruiter list
-            // Clear cached futures when navigating back
+            // Clear cached futures
             _cachedPostFuture = null;
             _cachedPostId = null;
             _cachedBookedDatesFuture = null;
@@ -232,13 +205,11 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
       );
     }
 
-    // Level 3: If application selected, show calendar
+    //show calendar
     return PopScope(
       canPop: false,
       onPopInvoked: (didPop) {
         if (!didPop) {
-          // Handle back button - navigate back to application list
-          // Clear cached futures when navigating back
           _cachedPostFuture = null;
           _cachedPostId = null;
           _cachedBookedDatesFuture = null;
@@ -252,7 +223,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
       },
       child: Column(
         children: [
-          // Header with back button
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -268,10 +238,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: IconButton(
-                    icon: const Icon(
-                      Icons.arrow_back,
-                      color: Color(0xFF00C8A0),
-                    ),
+                    icon: const Icon(Icons.arrow_back, color: Color(0xFF00C8A0)),
                     tooltip: 'Back to application list',
                     onPressed: () {
                       setState(() {
@@ -284,20 +251,12 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // Icon
                       Padding(
-                        padding: const EdgeInsets.only(
-                          top: 2.0,
-                        ), 
-                        child: const Icon(
-                          Icons.event_available,
-                          color: Color(0xFF00C8A0),
-                          size: 24,
-                        ),
+                        padding: const EdgeInsets.only(top: 2.0),
+                        child: const Icon(Icons.event_available, color: Color(0xFF00C8A0), size: 24),
                       ),
                       const SizedBox(width: 12),
 
-                      // Text (Company Name & Job Title)
                       Expanded(
                         child: FutureBuilder<Map<String, dynamic>>(
                           future: _selectedApplication != null
@@ -306,7 +265,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                           builder: (context, snapshot) {
                             final fullName = snapshot.data?['fullName'] as String?;
                             final jobTitle = snapshot.data?['jobTitle'] as String?;
-                            
+
                             return Column(
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -327,11 +286,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                                   const SizedBox(height: 2),
                                   Text(
                                     jobTitle,
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: Colors.grey[600],
-                                      height: 2.0,
-                                    ),
+                                    style: TextStyle(fontSize: 16, color: Colors.grey[600], height: 2.0),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -348,7 +303,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
             ),
           ),
 
-          // Scrollable Content
           Expanded(
             child: RefreshIndicator(
               onRefresh: _refreshData,
@@ -356,256 +310,211 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 child: Column(
-                children: [
-                  // Month Navigation
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    color: Colors.grey[50],
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.chevron_left),
-                          onPressed: () {
-                            _onMonthChanged(
-                              DateTime(
-                                _currentMonth.year,
-                                _currentMonth.month - 1,
-                              ),
-                            );
-                          },
-                        ),
-                        Text(
-                          DateFormat('MMMM yyyy').format(_currentMonth),
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.chevron_right),
-                          onPressed: () {
-                            _onMonthChanged(
-                              DateTime(
-                                _currentMonth.year,
-                                _currentMonth.month + 1,
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Calendar Legend
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    color: Colors.grey[50],
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        LegendItem(
-                          color: Colors.green,
-                          label: 'Available',
-                        ),
-                        const SizedBox(width: 24),
-                        LegendItem(
-                          color: const Color(0xFFFF0000),
-                          label: 'Unavailable',
-                        ),
-                        const SizedBox(width: 24),
-                        LegendItem(color: Colors.amber[700]!, label: 'Pending'),
-                      ],
-                    ),
-                  ),
-
-                  // Calendar with real-time updates
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    color: Colors.white,
-                    child: StreamBuilder<List<AvailabilitySlot>>(
-                      key: ValueKey('calendar_stream_${_selectedRecruiterId}_${_currentMonth.year}_${_currentMonth.month}'),
-                      stream: _availabilityService
-                          .streamAvailableSlotsForRecruiters(
-                            {_selectedRecruiterId!},
-                            startDate: _getMonthRange(_currentMonth).start,
-                            endDate: _getMonthRange(_currentMonth).end,
-                            jobseekerId: _authService.currentUserId, // Pass jobseekerId to include booked slots
-                          ),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-
-                        final userId = _authService.currentUserId;
-                        final slots = snapshot.data ?? [];
-                        
-                        // Filter slots to only show booked slots for this specific application
-                        final applicationId = _selectedApplication?.id;
-                        final filteredSlots = applicationId != null
-                            ? slots.where((slot) {
-                                // Show available slots (no matchId yet)
-                                if (slot.isAvailable && slot.bookedBy == null) {
-                                  return true;
-                                }
-                                // Show booked slots only if they match this application
-                                if (slot.bookedBy != null && slot.matchId == applicationId) {
-                                  return true;
-                                }
-                                // Hide other booked slots
-                                return false;
-                              }).toList()
-                            : slots;
-                        
-                        // Filter slots by post event date range if application is selected
-                        final postFuture = _getPostFuture(_selectedApplication?.postId);
-                        return FutureBuilder<Post?>(
-                          future: postFuture,
-                          builder: (context, postSnapshot) {
-                            final post = postSnapshot.data;
-                            
-                            // Filter slots by post event end date (allow booking before event starts)
-                            final dateFilteredSlots = filteredSlots.where((slot) {
-                              // Check if slot date is before or on event end date
-                              if (post != null && post.eventEndDate != null) {
-                                final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
-                                final eventEndDateOnly = DateTime(
-                                  post.eventEndDate!.year,
-                                  post.eventEndDate!.month,
-                                  post.eventEndDate!.day,
-                                );
-                                
-                                // Only check if slot date is after event end date
-                                if (slotDateOnly.isAfter(eventEndDateOnly)) {
-                                  return false; // Slot is after event end date
-                                }
-                              }
-                              return true; // If no event end date, show all slots
-                            }).toList();
-                            
-                            final processed = _processSlots(dateFilteredSlots);
-
-                            // Get booked dates for this jobseeker and specific application (cached)
-                            final monthRange = _getMonthRange(_currentMonth);
-                            final bookedDatesFuture = _getBookedDatesFuture(
-                              userId,
-                              monthRange.start,
-                              monthRange.end,
-                              applicationId,
-                            );
-                            
-                            return FutureBuilder<Set<DateTime>>(
-                              key: ValueKey('booked_dates_jobseeker_${applicationId ?? 'all'}_$_refreshKey'),
-                              future: bookedDatesFuture,
-                              builder: (context, bookedSnapshot) {
-                                // Get pending dates for jobseeker for this specific application (cached)
-                                final pendingSlotsFuture = _getPendingSlotsFuture(
-                                  userId,
-                                  applicationId,
-                                );
-                                
-                                return FutureBuilder<Set<String>>(
-                                  future: pendingSlotsFuture,
-                                  builder: (context, pendingSnapshot) {
-                                    final pendingData = _preparePendingDates(
-                                      dateFilteredSlots,
-                                      pendingSnapshot.data ?? {},
-                                      processed.availableDates,
-                                    );
-
-                                    return MonthlyCalendar(
-                                      currentMonth: _currentMonth,
-                                      selectedDate: _selectedDate,
-                                      availableDates: pendingData
-                                          .availableDatesExcludingPending,
-                                      bookedDates: bookedSnapshot.data ?? {},
-                                      addedSlotDates: const {},
-                                      pendingDates: pendingData.pendingDates,
-                                      onDateSelected: _onDateSelected,
-                                      onDateTapped: _onDateTapped,
-                                    );
-                                  },
-                                );
-                              },
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  ),
-
-                  const Divider(height: 1),
-
-                  // Available Time Slots for Selected Date
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Text(
-                          'Time Slots - ${DateFormat('MMMM d, yyyy').format(_selectedDate)}',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      // Show loading indicator overlay when date is clicked and slots are loading
-                      Stack(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      color: Colors.grey[50],
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          JobseekerSlotsList(
-                            key: ValueKey('slots_${_selectedDate.toIso8601String()}'),
-                            selectedDate: _selectedDate,
-                            selectedRecruiterId: _selectedRecruiterId,
-                            selectedApplication: _selectedApplication,
-                            availabilityService: _availabilityService,
-                            authService: _authService,
-                            applicationService: _applicationService,
-                            postService: _postService,
-                            onBooked: () {
-                              // Force refresh of booked dates and calendar
-                              setState(() {
-                                _refreshKey++;
-                                // Clear cached futures to force refresh
-                                _cachedBookedDatesFuture = null;
-                                _cachedBookedDatesKey = null;
-                                _cachedPendingSlotsFuture = null;
-                                _cachedPendingSlotsKey = null;
-                              });
+                          IconButton(
+                            icon: const Icon(Icons.chevron_left),
+                            onPressed: () {
+                              _onMonthChanged(DateTime(_currentMonth.year, _currentMonth.month - 1));
                             },
-                            onSlotsLoaded: _onSlotsLoaded,
                           ),
-                          // Loading overlay
-                          if (_isLoadingSlots)
-                            Container(
-                              color: Colors.white.withOpacity(0.8),
-                              child: const Center(
-                                child: LoadingIndicator.standard(),
-                              ),
-                            ),
+                          Text(
+                            DateFormat('MMMM yyyy').format(_currentMonth),
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.chevron_right),
+                            onPressed: () {
+                              _onMonthChanged(DateTime(_currentMonth.year, _currentMonth.month + 1));
+                            },
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                    ],
-                  ),
-                ],
+                    ),
+
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      color: Colors.grey[50],
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          LegendItem(color: Colors.green, label: 'Available'),
+                          const SizedBox(width: 24),
+                          LegendItem(color: const Color(0xFFFF0000), label: 'Unavailable'),
+                          const SizedBox(width: 24),
+                          LegendItem(color: Colors.amber[700]!, label: 'Pending'),
+                        ],
+                      ),
+                    ),
+
+                    //real-time updates
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      color: Colors.white,
+                      child: StreamBuilder<List<AvailabilitySlot>>(
+                        key: ValueKey(
+                          'calendar_stream_${_selectedRecruiterId}_${_currentMonth.year}_${_currentMonth.month}',
+                        ),
+                        stream: _availabilityService.streamAvailableSlotsForRecruiters(
+                          {_selectedRecruiterId!},
+                          startDate: _getMonthRange(_currentMonth).start,
+                          endDate: _getMonthRange(_currentMonth).end,
+                          jobseekerId: _authService.currentUserId,
+                        ),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const Center(child: CircularProgressIndicator());
+                          }
+
+                          final userId = _authService.currentUserId;
+                          final slots = snapshot.data ?? [];
+
+                          //filter booked slots
+                          final applicationId = _selectedApplication?.id;
+                          final filteredSlots = applicationId != null
+                              ? slots.where((slot) {
+                                  // Show available slots (no matchId yet)
+                                  if (slot.isAvailable && slot.bookedBy == null) {
+                                    return true;
+                                  }
+                                  if (slot.bookedBy != null && slot.matchId == applicationId) {
+                                    return true;
+                                  }
+                                  return false;
+                                }).toList()
+                              : slots;
+
+                          //filter slots of post event date range
+                          final postFuture = _getPostFuture(_selectedApplication?.postId);
+                          return FutureBuilder<Post?>(
+                            future: postFuture,
+                            builder: (context, postSnapshot) {
+                              final post = postSnapshot.data;
+
+                              //filter slots by post event end date (allow booking before event starts)
+                              final dateFilteredSlots = filteredSlots.where((slot) {
+                                //checking slot
+                                if (post != null && post.eventEndDate != null) {
+                                  final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
+                                  final eventEndDateOnly = DateTime(
+                                    post.eventEndDate!.year,
+                                    post.eventEndDate!.month,
+                                    post.eventEndDate!.day,
+                                  );
+
+                                  if (slotDateOnly.isAfter(eventEndDateOnly)) {
+                                    return false;
+                                  }
+                                }
+                                //show all slots if no event
+                                return true;
+                              }).toList();
+
+                              final processed = _processSlots(dateFilteredSlots);
+
+                              //get booked dates jobseeker application cahched
+                              final monthRange = _getMonthRange(_currentMonth);
+                              final bookedDatesFuture = _getBookedDatesFuture(
+                                userId,
+                                monthRange.start,
+                                monthRange.end,
+                                applicationId,
+                              );
+
+                              return FutureBuilder<Set<DateTime>>(
+                                key: ValueKey('booked_dates_jobseeker_${applicationId ?? 'all'}_$_refreshKey'),
+                                future: bookedDatesFuture,
+                                builder: (context, bookedSnapshot) {
+                                  // Get pending dates for jobseeker for this specific application (cached)
+                                  final pendingSlotsFuture = _getPendingSlotsFuture(userId, applicationId);
+
+                                  return FutureBuilder<Set<String>>(
+                                    future: pendingSlotsFuture,
+                                    builder: (context, pendingSnapshot) {
+                                      final pendingData = _preparePendingDates(
+                                        dateFilteredSlots,
+                                        pendingSnapshot.data ?? {},
+                                        processed.availableDates,
+                                      );
+
+                                      return MonthlyCalendar(
+                                        currentMonth: _currentMonth,
+                                        selectedDate: _selectedDate,
+                                        availableDates: pendingData.availableDatesExcludingPending,
+                                        bookedDates: bookedSnapshot.data ?? {},
+                                        addedSlotDates: const {},
+                                        pendingDates: pendingData.pendingDates,
+                                        onDateSelected: _onDateSelected,
+                                        onDateTapped: _onDateTapped,
+                                      );
+                                    },
+                                  );
+                                },
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+
+                    const Divider(height: 1),
+
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text(
+                            'Time Slots - ${DateFormat('MMMM d, yyyy').format(_selectedDate)}',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        // Show loading indicator overlay when date is clicked and slots are loading
+                        Stack(
+                          children: [
+                            JobseekerSlotsList(
+                              key: ValueKey('slots_${_selectedDate.toIso8601String()}'),
+                              selectedDate: _selectedDate,
+                              selectedRecruiterId: _selectedRecruiterId,
+                              selectedApplication: _selectedApplication,
+                              availabilityService: _availabilityService,
+                              authService: _authService,
+                              applicationService: _applicationService,
+                              postService: _postService,
+                              onBooked: () {
+                                setState(() {
+                                  _refreshKey++;
+                                  _cachedBookedDatesFuture = null;
+                                  _cachedBookedDatesKey = null;
+                                  _cachedPendingSlotsFuture = null;
+                                  _cachedPendingSlotsKey = null;
+                                });
+                              },
+                              onSlotsLoaded: _onSlotsLoaded,
+                            ),
+                            if (_isLoadingSlots)
+                              Container(
+                                color: Colors.white.withOpacity(0.8),
+                                child: const Center(child: LoadingIndicator.standard()),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-          ),
-          ],
-        ),
-      );
-    
+        ],
+      ),
+    );
   }
 
   Widget _buildRecruiterList() {
@@ -625,18 +534,14 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
               const Expanded(
                 child: Text(
                   'Select Recruiter to Book Interview',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.black),
                 ),
               ),
             ],
           ),
         ),
 
-        // Recruiter List
+        //recruiter list
         Expanded(
           child: StreamBuilder<List<Application>>(
             stream: _applicationService.streamMyApplications(),
@@ -650,16 +555,9 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 64,
-                        color: Colors.grey[300],
-                      ),
+                      Icon(Icons.error_outline, size: 64, color: Colors.grey[300]),
                       const SizedBox(height: 16),
-                      Text(
-                        'Unable to load recruiters',
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
+                      Text('Unable to load recruiters', style: TextStyle(color: Colors.grey[600])),
                     ],
                   ),
                 );
@@ -675,25 +573,15 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.info_outline,
-                        size: 64,
-                        color: Colors.grey[300],
-                      ),
+                      Icon(Icons.info_outline, size: 64, color: Colors.grey[300]),
                       const SizedBox(height: 16),
-                      Text(
-                        'No approved matches',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 16),
-                      ),
+                      Text('No approved matches', style: TextStyle(color: Colors.grey[600], fontSize: 16)),
                       const SizedBox(height: 8),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 32),
                         child: Text(
                           'You need to be approved by a recruiter to book interview slots',
-                          style: TextStyle(
-                            color: Colors.grey[500],
-                            fontSize: 12,
-                          ),
+                          style: TextStyle(color: Colors.grey[500], fontSize: 12),
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -702,38 +590,32 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                 );
               }
 
-              // Group applications by recruiter
               final Map<String, List<Application>> recruiterApplications = {};
               for (final app in approvedApplications) {
                 recruiterApplications.putIfAbsent(app.recruiterId, () => []).add(app);
               }
 
               return FutureBuilder<Map<String, dynamic>>(
-                future: _loadPostsAndRecruitersForApplications(
-                  approvedApplications,
-                ),
+                future: _loadPostsAndRecruitersForApplications(approvedApplications),
                 builder: (context, dataSnapshot) {
                   if (dataSnapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
                   final data = dataSnapshot.data ?? {};
-                  final recruitersMap =
-                      data['recruiters'] as Map<String, Map<String, dynamic>>? ??
-                      {};
+                  final recruitersMap = data['recruiters'] as Map<String, Map<String, dynamic>>? ?? {};
 
                   final uniqueRecruiters = recruiterApplications.keys.toList();
 
                   return ListView.separated(
                     padding: const EdgeInsets.all(16),
                     itemCount: uniqueRecruiters.length,
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(height: 12),
+                    separatorBuilder: (context, index) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final recruiterId = uniqueRecruiters[index];
                       final recruiterApps = recruiterApplications[recruiterId]!;
                       final count = recruiterApps.length;
-                      
+
                       final recruiterData = recruitersMap[recruiterId] ?? {};
                       final fullName =
                           recruiterData['fullName'] as String? ??
@@ -744,9 +626,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.grey[200]!,
-                          ),
+                          border: Border.all(color: Colors.grey[200]!),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withOpacity(0.03),
@@ -768,28 +648,20 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                               padding: const EdgeInsets.all(16),
                               child: Row(
                                 children: [
-                                  // 1. BRANDED ICON BOX
                                   Container(
                                     width: 50,
                                     height: 50,
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF00C8A0)
-                                          .withOpacity(0.1),
+                                      color: const Color(0xFF00C8A0).withOpacity(0.1),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
-                                    child: const Icon(
-                                      Icons.business_center,
-                                      color: Color(0xFF00C8A0),
-                                      size: 24,
-                                    ),
+                                    child: const Icon(Icons.business_center, color: Color(0xFF00C8A0), size: 24),
                                   ),
                                   const SizedBox(width: 16),
 
-                                  // 2. TEXT CONTENT
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           fullName,
@@ -815,13 +687,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                                       ],
                                     ),
                                   ),
-
-                                  // 4. ARROW
-                                  Icon(
-                                    Icons.chevron_right,
-                                    color: Colors.grey[300],
-                                    size: 24,
-                                  ),
+                                  Icon(Icons.chevron_right, color: Colors.grey[300], size: 24),
                                 ],
                               ),
                             ),
@@ -839,11 +705,9 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     );
   }
 
-  //Build application list for selected recruiter
   Widget _buildApplicationList() {
     return Column(
       children: [
-        // Header with back button
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -859,10 +723,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: IconButton(
-                  icon: const Icon(
-                    Icons.arrow_back,
-                    color: Color(0xFF00C8A0),
-                  ),
+                  icon: const Icon(Icons.arrow_back, color: Color(0xFF00C8A0)),
                   tooltip: 'Back to recruiter list',
                   onPressed: () {
                     setState(() {
@@ -876,18 +737,14 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
               const Expanded(
                 child: Text(
                   'Select Job Application',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.black),
                 ),
               ),
             ],
           ),
         ),
 
-        // Application List
+//application list
         Expanded(
           child: StreamBuilder<List<Application>>(
             stream: _applicationService.streamMyApplications(),
@@ -901,16 +758,9 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 64,
-                        color: Colors.grey[300],
-                      ),
+                      Icon(Icons.error_outline, size: 64, color: Colors.grey[300]),
                       const SizedBox(height: 16),
-                      Text(
-                        'Unable to load applications',
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
+                      Text('Unable to load applications', style: TextStyle(color: Colors.grey[600])),
                     ],
                   ),
                 );
@@ -918,9 +768,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
 
               final applications = snapshot.data ?? [];
               final approvedApplicationsForRecruiter = applications
-                  .where((app) =>
-                      app.status == ApplicationStatus.approved &&
-                      app.recruiterId == _selectedRecruiterId)
+                  .where((app) => app.status == ApplicationStatus.approved && app.recruiterId == _selectedRecruiterId)
                   .toList();
 
               if (approvedApplicationsForRecruiter.isEmpty) {
@@ -928,25 +776,16 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.info_outline,
-                        size: 64,
-                        color: Colors.grey[300],
-                      ),
+                      Icon(Icons.info_outline, size: 64, color: Colors.grey[300]),
                       const SizedBox(height: 16),
-                      Text(
-                        'No approved applications',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 16),
-                      ),
+                      Text('No approved applications', style: TextStyle(color: Colors.grey[600], fontSize: 16)),
                     ],
                   ),
                 );
               }
 
               return FutureBuilder<Map<String, dynamic>>(
-                future: _loadPostsAndRecruitersForApplications(
-                  approvedApplicationsForRecruiter,
-                ),
+                future: _loadPostsAndRecruitersForApplications(approvedApplicationsForRecruiter),
                 builder: (context, dataSnapshot) {
                   if (dataSnapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
@@ -954,21 +793,16 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
 
                   final data = dataSnapshot.data ?? {};
                   final postsMap = data['posts'] as Map<String, Post>? ?? {};
-                  final recruitersMap =
-                      data['recruiters'] as Map<String, Map<String, dynamic>>? ??
-                      {};
+                  final recruitersMap = data['recruiters'] as Map<String, Map<String, dynamic>>? ?? {};
 
                   return ListView.separated(
                     padding: const EdgeInsets.all(16),
                     itemCount: approvedApplicationsForRecruiter.length,
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(height: 12),
+                    separatorBuilder: (context, index) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
-                      final application =
-                          approvedApplicationsForRecruiter[index];
+                      final application = approvedApplicationsForRecruiter[index];
                       final post = postsMap[application.postId];
-                      final recruiterData =
-                          recruitersMap[application.recruiterId] ?? {};
+                      final recruiterData = recruitersMap[application.recruiterId] ?? {};
                       final fullName =
                           recruiterData['fullName'] as String? ??
                           recruiterData['professionalProfile'] as String? ??
@@ -980,9 +814,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.grey[200]!,
-                          ),
+                          border: Border.all(color: Colors.grey[200]!),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withOpacity(0.03),
@@ -998,7 +830,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                             onTap: () async {
                               setState(() {
                                 _selectedApplication = application;
-                                // Cache recruiter name for quick access
+                                //recruiter name cache 
                                 _recruiterNameCache[application.recruiterId] = fullName;
                               });
                             },
@@ -1006,28 +838,20 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                               padding: const EdgeInsets.all(16),
                               child: Row(
                                 children: [
-                                  // 1. BRANDED ICON BOX
                                   Container(
                                     width: 50,
                                     height: 50,
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF00C8A0)
-                                          .withOpacity(0.1),
+                                      color: const Color(0xFF00C8A0).withOpacity(0.1),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
-                                    child: const Icon(
-                                      Icons.work_outline,
-                                      color: Color(0xFF00C8A0),
-                                      size: 24,
-                                    ),
+                                    child: const Icon(Icons.work_outline, color: Color(0xFF00C8A0), size: 24),
                                   ),
                                   const SizedBox(width: 16),
 
-                                  // 2. TEXT CONTENT
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           jobTitle,
@@ -1052,28 +876,17 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                                         ),
                                         const SizedBox(height: 8),
 
-                                        // 3. STATUS BADGE
                                         Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                           decoration: BoxDecoration(
                                             color: const Color(0xFFE8F5E9),
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                            border: Border.all(
-                                              color: const Color(0xFFC8E6C9),
-                                            ),
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(color: const Color(0xFFC8E6C9)),
                                           ),
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              const Icon(
-                                                Icons.check_circle,
-                                                size: 12,
-                                                color: Color(0xFF2E7D32),
-                                              ),
+                                              const Icon(Icons.check_circle, size: 12, color: Color(0xFF2E7D32)),
                                               const SizedBox(width: 4),
                                               Text(
                                                 'Approved',
@@ -1089,13 +902,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                                       ],
                                     ),
                                   ),
-
-                                  // 4. ARROW
-                                  Icon(
-                                    Icons.chevron_right,
-                                    color: Colors.grey[300],
-                                    size: 24,
-                                  ),
+                                  Icon(Icons.chevron_right, color: Colors.grey[300], size: 24),
                                 ],
                               ),
                             ),
@@ -1113,17 +920,12 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     );
   }
 
-  // Load post data and recruiter data for approved applications
-  Future<Map<String, dynamic>> _loadPostsAndRecruitersForApplications(
-    List<Application> applications,
-  ) async {
+  
+  Future<Map<String, dynamic>> _loadPostsAndRecruitersForApplications(List<Application> applications) async {
     final Map<String, Post> postsMap = {};
     final Map<String, Map<String, dynamic>> recruitersMap = {};
-    final Set<String> recruiterIds = applications
-        .map((app) => app.recruiterId)
-        .toSet();
+    final Set<String> recruiterIds = applications.map((app) => app.recruiterId).toSet();
 
-    // Load posts
     for (final app in applications) {
       if (_postCache.containsKey(app.postId)) {
         postsMap[app.postId] = _postCache[app.postId]!;
@@ -1136,14 +938,10 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
       }
     }
 
-    // Load recruiter user documents
     final firestore = FirebaseFirestore.instance;
     for (final recruiterId in recruiterIds) {
       try {
-        final userDoc = await firestore
-            .collection('users')
-            .doc(recruiterId)
-            .get();
+        final userDoc = await firestore.collection('users').doc(recruiterId).get();
         if (userDoc.exists) {
           final data = userDoc.data() ?? {};
           recruitersMap[recruiterId] = {
@@ -1159,25 +957,23 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     return {'posts': postsMap, 'recruiters': recruitersMap};
   }
 
-  /// Load display data for selected application (recruiter name and job title)
+  //load selected application of recruiter name and job title
   Future<Map<String, dynamic>> _loadApplicationDisplayData(Application application) async {
-    // Get recruiter name from cache or load it
     String? fullName = _recruiterNameCache[application.recruiterId];
     if (fullName == null) {
       try {
         final recruiterData = await _loadPostsAndRecruitersForApplications([application]);
         final recruitersMap = recruiterData['recruiters'] as Map<String, Map<String, dynamic>>? ?? {};
         final recruiterDataMap = recruitersMap[application.recruiterId] ?? {};
-        fullName = recruiterDataMap['fullName'] as String? ??
-            recruiterDataMap['professionalProfile'] as String? ??
-            'Unknown';
+        fullName =
+            recruiterDataMap['fullName'] as String? ?? recruiterDataMap['professionalProfile'] as String? ?? 'Unknown';
         _recruiterNameCache[application.recruiterId] = fullName;
       } catch (e) {
         fullName = 'Unknown';
       }
     }
 
-    // Get job title from cache or load it
+    //job title cache
     String? jobTitle;
     if (_postCache.containsKey(application.postId)) {
       jobTitle = _postCache[application.postId]?.title;
@@ -1189,11 +985,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
       }
     }
 
-    return {
-      'fullName': fullName,
-      'jobTitle': jobTitle ?? 'Job Position',
-    };
+    return {'fullName': fullName, 'jobTitle': jobTitle ?? 'Job Position'};
   }
 }
-
-

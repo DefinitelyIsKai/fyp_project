@@ -550,6 +550,12 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
   }
 
   Widget _buildGenderDropdown() {
+    // Validate that _selectedGender is a valid value to prevent DropdownButton assertion error
+    const validGenders = ['male', 'female'];
+    final String? safeSelectedGender = (_selectedGender != null && validGenders.contains(_selectedGender))
+        ? _selectedGender
+        : null;
+    
     return Container(
       decoration: BoxDecoration(
         border: Border.all(
@@ -563,7 +569,7 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: DropdownButtonHideUnderline(
           child: DropdownButton<String>(
-            value: _selectedGender,
+            value: safeSelectedGender,
             hint: Text(
               'Select gender',
               style: TextStyle(

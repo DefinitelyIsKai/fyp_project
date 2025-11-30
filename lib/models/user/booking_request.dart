@@ -1,17 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum BookingRequestStatus {
-  pending,
-  approved,
-  rejected,
-}
+enum BookingRequestStatus {pending,approved,rejected}
 
 class BookingRequest {
   final String id;
   final String slotId;
   final String recruiterId;
   final String jobseekerId;
-  final String matchId; // application or jobMatch ID
+  final String matchId; 
   final BookingRequestStatus status;
   final DateTime createdAt;
   final DateTime? updatedAt;

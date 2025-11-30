@@ -36,6 +36,8 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
   String? _userRole;
   bool _isApplying = false;
   String? _ownerName;
+  String? _rejectionReason;
+  int _refreshKey = 0; 
 
   @override
   void initState() {
@@ -43,6 +45,28 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
     _loadAttachments();
     _checkUserRoleAndIncrementView();
     _loadOwnerName();
+    _loadRejectionReason();
+  }
+
+  Future<void> _loadRejectionReason() async {
+    if (widget.post.status == PostStatus.rejected) {
+      try {
+        final doc = await FirebaseFirestore.instance
+            .collection('posts')
+            .doc(widget.post.id)
+            .get();
+        if (doc.exists) {
+          final data = doc.data();
+          if (mounted) {
+            setState(() {
+              _rejectionReason = data?['rejectionReason'] as String?;
+            });
+          }
+        }
+      } catch (e) {
+        debugPrint('Error loading rejection reason: $e');
+      }
+    }
   }
 
   Future<void> _checkUserRoleAndIncrementView() async {
@@ -94,10 +118,14 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
   }
 
   Future<void> _refreshData() async {
+    setState(() {
+      _refreshKey++;
+    });
     await Future.wait([
       _loadAttachments(),
       _checkUserRoleAndIncrementView(),
       _loadOwnerName(),
+      _loadRejectionReason(),
     ]);
   }
 
@@ -148,7 +176,7 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
         actions: [
-          // Show report button for jobseekers when post is completed
+          //report button post is completed
           if (_userRole == 'jobseeker' && !_isOwner && widget.post.status == PostStatus.completed)
             FutureBuilder<bool>(
               future: Future.wait([
@@ -169,7 +197,7 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                 return const SizedBox.shrink();
               },
             ),
-          // Show report jobseekers button for owner when post is completed
+          // recruiter post is completed
           if (_isOwner && widget.post.status == PostStatus.completed)
             IconButton(
               icon: const Icon(Icons.flag_outlined, color: Colors.red),
@@ -197,17 +225,15 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                   builder: (context, applicationSnapshot) {
                     final application = applicationSnapshot.data;
                     final bool hasApplied = application != null;
-                    // Store application in local variable for type promotion
                     final Application? currentApplication = application;
                     
-                    // Stream post document for real-time quota updates
                     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                       stream: FirebaseFirestore.instance
                           .collection('posts')
                           .doc(widget.post.id)
                           .snapshots()
                           .handleError((error) {
-                            // Ignore permission errors during logout - stream will naturally end
+                           
                             debugPrint('Error in post stream (likely during logout): $error');
                           }),
                       builder: (context, postSnapshot) {
@@ -217,7 +243,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                         if (postSnapshot.hasData) {
                           final data = postSnapshot.data!.data();
                           if (data != null) {
-                            // Helper to safely parse int from Firestore (handles int, double, num)
                             int? _parseInt(dynamic value) {
                               if (value == null) return null;
                               if (value is int) return value;
@@ -226,33 +251,44 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                               if (value is String) return int.tryParse(value);
                               return null;
                             }
-                            // Get approved count from document
                             approvedCount = _parseInt(data['approvedApplicants']) ?? 0;
-                            // Reconstruct post from document data
                             try {
                               currentPost = Post.fromMap({...data, 'id': widget.post.id});
                             } catch (e) {
-                              // If parsing fails, use original post
                               currentPost = widget.post;
                             }
                           }
                         }
                         
                         final applicantQuota = currentPost.applicantQuota;
-                        final isQuotaReached = applicantQuota != null && 
-                                              approvedCount >= applicantQuota;
+                        final isQuotaReached = applicantQuota != null && approvedCount >= applicantQuota;
                         
-                        // Determine button state and text based on application status
+                        // Check if event starts today and tomorrw
+                        bool isEventStartingSoon = false;
+                        if (currentPost.eventStartDate != null) {
+                          final now = DateTime.now();
+                          final today = DateTime(now.year, now.month, now.day);
+                          final eventStartDate = currentPost.eventStartDate!;
+                          final eventStartDateOnly = DateTime(
+                            eventStartDate.year,
+                            eventStartDate.month,
+                            eventStartDate.day,
+                          );
+                          final tomorrow = DateTime(today.year, today.month, today.day + 1);
+                          //prevent
+                          isEventStartingSoon = eventStartDateOnly.isAtSameMomentAs(today) || eventStartDateOnly.isAtSameMomentAs(tomorrow) ||eventStartDateOnly.isBefore(today);
+                        }
+                        
                         final bool isDisabled = hasApplied || 
                                               currentPost.status == PostStatus.completed || 
                                               currentPost.status == PostStatus.pending ||
-                                              isQuotaReached;
+                                              isQuotaReached ||
+                                              isEventStartingSoon;
                         
                         String buttonText;
                         if (_isApplying) {
                           buttonText = 'Applying...';
                         } else if (hasApplied && currentApplication != null) {
-                          // Show actual application status
                           switch (currentApplication.status) {
                             case ApplicationStatus.pending:
                               buttonText = 'Application Pending';
@@ -273,19 +309,16 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                           buttonText = 'Pending Review';
                         } else if (isQuotaReached) {
                           buttonText = 'Quota Full';
+                        } else if (isEventStartingSoon) {
+                          buttonText = 'Event Starts';
                         } else {
                           buttonText = 'Apply Now - 100 points';
                         }
-                        
                         return SizedBox(
                           height: 54,
                           child: ElevatedButton(
-                            onPressed: (isDisabled || _isApplying)
-                                ? null
-                                : () => _handleApply(context),
-                            style: isDisabled
-                                ? ButtonStyles.disabled()
-                                : ButtonStyles.primaryElevated(),
+                            onPressed: (isDisabled || _isApplying)? null : () => _handleApply(context),
+                            style: isDisabled ? ButtonStyles.disabled(): ButtonStyles.primaryElevated(),
                             child: Text(
                               buttonText,
                               style: const TextStyle(
@@ -305,97 +338,118 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
       body: RefreshIndicator(
         onRefresh: _refreshData,
         color: const Color(0xFF00C8A0),
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header Card
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(24),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(
-                  bottom: BorderSide(color: Color(0xFF00C8A0), width: 3),
-                ),
-              ),
+        child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          key: ValueKey('post_stream_${widget.post.id}_$_refreshKey'),
+          stream: FirebaseFirestore.instance
+              .collection('posts')
+              .doc(widget.post.id)
+              .snapshots()
+              .handleError((error) {
+                debugPrint('Error in post stream: $error');
+              }),
+          builder: (context, postSnapshot) {
+            Post currentPost = widget.post;
+            if (postSnapshot.hasData && postSnapshot.data!.exists) {
+              final data = postSnapshot.data!.data();
+              if (data != null) {
+                try {
+                  currentPost = Post.fromMap({...data, 'id': widget.post.id});
+                } catch (e) {
+                  debugPrint('Error parsing post data: $e');
+                  currentPost = widget.post;
+                }
+              }
+            }
+            
+            return SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    widget.post.title,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black,
-                      height: 1.3,
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      border: Border(
+                        bottom: BorderSide(color: Color(0xFF00C8A0), width: 3),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: widget.post.status == PostStatus.completed
-                              ? Colors.grey[100]
-                              : (widget.post.status == PostStatus.pending
-                                  ? Colors.orange.withOpacity(0.1)
-                                  : const Color(0xFF00C8A0).withOpacity(0.1)),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: widget.post.status == PostStatus.completed
-                                ? Colors.grey[300]!
-                                : (widget.post.status == PostStatus.pending
-                                    ? Colors.orange.withOpacity(0.3)
-                                    : const Color(0xFF00C8A0).withOpacity(0.3)),
-                          ),
-                        ),
-                        child: Text(
-                          widget.post.status == PostStatus.completed 
-                              ? 'COMPLETED' 
-                              : (widget.post.status == PostStatus.pending ? 'PENDING' : 'ACTIVE'),
-                          style: TextStyle(
-                            color: widget.post.status == PostStatus.completed 
-                                ? Colors.grey[600] 
-                                : (widget.post.status == PostStatus.pending 
-                                    ? Colors.orange 
-                                    : const Color(0xFF00C8A0)),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Icon(Icons.schedule, size: 16, color: Colors.grey[500]),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${_daysAgo(widget.post.createdAt)} days ago',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  if (_ownerName != null) ...[
-                    Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.person, size: 16, color: Colors.grey[500]),
-                        const SizedBox(width: 4),
                         Text(
-                          'Posted by $_ownerName',
-                          style: TextStyle(color: Colors.grey[600], fontSize: 14, fontWeight: FontWeight.w500),
+                          currentPost.title,
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black,
+                            height: 1.3,
+                          ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                    future: FirebaseFirestore.instance.collection('posts').doc(widget.post.id).get(),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: currentPost.status == PostStatus.completed
+                                    ? Colors.grey[100]
+                                    : (currentPost.status == PostStatus.pending
+                                        ? Colors.orange.withOpacity(0.1)
+                                        : const Color(0xFF00C8A0).withOpacity(0.1)),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: currentPost.status == PostStatus.completed
+                                      ? Colors.grey[300]!
+                                      : (currentPost.status == PostStatus.pending
+                                          ? Colors.orange.withOpacity(0.3)
+                                          : const Color(0xFF00C8A0).withOpacity(0.3)),
+                                ),
+                              ),
+                              child: Text(
+                                currentPost.status == PostStatus.completed 
+                                    ? 'COMPLETED' 
+                                    : (currentPost.status == PostStatus.pending ? 'PENDING' : 'ACTIVE'),
+                                style: TextStyle(
+                                  color: currentPost.status == PostStatus.completed 
+                                      ? Colors.grey[600] 
+                                      : (currentPost.status == PostStatus.pending 
+                                          ? Colors.orange 
+                                          : const Color(0xFF00C8A0)),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Icon(Icons.schedule, size: 16, color: Colors.grey[500]),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${_daysAgo(currentPost.createdAt)} days ago',
+                              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        if (_ownerName != null) ...[
+                          Row(
+                            children: [
+                              Icon(Icons.person, size: 16, color: Colors.grey[500]),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Posted by $_ownerName',
+                                style: TextStyle(color: Colors.grey[600], fontSize: 14, fontWeight: FontWeight.w500),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                          future: FirebaseFirestore.instance.collection('posts').doc(currentPost.id).get(),
                     builder: (context, snapshot) {
                       final data = snapshot.data?.data();
-                      // Helper to safely parse int from Firestore (handles int, double, num)
                       int? _parseInt(dynamic value) {
                         if (value == null) return null;
                         if (value is int) return value;
@@ -421,10 +475,8 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                 ],
               ),
             ),
-            
             const SizedBox(height: 4),
             
-            // Quick Info Card
             Container(
               width: double.infinity,
               margin: const EdgeInsets.all(16),
@@ -442,20 +494,20 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
               ),
               child: Column(
                 children: [
-                  _buildInfoRow('Event Type', widget.post.event.isNotEmpty ? widget.post.event : 'Not specified'),
+                  _buildInfoRow('Event Type', currentPost.event.isNotEmpty ? currentPost.event : 'Not specified'),
                   const SizedBox(height: 16),
-                  _buildInfoRow('Event Date', _formatEventDate()),
+                  _buildInfoRow('Event Date', _formatEventDate(currentPost)),
                   const SizedBox(height: 16),
-                  _buildInfoRow('Budget Range', _budgetText(widget.post)),
+                  _buildInfoRow('Budget Range', _budgetText(currentPost)),
                   const SizedBox(height: 16),
-                  _buildInfoRow('Availability', widget.post.jobType.label),
+                  _buildInfoRow('Availability', currentPost.jobType.label),
                   const SizedBox(height: 16),
-                  _buildInfoRow('Work Time', _formatWorkTime()),
+                  _buildInfoRow('Work Time', _formatWorkTime(currentPost)),
                 ],
               ),
             ),
             
-            // Description Card
+            //desc
             Container(
               width: double.infinity,
               margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -498,8 +550,8 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                       border: Border.all(color: Colors.grey[200]!),
                     ),
                     child: Text(
-                      widget.post.description.isNotEmpty 
-                          ? widget.post.description 
+                      currentPost.description.isNotEmpty 
+                          ? currentPost.description 
                           : 'No description provided',
                       style: TextStyle(
                         color: Colors.grey[700],
@@ -511,10 +563,9 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                 ],
               ),
             ),
-            
             const SizedBox(height: 16),
             
-            // Location Card
+            //location
             Container(
               width: double.infinity,
               margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -548,19 +599,17 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  if (widget.post.latitude != null && widget.post.longitude != null) ...[
-                    _buildMapView(),
+                  if (currentPost.latitude != null && currentPost.longitude != null) ...[
+                    _buildMapView(currentPost),
                     const SizedBox(height: 12),
-                    _buildLocationText(showAsTextOnly: true),
+                    _buildLocationText(post: currentPost, showAsTextOnly: true),
                   ] else
-                    _buildLocationText(),
+                    _buildLocationText(post: currentPost),
                 ],
               ),
             ),
-            
             const SizedBox(height: 16),
-            
-            // Skills Card
+            //skill
             Container(
               width: double.infinity,
               margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -594,8 +643,8 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  if (widget.post.tags.isNotEmpty)
-                    _buildSkillsGrid()
+                  if (currentPost.tags.isNotEmpty)
+                    _buildSkillsGrid(currentPost)
                   else
                     Container(
                       width: double.infinity,
@@ -618,9 +667,9 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
               ),
             ),
             
-            if (_hasRequirementsSection) ...[
+            if (_hasRequirementsSection(currentPost)) ...[
               const SizedBox(height: 16),
-              _buildRequirementsCard(),
+              _buildRequirementsCard(currentPost),
             ],
             
             if (_attachments.isNotEmpty) ...[
@@ -664,9 +713,70 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
               ),
             ],
             
+            //rejection reason 
+            if (currentPost.status == PostStatus.rejected && _rejectionReason != null && _rejectionReason!.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.red.withOpacity(0.3)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.cancel_outlined, size: 20, color: Colors.red[700]),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Rejection Reason',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.red.withOpacity(0.2)),
+                      ),
+                      child: Text(
+                        _rejectionReason!,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[800],
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            
             const SizedBox(height: 20),
           ],
         ),
+            );
+          },
         ),
       ),
     );
@@ -696,16 +806,15 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
     );
   }
 
-  Widget _buildLocationText({bool showAsTextOnly = false}) {
+  Widget _buildLocationText({required Post post, bool showAsTextOnly = false}) {
     return FutureBuilder<DocumentSnapshot>(
       future: FirebaseFirestore.instance
           .collection('posts')
-          .doc(widget.post.id)
+          .doc(post.id)
           .get(),
       builder: (context, snapshot) {
-        String location = widget.post.location;
+        String location = post.location;
         
-        // 从 Firebase 读取 location 字段
         if (snapshot.hasData && snapshot.data!.exists) {
           final data = snapshot.data!.data() as Map<String, dynamic>?;
           if (data != null && data.containsKey('location')) {
@@ -716,7 +825,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
           }
         }
         
-        // 如果只是显示文本（地图下方），使用简化样式
         if (showAsTextOnly) {
           return snapshot.connectionState == ConnectionState.waiting
               ? const SizedBox(
@@ -735,7 +843,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                 );
         }
         
-        // 完整样式（没有地图时）
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.all(16),
@@ -762,9 +869,7 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        location.isNotEmpty 
-                            ? location 
-                            : 'Location not specified',
+                        location.isNotEmpty ? location : 'Location not specified',
                         style: TextStyle(
                           color: Colors.grey[700],
                           fontSize: 15,
@@ -778,11 +883,11 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
     );
   }
 
-  Widget _buildSkillsGrid() {
+  Widget _buildSkillsGrid(Post post) {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
-      children: widget.post.tags.map((tag) {
+      children: post.tags.map((tag) {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
@@ -803,19 +908,17 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
     );
   }
 
-  bool get _hasRequirementsSection {
-    // Only show requirements section if there are age, quota, or gender requirements
-    // Skills are already shown in Categories & Skills section
-    return widget.post.minAgeRequirement != null ||
-        widget.post.maxAgeRequirement != null ||
-        widget.post.applicantQuota != null ||
-        (widget.post.genderRequirement != null && widget.post.genderRequirement!.isNotEmpty);
+  bool _hasRequirementsSection(Post post) {
+    return post.minAgeRequirement != null ||
+        post.maxAgeRequirement != null ||
+        post.applicantQuota != null ||
+        (post.genderRequirement != null && post.genderRequirement!.isNotEmpty);
   }
 
-  Widget _buildRequirementsCard() {
-    final hasAge = widget.post.minAgeRequirement != null || widget.post.maxAgeRequirement != null;
-    final hasQuota = widget.post.applicantQuota != null;
-    final hasGender = widget.post.genderRequirement != null && widget.post.genderRequirement!.isNotEmpty;
+  Widget _buildRequirementsCard(Post post) {
+    final hasAge = post.minAgeRequirement != null || post.maxAgeRequirement != null;
+    final hasQuota = post.applicantQuota != null;
+    final hasGender = post.genderRequirement != null && post.genderRequirement!.isNotEmpty;
 
     return Container(
       width: double.infinity,
@@ -853,20 +956,20 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
           if (hasAge)
             _RequirementRow(
               label: 'Age Requirement',
-              value: _formatAgeRequirement(),
+              value: _formatAgeRequirement(post),
             ),
           if (hasQuota) ...[
             if (hasAge) const SizedBox(height: 12),
             _RequirementRow(
               label: 'Applicant Quota',
-              value: '${widget.post.applicantQuota} candidates',
+              value: '${post.applicantQuota} candidates',
             ),
           ],
           if (hasGender) ...[
             if (hasAge || hasQuota) const SizedBox(height: 12),
             _RequirementRow(
               label: 'Gender Requirement',
-              value: _formatGenderRequirement(),
+              value: _formatGenderRequirement(post),
             ),
           ],
         ],
@@ -874,9 +977,9 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
     );
   }
 
-  String _formatAgeRequirement() {
-    final min = widget.post.minAgeRequirement;
-    final max = widget.post.maxAgeRequirement;
+  String _formatAgeRequirement(Post post) {
+    final min = post.minAgeRequirement;
+    final max = post.maxAgeRequirement;
     if (min != null && max != null) {
       return '$min - $max years old';
     }
@@ -885,9 +988,9 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
     return 'Not specified';
   }
 
-  String _formatWorkTime() {
-    final start = widget.post.workTimeStart;
-    final end = widget.post.workTimeEnd;
+  String _formatWorkTime(Post post) {
+    final start = post.workTimeStart;
+    final end = post.workTimeEnd;
     if (start != null && end != null) {
       return '$start - $end';
     }
@@ -896,8 +999,8 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
     return 'Not specified';
   }
 
-  String _formatGenderRequirement() {
-    final gender = widget.post.genderRequirement;
+  String _formatGenderRequirement(Post post) {
+    final gender = post.genderRequirement;
     if (gender == null || gender.isEmpty) {
       return 'Not specified';
     }
@@ -926,9 +1029,9 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
     return 'Not specified';
   }
 
-  String _formatEventDate() {
-    final startDate = widget.post.eventStartDate;
-    final endDate = widget.post.eventEndDate;
+  String _formatEventDate(Post post) {
+    final startDate = post.eventStartDate;
+    final endDate = post.eventEndDate;
     
     if (startDate == null && endDate == null) {
       return 'Not specified';
@@ -947,21 +1050,15 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
     }
     
     if (startDate != null && endDate != null) {
-      // Check if same day
-      if (startDate.year == endDate.year &&
-          startDate.month == endDate.month &&
-          startDate.day == endDate.day) {
-        // Same day: "Dec 25, 2024, 9:00 AM - 5:00 PM"
+      
+      if (startDate.year == endDate.year && startDate.month == endDate.month && startDate.day == endDate.day) {
         return '${formatDate(startDate)}, ${formatTime(startDate)} - ${formatTime(endDate)}';
       } else {
-        // Different days: "Dec 25, 2024 - Dec 27, 2024"
         return '${formatDate(startDate)} - ${formatDate(endDate)}';
       }
     } else if (startDate != null) {
-      // Only start date: "Dec 25, 2024, 9:00 AM"
       return '${formatDate(startDate)}, ${formatTime(startDate)}';
     } else {
-      // Only end date: "Until Dec 27, 2024, 5:00 PM"
       return 'Until ${formatDate(endDate!)}, ${formatTime(endDate)}';
     }
   }
@@ -974,11 +1071,11 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
     return months[month - 1];
   }
 
-  Widget _buildMapView() {
-    final position = LatLng(widget.post.latitude!, widget.post.longitude!);
+  Widget _buildMapView(Post post) {
+    final position = LatLng(post.latitude!, post.longitude!);
     return GestureDetector(
-      onTap: () => _showFullScreenMap(position),
-      onDoubleTap: () => _showFullScreenMap(position),
+      onTap: () => _showFullScreenMap(position, post),
+      onDoubleTap: () => _showFullScreenMap(position, post),
       child: Container(
         height: 200,
         decoration: BoxDecoration(
@@ -996,7 +1093,7 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                 ),
                 markers: {
                   Marker(
-                    markerId: MarkerId(widget.post.id),
+                    markerId: MarkerId(post.id),
                     position: position,
                     icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
                   ),
@@ -1013,8 +1110,7 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                 tiltGesturesEnabled: false,
                 rotateGesturesEnabled: false,
                 onTap: (LatLng location) {
-                  // 点击地图时打开全屏视图
-                  _showFullScreenMap(position);
+                  _showFullScreenMap(position, post);
                 },
               ),
             ),
@@ -1047,13 +1143,12 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
     );
   }
 
-  void _showFullScreenMap(LatLng postPosition) {
-    // 从 Firebase 读取 location
+  void _showFullScreenMap(LatLng postPosition, Post post) {
     Future<String> getLocationFromFirebase() async {
       try {
         final doc = await FirebaseFirestore.instance
             .collection('posts')
-            .doc(widget.post.id)
+            .doc(post.id)
             .get();
         if (doc.exists) {
           final data = doc.data();
@@ -1065,20 +1160,18 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
       } catch (e) {
         debugPrint('Error loading location from Firebase: $e');
       }
-      return widget.post.location.isNotEmpty ? widget.post.location : 'Location';
+      return post.location.isNotEmpty ? post.location : 'Location';
     }
 
-    // 获取用户当前位置
     Future<Position?> getCurrentLocation() async {
       try {
-        // 检查位置服务是否启用
+        
         bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
         if (!serviceEnabled) {
           debugPrint('Location services are disabled');
           return null;
         }
 
-        // 检查位置权限
         LocationPermission permission = await Geolocator.checkPermission();
         if (permission == LocationPermission.denied) {
           permission = await Geolocator.requestPermission();
@@ -1092,8 +1185,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
           debugPrint('Location permissions are permanently denied');
           return null;
         }
-
-        // 获取当前位置
         Position position = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high,
         );
@@ -1116,36 +1207,31 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
           'userPosition': results[1] as Position?,
         }),
         builder: (context, snapshot) {
-          final locationText = snapshot.data?['locationText'] ?? widget.post.location;
+          final locationText = snapshot.data?['locationText'] ?? post.location;
           final userPosition = snapshot.data?['userPosition'] as Position?;
           
-          // 创建标记集合（只包含 post 位置）
           Set<Marker> markers = {
             Marker(
-              markerId: MarkerId('post_${widget.post.id}'),
+              markerId: MarkerId('post_${post.id}'),
               position: postPosition,
               icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
               infoWindow: InfoWindow(
-                title: widget.post.title,
+                title: post.title,
                 snippet: locationText.isNotEmpty ? locationText : 'Job Location',
               ),
             ),
           };
 
-          // 获取用户位置用于计算相机位置（但不添加自定义标记，使用系统位置指示器）
           LatLng? userLatLng;
           if (userPosition != null) {
             userLatLng = LatLng(userPosition.latitude, userPosition.longitude);
           }
 
-          // 计算相机位置以同时显示两个位置
           CameraPosition initialCameraPosition;
           if (userLatLng != null) {
-            // 计算两个位置的中点
             double centerLat = (postPosition.latitude + userLatLng.latitude) / 2;
             double centerLng = (postPosition.longitude + userLatLng.longitude) / 2;
             
-            // 计算距离以确定合适的缩放级别
             double distance = Geolocator.distanceBetween(
               postPosition.latitude,
               postPosition.longitude,
@@ -1153,7 +1239,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
               userLatLng.longitude,
             );
             
-            // 根据距离调整缩放级别
             double zoom = 12.0;
             if (distance > 10000) zoom = 10.0;
             else if (distance > 5000) zoom = 11.0;
@@ -1166,7 +1251,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
               zoom: zoom,
             );
           } else {
-            // 如果没有用户位置，只显示 post 位置
             initialCameraPosition = CameraPosition(
               target: postPosition,
               zoom: 15,
@@ -1184,12 +1268,11 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                   child: GoogleMap(
                     initialCameraPosition: initialCameraPosition,
                     markers: markers,
-                    myLocationEnabled: true, // 始终使用系统位置指示器
+                    myLocationEnabled: true, 
                     myLocationButtonEnabled: true,
                     zoomControlsEnabled: true,
                     mapToolbarEnabled: true,
                     onMapCreated: (GoogleMapController controller) {
-                      // 如果有两个位置，调整相机以显示两者
                       if (userLatLng != null) {
                         controller.animateCamera(
                           CameraUpdate.newLatLngBounds(
@@ -1356,10 +1439,32 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
   }
 
   Future<void> _handleApply(BuildContext context) async {
-    // Prevent multiple simultaneous executions
+    //no multiple apply
     if (_isApplying || !mounted) return;
     
-    // Show confirmation dialog
+    if (widget.post.eventStartDate != null) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final eventStartDate = widget.post.eventStartDate!;
+      final eventStartDateOnly = DateTime(
+        eventStartDate.year,
+        eventStartDate.month,
+        eventStartDate.day,
+      );
+      final tomorrow = DateTime(today.year, today.month, today.day + 1);
+      // tomorrow start no aply
+      if (eventStartDateOnly.isAtSameMomentAs(today) || 
+          eventStartDateOnly.isAtSameMomentAs(tomorrow) ||
+          eventStartDateOnly.isBefore(today)) {
+        if (!mounted) return;
+        DialogUtils.showWarningMessage(
+          context: context,
+          message: 'Applications are no longer accepted. The event has started or starts soon.',
+        );
+        return;
+      }
+    }
+    
     final confirmed = await DialogUtils.showConfirmationDialog(
       context: context,
       title: 'Apply to Job',
@@ -1389,8 +1494,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
         context: context,
         message: 'Application submitted successfully! 100 points on hold.',
       );
-      
-      // Refresh the page by replacing the current route
       if (mounted) {
         Navigator.pushReplacement(
           context,
@@ -1424,7 +1527,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
   }
 
   Future<void> _showReportPostDialog(BuildContext context) async {
-    // Show confirmation dialog first
     final confirmed = await DialogUtils.showConfirmationDialog(
       context: context,
       title: 'Report Post',
@@ -1437,7 +1539,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
 
     if (confirmed != true || !context.mounted) return;
 
-    // Show the report form dialog
     final result = await showDialog<Map<String, String>>(
       context: context,
       builder: (context) => const ReportPostDialog(),
@@ -1468,7 +1569,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
   }
 
   Future<void> _showReportJobseekerListDialog(BuildContext context) async {
-    // Show confirmation dialog first
     final confirmed = await DialogUtils.showConfirmationDialog(
       context: context,
       title: 'Report Jobseeker',
@@ -1481,7 +1581,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
 
     if (confirmed != true || !context.mounted) return;
 
-    // Show the jobseeker list dialog
     await showDialog(
       context: context,
       builder: (context) => ReportJobseekerListDialog(

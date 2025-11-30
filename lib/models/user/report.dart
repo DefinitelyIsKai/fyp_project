@@ -1,30 +1,22 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum ReportType {
-  post, // Jobseeker reporting a post
-  jobseeker, // Recruiter reporting a jobseeker
-}
+enum ReportType {post, jobseeker}
 
-enum ReportStatus {
-  pending,
-  reviewed,
-  resolved,
-  dismissed,
-}
+enum ReportStatus {pending,reviewed,resolved,dismissed}
 
 class Report {
   final String id;
   final ReportType type;
-  final String reporterId; // User who made the report
-  final String reportedPostId; // Post being reported (if type is post)
-  final String? reportedJobseekerId; // Jobseeker being reported (if type is jobseeker)
-  final String? reportedRecruiterId; // Recruiter who owns the post (if type is post)
-  final String reason; // Reason for reporting
-  final String description; // Detailed description
+  final String reporterId; 
+  final String reportedPostId; 
+  final String? reportedJobseekerId;
+  final String? reportedRecruiterId;
+  final String reason;
+  final String description; 
   final ReportStatus status;
   final DateTime createdAt;
   final DateTime? reviewedAt;
-  final String? reviewedBy; // Admin who reviewed
+  final String? reviewedBy; 
   final String? adminNotes;
 
   Report({

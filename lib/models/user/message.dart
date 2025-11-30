@@ -8,7 +8,7 @@ class Message {
   final String content;
   final DateTime timestamp;
   final bool isRead;
-  final String? matchId; // Optional link to job match
+
 
   Message({
     required this.id,
@@ -18,7 +18,6 @@ class Message {
     required this.content,
     required this.timestamp,
     this.isRead = false,
-    this.matchId,
   });
 
   factory Message.fromFirestore(DocumentSnapshot doc) {
@@ -31,7 +30,6 @@ class Message {
       content: data['content'] as String,
       timestamp: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isRead: data['isRead'] as bool? ?? false,
-      matchId: data['matchId'] as String?,
     );
   }
 
@@ -43,20 +41,19 @@ class Message {
       'content': content,
       'timestamp': Timestamp.fromDate(timestamp),
       'isRead': isRead,
-      if (matchId != null) 'matchId': matchId,
     };
   }
 }
 
 class Conversation {
   final String id;
-  final String participant1Id; // recruiter or jobseeker
-  final String participant2Id; // recruiter or jobseeker
+  final String participant1Id; 
+  final String participant2Id; 
   final String lastMessage;
   final DateTime lastMessageTime;
   final String? matchId;
-  final Map<String, String> participantNames; // {userId: name}
-  final Map<String, String> participantRoles; // {userId: role}
+  final Map<String, String> participantNames; 
+  final Map<String, String> participantRoles; 
 
   Conversation({
     required this.id,

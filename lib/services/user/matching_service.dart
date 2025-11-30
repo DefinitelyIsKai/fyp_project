@@ -179,4 +179,18 @@ class MatchingService {
       strategy: strategy,
     );
   }
+
+  /// Get count of matched applicants for a specific post.
+  /// This is a lightweight method that returns only the count.
+  Future<int> getMatchedApplicantCount({
+    required String postId,
+    required String recruiterId,
+    MatchingStrategy strategy = MatchingStrategy.embeddingsAnn,
+  }) async {
+    return await _matchingEngine.getMatchedApplicantCount(
+      postId: postId,
+      recruiterId: recruiterId,
+      strategy: strategy,
+    );
+  }
 }

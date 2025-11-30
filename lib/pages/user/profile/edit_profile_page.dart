@@ -46,7 +46,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   bool _loading = true;
   bool _saving = false;
   bool _uploadingResume = false;
-  String? _selectedGender; // "male", "female"
+  String? _selectedGender;
 
   @override
   void initState() {
@@ -92,9 +92,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
       _profProfileCtrl.text = (data['professionalProfile'] as String?) ?? '';
       _summaryCtrl.text = (data['professionalSummary'] as String?) ?? '';
       _experienceCtrl.text = (data['workExperience'] as String?) ?? '';
-      _selectedGender = data['gender'] as String?;
-      final attachment =
-          ResumeAttachment.fromMap(data['resume']) ?? ResumeAttachment.fromLegacyValue(data['cvUrl']);
+      final genderValue = data['gender'] as String?;
+      const validGenders = ['male', 'female'];
+      _selectedGender = (genderValue != null && validGenders.contains(genderValue)) ? genderValue : null;
+      final attachment = ResumeAttachment.fromMap(data['resume']);
       final parsedTags = parseTagSelection(data['tags']);
       if (mounted) {
         setState(() {
@@ -140,12 +141,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
         resumeData = {
           'fileName': _resumeAttachment!.fileName,
           'fileType': _resumeAttachment!.fileType,
-          // Only save downloadUrl if it exists, don't save base64 data
+          //download url save
           if (_resumeAttachment!.downloadUrl != null && _resumeAttachment!.downloadUrl!.isNotEmpty)
             'downloadUrl': _resumeAttachment!.downloadUrl,
-          // Don't include base64 data to prevent Firestore document size limit (1MB) error
+          //no base 64 prevents over size
         };
-        // If no downloadUrl and no base64, don't save resume data
         if (resumeData['downloadUrl'] == null) {
           resumeData = null;
         }
@@ -165,15 +165,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
         if (tagsToSave.isNotEmpty) 'tags': tagsToSave else 'tags': FieldValue.delete(),
         'profileCompleted': true,
       };
-      // Handle resume field
       if (resumeData != null) {
-        // Save resume if it has downloadUrl (not base64 data)
+        //save when have url
         payload['resume'] = resumeData;
       } else {
-        // If resume was removed, delete both resume and cvUrl fields
-        // (cvUrl is deleted for backward compatibility - clean up old data)
         payload['resume'] = FieldValue.delete();
-        payload['cvUrl'] = FieldValue.delete();
       }
       await _authService.updateUserProfile(payload);
       if (!mounted) return;
@@ -210,7 +206,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _uploadingResume = false);
-      // Extract error message from exception
+      //exception extractions
       String errorMessage = 'Failed to upload resume';
       if (e is Exception) {
         errorMessage = e.toString().replaceFirst('Exception: ', '');
@@ -229,7 +225,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   Future<void> _removeResume() async {
-    // Show confirmation dialog
     final confirmed = await DialogUtils.showConfirmationDialog(
       context: context,
       title: 'Remove Resume',
@@ -243,13 +238,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
     if (confirmed != true || !mounted) return;
     
     try {
-      // Immediately delete resume and cvUrl from Firestore
       await _authService.updateUserProfile({
         'resume': FieldValue.delete(),
-        'cvUrl': FieldValue.delete(),
       });
       
-      // Update UI state
       if (mounted) {
         setState(() {
           _resumeAttachment = null;
@@ -371,7 +363,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
                       const SizedBox(height: 20),
 
-                      // Personal Information Card
+                      //personal imfo
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -413,7 +405,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                               icon: Icons.phone_outlined,
                               keyboardType: TextInputType.phone,
                               inputFormatters: [
-                                // Auto-format as user types: 012-345 6789
                                 PhoneNumberFormatter(),
                               ],
                               validator: (v) => InputValidators.phoneNumberMalaysia(v, allowEmpty: false, errorMessage: 'Phone number is required. Format: 012-345 6789'),
@@ -425,7 +416,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                               icon: Icons.cake_outlined,
                               keyboardType: TextInputType.number,
                               inputFormatters: [
-                                // Only allow digits
                                 FilteringTextInputFormatter.digitsOnly,
                               ],
                               validator: (v) => InputValidators.age(v, errorMessage: 'Age must be 18 or above'),
@@ -515,7 +505,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
                       const SizedBox(height: 20),
 
-                      // Talent Tags Card
+                      //ttags 
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -573,7 +563,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
                       const SizedBox(height: 20),
 
-                      // Resume Upload Card
+                      //resume 
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -625,10 +615,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 24),
 
-                      // Save Button
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
@@ -668,7 +656,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                 ),
                         ),
                       ),
-
                       const SizedBox(height: 20),
                     ],
                   ),
@@ -736,6 +723,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   Widget _buildGenderDropdown() {
+    // Validate that _selectedGender is a valid value to prevent DropdownButton assertion error
+    const validGenders = ['male', 'female'];
+    final String? safeSelectedGender = (_selectedGender != null && validGenders.contains(_selectedGender))
+        ? _selectedGender
+        : null;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -760,7 +753,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: _selectedGender,
+                value: safeSelectedGender,
                 hint: Text(
                   'Select gender',
                   style: TextStyle(
