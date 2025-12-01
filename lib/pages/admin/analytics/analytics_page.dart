@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:fyp_project/models/admin/analytics_model.dart';
 import 'package:fyp_project/services/admin/analytics_service.dart';
+import 'package:fyp_project/services/admin/pdf_report_service.dart';
+import 'package:fyp_project/utils/admin/analytics_formatter.dart';
+import 'package:fyp_project/utils/admin/app_colors.dart';
+import 'package:fyp_project/widgets/admin/cards/analytics_quick_stat_card.dart';
+import 'package:fyp_project/widgets/admin/cards/analytics_section_card.dart';
+import 'package:fyp_project/widgets/admin/cards/analytics_topup_stat_card.dart';
+import 'package:fyp_project/widgets/admin/common/analytics_metric_row.dart';
+import 'package:fyp_project/widgets/admin/charts/analytics_trend_charts.dart';
+import 'package:fyp_project/widgets/admin/dialogs/date_range_picker_dialog.dart' as custom;
 import 'package:intl/intl.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
-import 'package:fyp_project/utils/admin/app_colors.dart';
 
 class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key});
@@ -45,19 +50,25 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     _loadAnalytics();
   }
 
+  // Load analytics data for selected period and all-time
+  // Also builds trend data for charts (max 30 days to keep it fast)
   Future<void> _loadAnalytics() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
+      // Get all-time stats from 2020 to now
       final allTimeStart = DateTime(2020, 1, 1);
       final allTimeAnalytics = await _analyticsService.getAnalyticsForRange(allTimeStart, DateTime.now());
       
+      // Get stats for selected date range
       final periodAnalytics = await _analyticsService.getAnalyticsForRange(_startDate, _endDate);
       
+      // Build trend data day by day (limit to 30 days max for performance)
       List<AnalyticsModel> trendData = [];
       final daysDiff = _endDate.difference(_startDate).inDays;
       final daysToLoad = daysDiff > 30 ? 30 : daysDiff;
       
+      // Fetch analytics for each day in the range
       for (int i = daysToLoad; i >= 0; i--) {
         final day = _endDate.subtract(Duration(days: i));
         final dayStart = DateTime(day.year, day.month, day.day);
@@ -66,6 +77,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         trendData.add(dayAnalytics.copyWith(date: dayStart));
       }
       
+      // Get credit transaction logs for the period
       final creditLogs = await _analyticsService.getCreditLogs(_startDate, _endDate);
       
       if (mounted) {
@@ -101,12 +113,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Future<void> _selectDateRange() async {
     if (!mounted) return;
 
-    final result = await showDialog<Map<String, DateTime>>(
-      context: context,
-      builder: (dialogContext) => _DateRangePickerDialog(
-        startDate: _startDate,
-        endDate: _endDate,
-      ),
+    final result = await custom.DateRangePickerDialog.show(
+      context,
+      startDate: _startDate,
+      endDate: _endDate,
     );
 
     if (result != null && mounted) {
@@ -122,79 +132,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return DateFormat('dd/MM/yyyy').format(date);
   }
 
-  double _capEngagementRate(double rate) {
-    return rate > 100.0 ? 100.0 : rate;
-  }
-
-  double _capGrowthRate(double rate) {
-    // Cap growth rate at 100%
-    if (rate > 100.0) return 100.0;
-    // Hide negative growth rates
-    if (rate < 0) return 0.0;
-    return rate;
-  }
-
-  String _formatGrowthRateForPDF(double rate, String metricType, AnalyticsModel analytics) {
-    const double newDataIndicator = -999.0;
-    if (rate == newDataIndicator) {
-      // Show percentage based on current value
-      // Cap all calculated percentages at 100%
-      switch (metricType) {
-        case 'userGrowth':
-          return '100.0%';
-        case 'activeUserGrowth':
-          if (analytics.totalUsers > 0) {
-            final calculated = (analytics.activeUsers / analytics.totalUsers * 100);
-            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
-          }
-          return '0.0%';
-        case 'registrationGrowth':
-          if (analytics.totalUsers > 0) {
-            final calculated = (analytics.newRegistrations / analytics.totalUsers * 100);
-            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
-          }
-          return '100.0%';
-        case 'engagementGrowth':
-          return '${_capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%';
-        case 'messageGrowth':
-          if (analytics.totalUsers > 0) {
-            final calculated = (analytics.totalMessages / analytics.totalUsers * 100);
-            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
-          }
-          return '0.0%';
-        case 'applicationGrowth':
-          if (analytics.totalUsers > 0) {
-            final calculated = (analytics.totalApplications / analytics.totalUsers * 100);
-            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
-          }
-          return '0.0%';
-        case 'reportGrowth':
-          if (analytics.totalUsers > 0) {
-            final calculated = (analytics.totalReports / analytics.totalUsers * 100);
-            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
-          }
-          return '0.0%';
-        case 'jobPostGrowth':
-          if (analytics.totalUsers > 0) {
-            final calculated = (analytics.totalJobPosts / analytics.totalUsers * 100);
-            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
-          }
-          return '0.0%';
-        default:
-          return '0.0%';
-      }
-    }
-    // Hide negative growth rates
-    if (rate < 0 && (metricType == 'registrationGrowth' || metricType == 'engagementGrowth' || metricType == 'applicationGrowth' || metricType == 'messageGrowth')) {
-      return '0.0%';
-    }
-    // Cap ALL growth rates at 100%
-    if (rate > 100) {
-      return '100.0%';
-    }
-    return '${rate.toStringAsFixed(1)}%';
-  }
-
   String _getDateRangeText() {
     final daysDiff = _endDate.difference(_startDate).inDays;
     if (daysDiff == 0) {
@@ -206,321 +143,21 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return '${_formatDate(_startDate)} - ${_formatDate(_endDate)}';
   }
 
+  // Generate PDF report using PDF service
   Future<void> _generatePDFReport() async {
     if (_analytics == null || _allTimeAnalytics == null) return;
 
     try {
-      final pdf = pw.Document();
-      final analytics = _analytics!;
-      final allTime = _allTimeAnalytics!;
-
-      // Calculate credit topup statistics
-      final processedLogs = _creditLogs.where((log) => log['status'] == 'processed').toList();
-      final totalTopupAmount = processedLogs.fold<double>(0.0, (sum, log) => sum + (log['amount'] as double));
-      final totalTopupCredits = processedLogs.fold<int>(0, (sum, log) => sum + (log['credits'] as int));
-      final avgTopupAmount = processedLogs.isNotEmpty ? totalTopupAmount / processedLogs.length : 0.0;
-      final avgTopupCredits = processedLogs.isNotEmpty ? totalTopupCredits / processedLogs.length : 0.0;
-      final maxTopupAmount = processedLogs.isNotEmpty 
-          ? processedLogs.map((log) => log['amount'] as double).reduce((a, b) => a > b ? a : b)
-          : 0.0;
-      final minTopupAmount = processedLogs.isNotEmpty 
-          ? processedLogs.map((log) => log['amount'] as double).reduce((a, b) => a < b ? a : b)
-          : 0.0;
-
-      pdf.addPage(
-        pw.MultiPage(
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(40),
-          build: (pw.Context context) {
-            return [
-              // Header
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(
-                    'Platform Analytics Report',
-                    style: pw.TextStyle(
-                      fontSize: 20,
-                      fontWeight: pw.FontWeight.bold,
-                      color: PdfColors.blue700,
-                    ),
-                  ),
-                  pw.Text(
-                    DateFormat('dd MMM yyyy HH:mm').format(DateTime.now()),
-                    style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 15),
-
-              // Date Range
-              pw.Container(
-                padding: const pw.EdgeInsets.all(10),
-                decoration: pw.BoxDecoration(
-                  color: PdfColors.grey100,
-                  borderRadius: pw.BorderRadius.circular(6),
-                ),
-                child: pw.Row(
-                  children: [
-                    pw.Text(
-                      'Period: ',
-                      style: pw.TextStyle(
-                        fontSize: 12,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                    pw.Text(
-                      '${_formatDate(_startDate)} - ${_formatDate(_endDate)}',
-                      style: pw.TextStyle(fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              pw.SizedBox(height: 20),
-
-              // Overview Statistics
-              pw.Text(
-                'Overview Statistics',
-                style: pw.TextStyle(
-                  fontSize: 16,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 10),
-              pw.TableHelper.fromTextArray(
-                context: context,
-                border: pw.TableBorder.all(
-                  color: PdfColors.grey400,
-                  width: 0.5,
-                ),
-                cellAlignment: pw.Alignment.centerLeft,
-                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
-                headerStyle: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-                cellStyle: pw.TextStyle(fontSize: 9),
-                rowDecoration: pw.BoxDecoration(
-                  border: pw.Border(
-                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-                  ),
-                ),
-                headers: ['Metric', 'All Time', 'Selected Period'],
-                data: [
-                  ['Total Users', allTime.totalUsers.toString(), analytics.totalUsers.toString()],
-                  ['Active Users', allTime.activeUsers.toString(), analytics.activeUsers.toString()],
-                  ['Inactive Users', allTime.inactiveUsers.toString(), analytics.inactiveUsers.toString()],
-                  ['New Registrations', allTime.newRegistrations.toString(), analytics.newRegistrations.toString()],
-                  ['Total Job Posts', allTime.totalJobPosts.toString(), analytics.totalJobPosts.toString()],
-                  ['Total Applications', allTime.totalApplications.toString(), analytics.totalApplications.toString()],
-                  ['Total Reports', allTime.totalReports.toString(), analytics.totalReports.toString()],
-                  ['Engagement Rate', '${_capEngagementRate(allTime.engagementRate).toStringAsFixed(1)}%', '${_capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%'],
-                ],
-              ),
-              pw.SizedBox(height: 20),
-
-              // User Engagement
-              pw.Text(
-                'User Engagement',
-                style: pw.TextStyle(
-                  fontSize: 16,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 10),
-              pw.TableHelper.fromTextArray(
-                context: context,
-                border: pw.TableBorder.all(
-                  color: PdfColors.grey400,
-                  width: 0.5,
-                ),
-                cellAlignment: pw.Alignment.centerLeft,
-                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
-                headerStyle: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-                cellStyle: pw.TextStyle(fontSize: 9),
-                rowDecoration: pw.BoxDecoration(
-                  border: pw.Border(
-                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-                  ),
-                ),
-                headers: ['Metric', 'All Time', 'Selected Period'],
-                data: [
-                  ['Engagement Rate', '${_capEngagementRate(allTime.engagementRate).toStringAsFixed(1)}%', '${_capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%'],
-                  ['Job Applications', allTime.totalApplications.toString(), analytics.totalApplications.toString()],
-                  ['Messages Sent', allTime.totalMessages.toString(), analytics.totalMessages.toString()],
-                ],
-              ),
-              pw.SizedBox(height: 20),
-
-              // Content & Moderation Statistics
-              pw.Text(
-                'Content & Moderation Statistics',
-                style: pw.TextStyle(
-                  fontSize: 16,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 10),
-              pw.TableHelper.fromTextArray(
-                context: context,
-                border: pw.TableBorder.all(
-                  color: PdfColors.grey400,
-                  width: 0.5,
-                ),
-                cellAlignment: pw.Alignment.centerLeft,
-                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
-                headerStyle: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-                cellStyle: pw.TextStyle(fontSize: 9),
-                rowDecoration: pw.BoxDecoration(
-                  border: pw.Border(
-                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-                  ),
-                ),
-                headers: ['Metric', 'All Time', 'Selected Period'],
-                data: [
-                  ['Total Job Posts', allTime.totalJobPosts.toString(), analytics.totalJobPosts.toString()],
-                  ['Pending Posts', allTime.pendingJobPosts.toString(), analytics.pendingJobPosts.toString()],
-                  ['Approved Posts', allTime.approvedJobPosts.toString(), analytics.approvedJobPosts.toString()],
-                  ['Rejected Posts', allTime.rejectedJobPosts.toString(), analytics.rejectedJobPosts.toString()],
-                  ['Total Reports', allTime.totalReports.toString(), analytics.totalReports.toString()],
-                  ['Pending Reports', allTime.pendingReports.toString(), analytics.pendingReports.toString()],
-                  ['Resolved Reports', allTime.resolvedReports.toString(), analytics.resolvedReports.toString()],
-                  ['Dismissed Reports', allTime.dismissedReports.toString(), analytics.dismissedReports.toString()],
-                ],
-              ),
-              pw.SizedBox(height: 20),
-
-              // Credit & Billing
-              pw.Text(
-                'Credit & Billing',
-                style: pw.TextStyle(
-                  fontSize: 16,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 10),
-              pw.TableHelper.fromTextArray(
-                context: context,
-                border: pw.TableBorder.all(
-                  color: PdfColors.grey400,
-                  width: 0.5,
-                ),
-                cellAlignment: pw.Alignment.centerLeft,
-                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
-                headerStyle: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-                cellStyle: pw.TextStyle(fontSize: 9),
-                rowDecoration: pw.BoxDecoration(
-                  border: pw.Border(
-                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-                  ),
-                ),
-                headers: ['Metric', 'All Time', 'Selected Period'],
-                data: [
-                  ['Total Credits Used', allTime.totalCreditsUsed.toString(), analytics.totalCreditsUsed.toString()],
-                  ['Active Subscriptions', allTime.activeSubscriptions.toString(), analytics.activeSubscriptions.toString()],
-                  ['Revenue', 'RM ${allTime.revenue.toStringAsFixed(2)}', 'RM ${analytics.revenue.toStringAsFixed(2)}'],
-                  ['Credit Purchases', allTime.creditPurchases.toString(), analytics.creditPurchases.toString()],
-                ],
-              ),
-              pw.SizedBox(height: 20),
-
-              // Credit Topup Statistics
-              if (processedLogs.isNotEmpty) ...[
-                pw.Text(
-                  'Credit Topup Statistics',
-                  style: pw.TextStyle(
-                    fontSize: 16,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-                pw.SizedBox(height: 10),
-                pw.TableHelper.fromTextArray(
-                  context: context,
-                  border: pw.TableBorder.all(
-                    color: PdfColors.grey400,
-                    width: 0.5,
-                  ),
-                  cellAlignment: pw.Alignment.centerLeft,
-                  headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
-                  headerStyle: pw.TextStyle(
-                    fontSize: 10,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                  cellStyle: pw.TextStyle(fontSize: 9),
-                  rowDecoration: pw.BoxDecoration(
-                    border: pw.Border(
-                      bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-                    ),
-                  ),
-                  headers: ['Metric', 'Value'],
-                  data: [
-                    ['Total Topup Amount', 'RM ${totalTopupAmount.toStringAsFixed(2)}'],
-                    ['Total Credits', totalTopupCredits.toString()],
-                    ['Average Amount', 'RM ${avgTopupAmount.toStringAsFixed(2)}'],
-                    ['Average Credits', avgTopupCredits.toStringAsFixed(0)],
-                    ['Max Topup', 'RM ${maxTopupAmount.toStringAsFixed(2)}'],
-                    ['Min Topup', 'RM ${minTopupAmount.toStringAsFixed(2)}'],
-                    ['Total Transactions', '${processedLogs.length} processed'],
-                  ],
-                ),
-                pw.SizedBox(height: 20),
-              ],
-
-              // Growth Rates
-              pw.Text(
-                'Growth Rates',
-                style: pw.TextStyle(
-                  fontSize: 16,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 10),
-              pw.TableHelper.fromTextArray(
-                context: context,
-                border: pw.TableBorder.all(
-                  color: PdfColors.grey400,
-                  width: 0.5,
-                ),
-                cellAlignment: pw.Alignment.centerLeft,
-                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
-                headerStyle: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-                cellStyle: pw.TextStyle(fontSize: 9),
-                rowDecoration: pw.BoxDecoration(
-                  border: pw.Border(
-                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-                  ),
-                ),
-                headers: ['Metric', 'Growth Rate'],
-                data: [
-                  ['User Growth', _formatGrowthRateForPDF(analytics.userGrowthRate, 'userGrowth', analytics)],
-                  ['Active User Growth', _formatGrowthRateForPDF(analytics.activeUserGrowth, 'activeUserGrowth', analytics)],
-                  ['Registration Growth', _formatGrowthRateForPDF(analytics.registrationGrowth, 'registrationGrowth', analytics)],
-                  ['Engagement Growth', _formatGrowthRateForPDF(analytics.engagementGrowth, 'engagementGrowth', analytics)],
-                  ['Message Growth', _formatGrowthRateForPDF(analytics.messageGrowth, 'messageGrowth', analytics)],
-                  ['Application Growth', _formatGrowthRateForPDF(analytics.applicationGrowth, 'applicationGrowth', analytics)],
-                  ['Report Growth', _formatGrowthRateForPDF(analytics.reportGrowth, 'reportGrowth', analytics)],
-                  ['Job Post Growth', _formatGrowthRateForPDF(analytics.jobPostGrowth, 'jobPostGrowth', analytics)],
-                ],
-              ),
-            ];
-          },
-        ),
+      final pdf = await PdfReportService.generateReport(
+        analytics: _analytics!,
+        allTime: _allTimeAnalytics!,
+        startDate: _startDate,
+        endDate: _endDate,
+        creditLogs: _creditLogs,
       );
 
       await Printing.layoutPdf(
-        onLayout: (PdfPageFormat format) async => pdf.save(),
+        onLayout: (format) async => pdf.save(),
       );
     } catch (e) {
       if (mounted) {
@@ -529,317 +166,17 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     }
   }
 
+  // Share PDF using PDF service
   Future<void> _sharePDF() async {
     if (_analytics == null || _allTimeAnalytics == null) return;
 
     try {
-      final pdf = pw.Document();
-      final analytics = _analytics!;
-      final allTime = _allTimeAnalytics!;
-
-      // Calculate credit topup statistics
-      final processedLogs = _creditLogs.where((log) => log['status'] == 'processed').toList();
-      final totalTopupAmount = processedLogs.fold<double>(0.0, (sum, log) => sum + (log['amount'] as double));
-      final totalTopupCredits = processedLogs.fold<int>(0, (sum, log) => sum + (log['credits'] as int));
-      final avgTopupAmount = processedLogs.isNotEmpty ? totalTopupAmount / processedLogs.length : 0.0;
-      final avgTopupCredits = processedLogs.isNotEmpty ? totalTopupCredits / processedLogs.length : 0.0;
-      final maxTopupAmount = processedLogs.isNotEmpty 
-          ? processedLogs.map((log) => log['amount'] as double).reduce((a, b) => a > b ? a : b)
-          : 0.0;
-      final minTopupAmount = processedLogs.isNotEmpty 
-          ? processedLogs.map((log) => log['amount'] as double).reduce((a, b) => a < b ? a : b)
-          : 0.0;
-
-      pdf.addPage(
-        pw.MultiPage(
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(40),
-          build: (pw.Context context) {
-            return [
-              // Header
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(
-                    'Platform Analytics Report',
-                    style: pw.TextStyle(
-                      fontSize: 20,
-                      fontWeight: pw.FontWeight.bold,
-                      color: PdfColors.blue700,
-                    ),
-                  ),
-                  pw.Text(
-                    DateFormat('dd MMM yyyy HH:mm').format(DateTime.now()),
-                    style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 15),
-
-              // Date Range
-              pw.Container(
-                padding: const pw.EdgeInsets.all(10),
-                decoration: pw.BoxDecoration(
-                  color: PdfColors.grey100,
-                  borderRadius: pw.BorderRadius.circular(6),
-                ),
-                child: pw.Row(
-                  children: [
-                    pw.Text(
-                      'Period: ',
-                      style: pw.TextStyle(
-                        fontSize: 12,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                    pw.Text(
-                      '${_formatDate(_startDate)} - ${_formatDate(_endDate)}',
-                      style: pw.TextStyle(fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              pw.SizedBox(height: 20),
-
-              // Overview Statistics
-              pw.Text(
-                'Overview Statistics',
-                style: pw.TextStyle(
-                  fontSize: 16,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 10),
-              pw.TableHelper.fromTextArray(
-                context: context,
-                border: pw.TableBorder.all(
-                  color: PdfColors.grey400,
-                  width: 0.5,
-                ),
-                cellAlignment: pw.Alignment.centerLeft,
-                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
-                headerStyle: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-                cellStyle: pw.TextStyle(fontSize: 9),
-                rowDecoration: pw.BoxDecoration(
-                  border: pw.Border(
-                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-                  ),
-                ),
-                headers: ['Metric', 'All Time', 'Selected Period'],
-                data: [
-                  ['Total Users', allTime.totalUsers.toString(), analytics.totalUsers.toString()],
-                  ['Active Users', allTime.activeUsers.toString(), analytics.activeUsers.toString()],
-                  ['Inactive Users', allTime.inactiveUsers.toString(), analytics.inactiveUsers.toString()],
-                  ['New Registrations', allTime.newRegistrations.toString(), analytics.newRegistrations.toString()],
-                  ['Total Job Posts', allTime.totalJobPosts.toString(), analytics.totalJobPosts.toString()],
-                  ['Total Applications', allTime.totalApplications.toString(), analytics.totalApplications.toString()],
-                  ['Total Reports', allTime.totalReports.toString(), analytics.totalReports.toString()],
-                  ['Engagement Rate', '${_capEngagementRate(allTime.engagementRate).toStringAsFixed(1)}%', '${_capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%'],
-                ],
-              ),
-              pw.SizedBox(height: 20),
-
-              // User Engagement
-              pw.Text(
-                'User Engagement',
-                style: pw.TextStyle(
-                  fontSize: 16,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 10),
-              pw.TableHelper.fromTextArray(
-                context: context,
-                border: pw.TableBorder.all(
-                  color: PdfColors.grey400,
-                  width: 0.5,
-                ),
-                cellAlignment: pw.Alignment.centerLeft,
-                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
-                headerStyle: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-                cellStyle: pw.TextStyle(fontSize: 9),
-                rowDecoration: pw.BoxDecoration(
-                  border: pw.Border(
-                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-                  ),
-                ),
-                headers: ['Metric', 'All Time', 'Selected Period'],
-                data: [
-                  ['Engagement Rate', '${_capEngagementRate(allTime.engagementRate).toStringAsFixed(1)}%', '${_capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%'],
-                  ['Job Applications', allTime.totalApplications.toString(), analytics.totalApplications.toString()],
-                  ['Messages Sent', allTime.totalMessages.toString(), analytics.totalMessages.toString()],
-                ],
-              ),
-              pw.SizedBox(height: 20),
-
-              // Content & Moderation Statistics
-              pw.Text(
-                'Content & Moderation Statistics',
-                style: pw.TextStyle(
-                  fontSize: 16,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 10),
-              pw.TableHelper.fromTextArray(
-                context: context,
-                border: pw.TableBorder.all(
-                  color: PdfColors.grey400,
-                  width: 0.5,
-                ),
-                cellAlignment: pw.Alignment.centerLeft,
-                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
-                headerStyle: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-                cellStyle: pw.TextStyle(fontSize: 9),
-                rowDecoration: pw.BoxDecoration(
-                  border: pw.Border(
-                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-                  ),
-                ),
-                headers: ['Metric', 'All Time', 'Selected Period'],
-                data: [
-                  ['Total Job Posts', allTime.totalJobPosts.toString(), analytics.totalJobPosts.toString()],
-                  ['Pending Posts', allTime.pendingJobPosts.toString(), analytics.pendingJobPosts.toString()],
-                  ['Approved Posts', allTime.approvedJobPosts.toString(), analytics.approvedJobPosts.toString()],
-                  ['Rejected Posts', allTime.rejectedJobPosts.toString(), analytics.rejectedJobPosts.toString()],
-                  ['Total Reports', allTime.totalReports.toString(), analytics.totalReports.toString()],
-                  ['Pending Reports', allTime.pendingReports.toString(), analytics.pendingReports.toString()],
-                  ['Resolved Reports', allTime.resolvedReports.toString(), analytics.resolvedReports.toString()],
-                  ['Dismissed Reports', allTime.dismissedReports.toString(), analytics.dismissedReports.toString()],
-                ],
-              ),
-              pw.SizedBox(height: 20),
-
-              // Credit & Billing
-              pw.Text(
-                'Credit & Billing',
-                style: pw.TextStyle(
-                  fontSize: 16,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 10),
-              pw.TableHelper.fromTextArray(
-                context: context,
-                border: pw.TableBorder.all(
-                  color: PdfColors.grey400,
-                  width: 0.5,
-                ),
-                cellAlignment: pw.Alignment.centerLeft,
-                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
-                headerStyle: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-                cellStyle: pw.TextStyle(fontSize: 9),
-                rowDecoration: pw.BoxDecoration(
-                  border: pw.Border(
-                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-                  ),
-                ),
-                headers: ['Metric', 'All Time', 'Selected Period'],
-                data: [
-                  ['Total Credits Used', allTime.totalCreditsUsed.toString(), analytics.totalCreditsUsed.toString()],
-                  ['Active Subscriptions', allTime.activeSubscriptions.toString(), analytics.activeSubscriptions.toString()],
-                  ['Revenue', 'RM ${allTime.revenue.toStringAsFixed(2)}', 'RM ${analytics.revenue.toStringAsFixed(2)}'],
-                  ['Credit Purchases', allTime.creditPurchases.toString(), analytics.creditPurchases.toString()],
-                ],
-              ),
-              pw.SizedBox(height: 20),
-
-              // Credit Topup Statistics
-              if (processedLogs.isNotEmpty) ...[
-                pw.Text(
-                  'Credit Topup Statistics',
-                  style: pw.TextStyle(
-                    fontSize: 16,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-                pw.SizedBox(height: 10),
-                pw.TableHelper.fromTextArray(
-                  context: context,
-                  border: pw.TableBorder.all(
-                    color: PdfColors.grey400,
-                    width: 0.5,
-                  ),
-                  cellAlignment: pw.Alignment.centerLeft,
-                  headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
-                  headerStyle: pw.TextStyle(
-                    fontSize: 10,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                  cellStyle: pw.TextStyle(fontSize: 9),
-                  rowDecoration: pw.BoxDecoration(
-                    border: pw.Border(
-                      bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-                    ),
-                  ),
-                  headers: ['Metric', 'Value'],
-                  data: [
-                    ['Total Topup Amount', 'RM ${totalTopupAmount.toStringAsFixed(2)}'],
-                    ['Total Credits', totalTopupCredits.toString()],
-                    ['Average Amount', 'RM ${avgTopupAmount.toStringAsFixed(2)}'],
-                    ['Average Credits', avgTopupCredits.toStringAsFixed(0)],
-                    ['Max Topup', 'RM ${maxTopupAmount.toStringAsFixed(2)}'],
-                    ['Min Topup', 'RM ${minTopupAmount.toStringAsFixed(2)}'],
-                    ['Total Transactions', '${processedLogs.length} processed'],
-                  ],
-                ),
-                pw.SizedBox(height: 20),
-              ],
-
-              // Growth Rates
-              pw.Text(
-                'Growth Rates',
-                style: pw.TextStyle(
-                  fontSize: 16,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 10),
-              pw.TableHelper.fromTextArray(
-                context: context,
-                border: pw.TableBorder.all(
-                  color: PdfColors.grey400,
-                  width: 0.5,
-                ),
-                cellAlignment: pw.Alignment.centerLeft,
-                headerDecoration: pw.BoxDecoration(color: PdfColors.grey200),
-                headerStyle: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-                cellStyle: pw.TextStyle(fontSize: 9),
-                rowDecoration: pw.BoxDecoration(
-                  border: pw.Border(
-                    bottom: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-                  ),
-                ),
-                headers: ['Metric', 'Growth Rate'],
-                data: [
-                  ['User Growth', _formatGrowthRateForPDF(analytics.userGrowthRate, 'userGrowth', analytics)],
-                  ['Active User Growth', _formatGrowthRateForPDF(analytics.activeUserGrowth, 'activeUserGrowth', analytics)],
-                  ['Registration Growth', _formatGrowthRateForPDF(analytics.registrationGrowth, 'registrationGrowth', analytics)],
-                  ['Engagement Growth', _formatGrowthRateForPDF(analytics.engagementGrowth, 'engagementGrowth', analytics)],
-                  ['Message Growth', _formatGrowthRateForPDF(analytics.messageGrowth, 'messageGrowth', analytics)],
-                  ['Application Growth', _formatGrowthRateForPDF(analytics.applicationGrowth, 'applicationGrowth', analytics)],
-                  ['Report Growth', _formatGrowthRateForPDF(analytics.reportGrowth, 'reportGrowth', analytics)],
-                  ['Job Post Growth', _formatGrowthRateForPDF(analytics.jobPostGrowth, 'jobPostGrowth', analytics)],
-                ],
-              ),
-            ];
-          },
-        ),
+      final pdf = await PdfReportService.generateReport(
+        analytics: _analytics!,
+        allTime: _allTimeAnalytics!,
+        startDate: _startDate,
+        endDate: _endDate,
+        creditLogs: _creditLogs,
       );
 
       // Save PDF to temporary file and share
@@ -1072,7 +409,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return Row(
       children: [
         Expanded(
-          child: _QuickStatCard(
+          child: AnalyticsQuickStatCard(
             title: 'Active Users',
             value: _analytics!.activeUsers.toString(),
             subtitle: 'Online now',
@@ -1083,7 +420,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         ),
         const SizedBox(width: 4),
         Expanded(
-          child: _QuickStatCard(
+          child: AnalyticsQuickStatCard(
             title: 'Job Posts',
             value: _analytics!.totalJobPosts.toString(),
             subtitle: 'This period',
@@ -1094,7 +431,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         ),
         const SizedBox(width: 4),
         Expanded(
-          child: _QuickStatCard(
+          child: AnalyticsQuickStatCard(
             title: 'Flagged Content',
             value: _analytics!.totalReports.toString(),
             subtitle: 'Requires attention',
@@ -1108,216 +445,32 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   }
 
   Widget _buildTrendCharts() {
-    if (_trendData.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      children: [
-        // User Growth Trend
-        Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'User Activity Trends',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  height: 300,
-                  child: SfCartesianChart(
-                    primaryXAxis: CategoryAxis(
-                      labelRotation: -45,
-                      majorGridLines: const MajorGridLines(width: 0),
-                    ),
-                    primaryYAxis: NumericAxis(),
-                    legend: Legend(
-                      isVisible: true,
-                      position: LegendPosition.bottom,
-                    ),
-                    tooltipBehavior: TooltipBehavior(enable: true),
-                    series: <CartesianSeries<AnalyticsModel, String>>[
-                      LineSeries<AnalyticsModel, String>(
-                        name: 'Total Users',
-                        dataSource: _trendData,
-                        xValueMapper: (model, _) => DateFormat('MMM dd').format(model.date),
-                        yValueMapper: (model, _) => model.totalUsers,
-                        color: Colors.blue,
-                        width: 3,
-                        markerSettings: const MarkerSettings(isVisible: true),
-                      ),
-                      LineSeries<AnalyticsModel, String>(
-                        name: 'Active Users',
-                        dataSource: _trendData,
-                        xValueMapper: (model, _) => DateFormat('MMM dd').format(model.date),
-                        yValueMapper: (model, _) => model.activeUsers,
-                        color: Colors.green,
-                        width: 3,
-                        markerSettings: const MarkerSettings(isVisible: true),
-                      ),
-                      LineSeries<AnalyticsModel, String>(
-                        name: 'New Registrations',
-                        dataSource: _trendData,
-                        xValueMapper: (model, _) => DateFormat('MMM dd').format(model.date),
-                        yValueMapper: (model, _) => model.newRegistrations,
-                        color: Colors.orange,
-                        width: 3,
-                        markerSettings: const MarkerSettings(isVisible: true),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // Job Posts Trend (Line Chart)
-        Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Job Posts Trend',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  height: 300,
-                  child: SfCartesianChart(
-                    primaryXAxis: CategoryAxis(
-                      labelRotation: _trendData.length > 7 ? -45 : 0,
-                      majorGridLines: const MajorGridLines(width: 0),
-                    ),
-                    primaryYAxis: NumericAxis(),
-                    tooltipBehavior: TooltipBehavior(enable: true),
-                    series: <CartesianSeries<AnalyticsModel, String>>[
-                      LineSeries<AnalyticsModel, String>(
-                        name: 'Job Posts',
-                        dataSource: _trendData,
-                        xValueMapper: (model, _) => DateFormat('MMM dd').format(model.date),
-                        yValueMapper: (model, _) => model.totalJobPosts,
-                        color: Colors.blue,
-                        width: 3,
-                        markerSettings: const MarkerSettings(
-                          isVisible: true,
-                          height: 6,
-                          width: 6,
-                        ),
-                        dataLabelSettings: const DataLabelSettings(
-                          isVisible: true,
-                          labelPosition: ChartDataLabelPosition.outside,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // Flagged Content Trend
-        Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Flagged Content & Reports Trend',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  height: 300,
-                  child: SfCartesianChart(
-                    primaryXAxis: CategoryAxis(
-                      labelRotation: -45,
-                      majorGridLines: const MajorGridLines(width: 0),
-                    ),
-                    primaryYAxis: NumericAxis(
-                      numberFormat: NumberFormat('#'),
-                      interval: 1,
-                    ),
-                    legend: Legend(
-                      isVisible: true,
-                      position: LegendPosition.bottom,
-                    ),
-                    tooltipBehavior: TooltipBehavior(enable: true),
-                    series: <CartesianSeries<AnalyticsModel, String>>[
-                      LineSeries<AnalyticsModel, String>(
-                        name: 'Total Reports',
-                        dataSource: _trendData,
-                        xValueMapper: (model, _) => DateFormat('MMM dd').format(model.date),
-                        yValueMapper: (model, _) => model.totalReports,
-                        color: Colors.red,
-                        width: 3,
-                        markerSettings: const MarkerSettings(isVisible: true),
-                      ),
-                      LineSeries<AnalyticsModel, String>(
-                        name: 'Pending Reports',
-                        dataSource: _trendData,
-                        xValueMapper: (model, _) => DateFormat('MMM dd').format(model.date),
-                        yValueMapper: (model, _) => model.pendingReports,
-                        color: Colors.orange,
-                        width: 3,
-                        markerSettings: const MarkerSettings(isVisible: true),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
+    return AnalyticsTrendCharts(trendData: _trendData);
   }
 
   Widget _buildAnalyticsCards() {
     return Column(
       children: [
         // User Engagement
-        _AnalyticsSectionCard(
+        AnalyticsSectionCard(
           title: 'User Engagement',
           icon: Icons.trending_up,
           color: Colors.green,
           children: [
-            _MetricRow(
+            AnalyticsMetricRow(
               label: 'Engagement Rate',
-              value: '${_capEngagementRate(_analytics!.engagementRate).toStringAsFixed(1)}%',
-              trend: _capGrowthRate(_analytics!.engagementGrowth),
+              value: '${AnalyticsFormatter.capEngagementRate(_analytics!.engagementRate).toStringAsFixed(1)}%',
+              trend: AnalyticsFormatter.capGrowthRate(_analytics!.engagementGrowth),
             ),
-            _MetricRow(
+            AnalyticsMetricRow(
               label: 'Messages Sent',
               value: _analytics!.totalMessages.toString(),
-              trend: _capGrowthRate(_analytics!.messageGrowth),
+              trend: AnalyticsFormatter.capGrowthRate(_analytics!.messageGrowth),
             ),
-            _MetricRow(
+            AnalyticsMetricRow(
               label: 'Job Applications',
               value: _analytics!.totalApplications.toString(),
-              trend: _capGrowthRate(_analytics!.applicationGrowth),
+              trend: AnalyticsFormatter.capGrowthRate(_analytics!.applicationGrowth),
             ),
           ],
         ),
@@ -1328,27 +481,27 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         const SizedBox(height: 16),
 
         // Credit & Billing Logs
-        _AnalyticsSectionCard(
+        AnalyticsSectionCard(
           title: 'Credit & Billing',
           icon: Icons.credit_card,
           color: Colors.purple,
           children: [
-            _MetricRow(
+            AnalyticsMetricRow(
               label: 'Total Credits Used',
               value: _analytics!.totalCreditsUsed.toString(),
               trend: 0.0, 
             ),
-            _MetricRow(
+            AnalyticsMetricRow(
               label: 'Active Subscriptions',
               value: _analytics!.activeSubscriptions.toString(),
               trend: 0.0,
             ),
-            _MetricRow(
+            AnalyticsMetricRow(
               label: 'Revenue',
               value: 'RM ${_analytics!.revenue.toStringAsFixed(2)}',
               trend: 0.0, 
             ),
-            _MetricRow(
+            AnalyticsMetricRow(
               label: 'Credit Purchases',
               value: _analytics!.creditPurchases.toString(),
               trend: 0.0, 
@@ -1628,7 +781,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             Row(
               children: [
                 Expanded(
-                  child: _TopupStatCard(
+                  child: AnalyticsTopupStatCard(
                     label: 'Total Topup Amount',
                     value: '\$${totalTopupAmount.toStringAsFixed(2)}',
                     icon: Icons.account_balance_wallet,
@@ -1637,7 +790,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _TopupStatCard(
+                  child: AnalyticsTopupStatCard(
                     label: 'Total Credits',
                     value: totalTopupCredits.toString(),
                     icon: Icons.stars,
@@ -1650,7 +803,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             Row(
               children: [
                 Expanded(
-                  child: _TopupStatCard(
+                  child: AnalyticsTopupStatCard(
                     label: 'Average Amount',
                     value: '\$${avgTopupAmount.toStringAsFixed(2)}',
                     icon: Icons.calculate,
@@ -1659,7 +812,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _TopupStatCard(
+                  child: AnalyticsTopupStatCard(
                     label: 'Average Credits',
                     value: avgTopupCredits.toStringAsFixed(0),
                     icon: Icons.analytics,
@@ -1672,7 +825,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             Row(
               children: [
                 Expanded(
-                  child: _TopupStatCard(
+                  child: AnalyticsTopupStatCard(
                     label: 'Max Topup',
                     value: '\$${maxTopupAmount.toStringAsFixed(2)}',
                     icon: Icons.arrow_upward,
@@ -1681,7 +834,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _TopupStatCard(
+                  child: AnalyticsTopupStatCard(
                     label: 'Min Topup',
                     value: '\$${minTopupAmount.toStringAsFixed(2)}',
                     icon: Icons.arrow_downward,
@@ -1691,7 +844,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               ],
             ),
             const SizedBox(height: 12),
-            _TopupStatCard(
+            AnalyticsTopupStatCard(
               label: 'Total Transactions',
               value: '${processedLogs.length} processed',
               icon: Icons.receipt_long,
@@ -1730,535 +883,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               color: Colors.grey[400],
             ),
             textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _QuickStatCard extends StatelessWidget {
-  final String title;
-  final String value;
-  final String subtitle;
-  final Color color;
-  final IconData icon;
-  final double trend;
-
-  const _QuickStatCard({
-    required this.title,
-    required this.value,
-    required this.subtitle,
-    required this.color,
-    required this.icon,
-    this.trend = 0.0,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(icon, size: 18, color: color),
-                ),
-                Flexible(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        value,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    if (trend != 0 && trend != -999.0)
-                      Container(
-                        margin: const EdgeInsets.only(top: 3),
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: trend > 0 ? Colors.green[50] : Colors.red[50],
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              trend > 0 ? Icons.arrow_upward : Icons.arrow_downward,
-                              size: 10,
-                              color: trend > 0 ? Colors.green[700] : Colors.red[700],
-                            ),
-                            const SizedBox(width: 1),
-                            Text(
-                              '${(trend.abs().clamp(0.0, 100.0)).toStringAsFixed(1)}%',
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w600,
-                                color: trend > 0 ? Colors.green[700] : Colors.red[700],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey[600],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AnalyticsSectionCard extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final Color color;
-  final List<Widget> children;
-
-  const _AnalyticsSectionCard({
-    required this.title,
-    required this.icon,
-    required this.color,
-    required this.children,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(icon, size: 24, color: color),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MetricRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final double trend;
-
-  const _MetricRow({
-    required this.label,
-    required this.value,
-    required this.trend,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            Row(
-              children: [
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                if (trend != 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: trend > 0 ? Colors.green[50] : Colors.red[50],
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: trend > 0 ? Colors.green[100]! : Colors.red[100]!,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          trend > 0 ? Icons.arrow_upward : Icons.arrow_downward,
-                          size: 12,
-                          color: trend > 0 ? Colors.green[700] : Colors.red[700],
-                        ),
-                        const SizedBox(width: 2),
-                        Text(
-                          '${(trend.abs().clamp(0.0, 100.0)).toStringAsFixed(1)}%',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: trend > 0 ? Colors.green[700] : Colors.red[700],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-      ],
-    );
-  }
-}
-
-class _DateRangePickerDialog extends StatefulWidget {
-  final DateTime startDate;
-  final DateTime endDate;
-
-  const _DateRangePickerDialog({
-    required this.startDate,
-    required this.endDate,
-  });
-
-  @override
-  State<_DateRangePickerDialog> createState() => _DateRangePickerDialogState();
-}
-
-class _DateRangePickerDialogState extends State<_DateRangePickerDialog> {
-  late DateTime _tempStartDate;
-  late DateTime _tempEndDate;
-
-  @override
-  void initState() {
-    super.initState();
-    _tempStartDate = DateTime(widget.startDate.year, widget.startDate.month, widget.startDate.day);
-    _tempEndDate = DateTime(widget.endDate.year, widget.endDate.month, widget.endDate.day);
-  }
-
-  Future<void> _selectStartDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _tempStartDate,
-      firstDate: DateTime(2020),
-      lastDate: _tempEndDate,
-    );
-    if (picked != null) {
-      setState(() {
-        _tempStartDate = DateTime(picked.year, picked.month, picked.day);
-      });
-    }
-  }
-
-  Future<void> _selectEndDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _tempEndDate,
-      firstDate: _tempStartDate,
-      lastDate: DateTime.now(),
-    );
-    if (picked != null) {
-      setState(() {
-        _tempEndDate = DateTime(picked.year, picked.month, picked.day);
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Select Date Range'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Start Date
-            const Text(
-              'Start Date',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            InkWell(
-              onTap: _selectStartDate,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey[300]!),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      DateFormat('dd/MM/yyyy').format(_tempStartDate),
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                    const Icon(Icons.calendar_today, size: 18),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // End Date
-            const Text(
-              'End Date',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            InkWell(
-              onTap: _selectEndDate,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey[300]!),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      DateFormat('dd/MM/yyyy').format(_tempEndDate),
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                    const Icon(Icons.calendar_today, size: 18),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Quick Presets
-            const Text(
-              'Quick Presets',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _QuickDateButton(
-                  label: 'Today',
-                  onTap: () {
-                    final now = DateTime.now();
-                    setState(() {
-                      _tempStartDate = DateTime(now.year, now.month, now.day);
-                      _tempEndDate = DateTime(now.year, now.month, now.day);
-                    });
-                  },
-                ),
-                _QuickDateButton(
-                  label: 'Last 7 Days',
-                  onTap: () {
-                    final now = DateTime.now();
-                    final startDate = now.subtract(const Duration(days: 7));
-                    setState(() {
-                      _tempStartDate = DateTime(startDate.year, startDate.month, startDate.day);
-                      _tempEndDate = DateTime(now.year, now.month, now.day);
-                    });
-                  },
-                ),
-                _QuickDateButton(
-                  label: 'Last 30 Days',
-                  onTap: () {
-                    final now = DateTime.now();
-                    final startDate = now.subtract(const Duration(days: 30));
-                    setState(() {
-                      _tempStartDate = DateTime(startDate.year, startDate.month, startDate.day);
-                      _tempEndDate = DateTime(now.year, now.month, now.day);
-                    });
-                  },
-                ),
-                _QuickDateButton(
-                  label: 'This Month',
-                  onTap: () {
-                    final now = DateTime.now();
-                    setState(() {
-                      _tempStartDate = DateTime(now.year, now.month, 1);
-                      _tempEndDate = DateTime(now.year, now.month, now.day);
-                    });
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            if (_tempStartDate.isAfter(_tempEndDate)) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Start date must be before end date'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-              return;
-            }
-            Navigator.pop(context, {
-              'start': _tempStartDate,
-              'end': _tempEndDate,
-            });
-          },
-          child: const Text('Apply'),
-        ),
-      ],
-    );
-  }
-}
-
-class _QuickDateButton extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-
-  const _QuickDateButton({
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.blue[50],
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.blue[200]!),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.blue[700],
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TopupStatCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-  final bool fullWidth;
-
-  const _TopupStatCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-    this.fullWidth = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: fullWidth ? double.infinity : null,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[700],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
           ),
         ],
       ),

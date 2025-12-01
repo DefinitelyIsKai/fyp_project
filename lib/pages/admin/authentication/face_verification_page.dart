@@ -125,10 +125,10 @@ class _FaceVerificationPageState extends State<FaceVerificationPage> {
 
       print('Similarity score: $similarity');
 
-      // Similarity threshold (increased to 0.95 for extremely strict matching)
+      // Similarity threshold (0.95 for strict matching)
       // Very high threshold to prevent false positives (other faces being accepted)
       // If legitimate users are rejected, lower this value slightly
-      const threshold = 0.95;
+      const threshold = 0.96;
 
       if (similarity >= threshold) {
         // Verification successful

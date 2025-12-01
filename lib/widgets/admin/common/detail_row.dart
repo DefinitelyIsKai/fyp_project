@@ -6,6 +6,7 @@ class DetailRow extends StatelessWidget {
   final String value;
   final Color? valueColor;
   final double labelWidth;
+  final bool isHighlighted;
 
   const DetailRow({
     super.key,
@@ -13,12 +14,13 @@ class DetailRow extends StatelessWidget {
     required this.value,
     this.valueColor,
     this.labelWidth = 120,
+    this.isHighlighted = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -26,9 +28,10 @@ class DetailRow extends StatelessWidget {
             width: labelWidth,
             child: Text(
               label,
-              style: const TextStyle(
-                fontWeight: FontWeight.w500,
-                color: Colors.grey,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                color: Colors.grey[700],
               ),
             ),
           ),
@@ -36,7 +39,8 @@ class DetailRow extends StatelessWidget {
             child: Text(
               value,
               style: TextStyle(
-                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                fontWeight: isHighlighted ? FontWeight.w600 : FontWeight.normal,
                 color: valueColor ?? Colors.black87,
               ),
             ),

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:image/image.dart' as img;
 import 'package:fyp_project/services/admin/auth_service.dart';
 import 'package:fyp_project/services/admin/profile_pic_service.dart';
 import 'package:fyp_project/services/admin/face_recognition_service.dart';
@@ -13,7 +14,6 @@ import 'package:fyp_project/utils/admin/app_colors.dart';
 import 'package:fyp_project/pages/user/authentication/login_page.dart' as user_login;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:image/image.dart' as img;
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 class LoginPage extends StatefulWidget {
@@ -40,17 +40,21 @@ class _LoginPageState extends State<LoginPage> {
   Uint8List? _capturedImageBytes; // Used for preview display
   bool _isDetectingFace = false; // Whether face detection is in progress
   bool? _faceDetected; // Whether face is detected (null = not detected, true = detected, false = not detected)
-  Face? _detectedFace; // Detected face object (used for comparison)
+  Face? _detectedFace; // Detected face object (used for preview display only, not for verification)
 
   @override
   void initState() {
     super.initState();
-    // Initialize face recognition service (async, don't wait)
-    _faceService.initialize().then((success) {
-      if (!success && mounted) {
-        print('Warning: Face recognition service initialization failed, login may fail');
-      }
-    });
+    _initializeFaceService();
+  }
+
+  /// Initialize face recognition service
+  Future<void> _initializeFaceService() async {
+    try {
+      await _faceService.initialize();
+    } catch (e) {
+      debugPrint('Error initializing face service: $e');
+    }
   }
 
   @override
@@ -65,7 +69,6 @@ class _LoginPageState extends State<LoginPage> {
     
     _emailController.dispose();
     _passwordController.dispose();
-    _faceService.dispose();
     super.dispose();
   }
 
@@ -178,20 +181,214 @@ class _LoginPageState extends State<LoginPage> {
     });
   }
 
+  /// Verify face against profile photo
+  Future<void> _verifyFace(String profileImageBase64) async {
+    if (_capturedImageBase64 == null || _capturedImageBytes == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please take a photo first'),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        setState(() => _isLoading = false);
+      }
+      return;
+    }
+
+    if (_faceDetected != true) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No face detected. Please take another photo with your face clearly visible.'),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        setState(() => _isLoading = false);
+      }
+      return;
+    }
+
+    // Show loading dialog
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Verifying Identity',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Please wait while we verify your face...',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey[600],
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    setState(() => _isLoading = true);
+
+    try {
+      print('========== Face Verification Started ==========');
+      print('Time: ${DateTime.now()}');
+      print('Profile image base64 length: ${profileImageBase64.length}');
+      print('Captured image bytes length: ${_capturedImageBytes!.length}');
+      print('Face detected: $_faceDetected');
+      print('Detected face: ${_detectedFace != null ? "Yes" : "No"}');
+
+      // Convert captured image bytes to image.Image
+      print('Decoding captured image...');
+      final capturedImage = img.decodeImage(_capturedImageBytes!);
+      if (capturedImage == null) {
+        throw Exception('Failed to decode captured image');
+      }
+      print('Captured image decoded: ${capturedImage.width}x${capturedImage.height}');
+
+      // Compare faces
+      print('Starting face comparison...');
+      print('Calling compareFaces with profile image and captured image...');
+      final similarity = await _faceService.compareFaces(
+        profileImageBase64,
+        capturedImage,
+        _detectedFace,
+      );
+
+      print('========== Face Verification Result ==========');
+      print('Similarity score: $similarity');
+      print('Threshold: 0.96');
+      print('Verification ${similarity >= 0.96 ? "SUCCESS" : "FAILED"}');
+      print('Similarity difference: ${(similarity - 0.96).toStringAsFixed(4)}');
+      print('==============================================');
+
+      // Similarity threshold (0.96 for strict matching)
+      const threshold = 0.96;
+
+      final email = _emailController.text.trim();
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final currentUser = authService.currentAdmin;
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      if (similarity >= threshold) {
+        // Verification successful
+        print('Verification SUCCESS - Navigating to dashboard');
+        _logLoginSuccess(
+          email: email,
+          userId: currentUser?.id,
+          userName: currentUser?.name,
+        );
+
+        _clearLoginResources();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Welcome, ${currentUser?.name ?? 'Admin'}!'),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
+        }
+      } else {
+        // Verification failed
+        print('Verification FAILED - Logging out user');
+        _logFaceVerificationFailure(
+          email: email,
+          userId: currentUser?.id,
+          userName: currentUser?.name,
+        );
+
+        _clearLoginResources();
+
+        if (mounted) {
+          setState(() => _isLoading = false);
+          authService.logout();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Face verification failed. Similarity: ${(similarity * 100).toStringAsFixed(1)}% (Required: 96.0%)'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    } catch (e, stackTrace) {
+      print('========== Face Verification Error ==========');
+      print('Error: $e');
+      print('Stack trace: $stackTrace');
+      print('Time: ${DateTime.now()}');
+      print('=============================================');
+
+      final email = _emailController.text.trim();
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final currentUser = authService.currentAdmin;
+
+      _logFaceVerificationError(
+        email: email,
+        userId: currentUser?.id,
+        userName: currentUser?.name,
+        error: e.toString(),
+      );
+
+      // Close loading dialog if still open
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      _clearLoginResources();
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+        authService.logout();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Face verification error: ${e.toString().length > 100 ? e.toString().substring(0, 100) + "..." : e.toString()}'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
     
-    // Check if photo has been taken (only required when face recognition is enabled)
-    if (_enableFaceRecognition && (_capturedImageBase64 == null || _capturedImageBase64!.isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please take a photo for face verification'),
-          backgroundColor: Colors.orange,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
+    // Note: Photo capture is now handled by FaceVerificationPage, so we don't need to check here
 
     setState(() => _isLoading = true);
     
@@ -238,8 +435,11 @@ class _LoginPageState extends State<LoginPage> {
             
             if (profileImageBase64 != null && profileImageBase64.isNotEmpty) {
               print('Starting face verification, base64 length: ${profileImageBase64.length}');
-              // Perform face comparison
-              await _verifyFace(profileImageBase64);
+              // Verify face using internal logic
+              if (mounted) {
+                setState(() => _isLoading = false);
+                await _verifyFace(profileImageBase64);
+              }
             } else {
               // No profile photo, require upload
               print('Error: Profile photo base64 field is empty or does not exist');
@@ -343,264 +543,6 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  /// Verify face
-  Future<void> _verifyFace(String profileImageBase64) async {
-    if (!mounted) return;
-    
-    // Show blocking loading dialog (prevent all user interaction)
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false, // Prevent user from closing by tapping outside
-      builder: (BuildContext dialogContext) => WillPopScope(
-        onWillPop: () async => false, // Prevent back button from closing
-        child: Dialog(
-          backgroundColor: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircularProgressIndicator(),
-                const SizedBox(height: 24),
-                const Text(
-                  'Verifying Face...',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Please Wait, It might take few seconds',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    
-    try {
-      // Ensure service is initialized (using Google ML Kit + image hashing method)
-      if (!_faceService.isModelLoaded) {
-        print('Service not initialized, starting initialization...');
-        final initialized = await _faceService.initialize()
-            .timeout(const Duration(seconds: 5), onTimeout: () {
-          print('Service initialization timeout');
-          return false;
-        });
-        if (!initialized) {
-          if (mounted) Navigator.of(context).pop(); // Close loading dialog
-          throw Exception('Failed to initialize face recognition service (using Google ML Kit)');
-        }
-        print('Service initialized successfully');
-      } else {
-        print('Service already initialized, skipping');
-      }
-
-      if (!mounted) {
-        Navigator.of(context).pop(); // 关闭加载对话框
-        return;
-      }
-
-      // Decode captured image
-      final capturedImage = img.decodeImage(_capturedImageBytes!);
-      if (capturedImage == null) {
-        if (mounted) Navigator.of(context).pop(); // Close loading dialog
-        throw Exception('Failed to decode captured image');
-      }
-
-      if (!mounted) {
-        Navigator.of(context).pop(); // Close loading dialog
-        return;
-      }
-
-      // Compare faces (with timeout mechanism)
-      print('Starting face comparison...');
-      // Use detected face information (if available)
-      final capturedFace = _detectedFace;
-      if (capturedFace != null) {
-        print('Using detected face information for comparison');
-      } else {
-        print('No face detected, using full image for comparison');
-      }
-      
-      final similarity = await _faceService.compareFaces(
-        profileImageBase64,
-        capturedImage,
-        capturedFace, // Use detected face information
-      ).timeout(
-        const Duration(seconds: 30), // 30 second timeout to prevent closure accumulation
-        onTimeout: () {
-          print('Face comparison timeout after 30 seconds - preventing closure accumulation');
-          return 0.0;
-        },
-      );
-
-      print('Similarity score: $similarity');
-
-      // Close loading dialog
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-      
-      if (!mounted) return;
-
-      // Similarity threshold (increased to 0.95 for extremely strict matching)
-      // Very high threshold to prevent false positives (other faces being accepted)
-      // If legitimate users are rejected, lower this value slightly
-      const threshold = 0.95;
-
-      if (similarity >= threshold) {
-        // Verification successful
-        final email = _emailController.text.trim();
-          final authService = Provider.of<AuthService>(context, listen: false);
-          final currentUser = authService.currentAdmin;
-        
-        // Log login success to Firestore
-        _logLoginSuccess(
-          email: email,
-          userId: currentUser?.id,
-          userName: currentUser?.name,
-          similarity: similarity,
-        );
-        
-        // Log to console
-        print('========== Face Verification Success ==========');
-        print('Similarity Score: ${similarity.toStringAsFixed(4)}');
-        print('Threshold: $threshold');
-        print('Time: ${DateTime.now()}');
-        print('==============================================');
-        
-        // Clean up all resources
-        _clearLoginResources();
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Welcome, ${currentUser?.name ?? 'Admin'}!'),
-              backgroundColor: Colors.green,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
-        }
-      } else {
-        // Verification failed - face mismatch
-        final email = _emailController.text.trim();
-          final authService = Provider.of<AuthService>(context, listen: false);
-        final currentUser = authService.currentAdmin;
-        
-        // Log face verification failure to Firestore
-        _logFaceVerificationFailure(
-          email: email,
-          userId: currentUser?.id,
-          userName: currentUser?.name,
-          similarity: similarity,
-          threshold: threshold,
-        );
-        
-        // Log to console
-        print('========== Face Verification Failed ==========');
-        print('Reason: Face mismatch');
-        print('Similarity Score: ${similarity.toStringAsFixed(4)}');
-        print('Threshold: $threshold');
-        print('Time: ${DateTime.now()}');
-        print('=============================================');
-        
-        // Clean up all resources
-        _clearLoginResources();
-        
-        if (mounted) {
-          setState(() => _isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Face verification failed. Similarity: ${similarity.toStringAsFixed(2)}. Please take a new photo and try again.'),
-              backgroundColor: Colors.red,
-              behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 5),
-              action: SnackBarAction(
-                label: 'Retry',
-                textColor: Colors.white,
-                onPressed: () {
-                  // Clear current photo to allow user to retake
-                  _clearCapturedImage();
-                },
-              ),
-            ),
-          );
-          // Logout
-          authService.logout();
-        }
-      }
-    } catch (e, stackTrace) {
-      final email = _emailController.text.trim();
-        final authService = Provider.of<AuthService>(context, listen: false);
-      final currentUser = authService.currentAdmin;
-      
-      // Log face verification error to Firestore
-      _logFaceVerificationError(
-        email: email,
-        userId: currentUser?.id,
-        userName: currentUser?.name,
-        error: e.toString(),
-      );
-      
-      // Log to console
-      print('========== Face Verification Error ==========');
-      print('Reason: Verification process error');
-      print('Error Type: ${e.runtimeType}');
-      print('Error: $e');
-      print('Stack Trace: $stackTrace');
-      print('Time: ${DateTime.now()}');
-      print('============================================');
-      
-      // Clean up all resources
-      _clearLoginResources();
-      
-      // Ensure loading dialog is closed
-      if (mounted) {
-        Navigator.of(context).pop();
-        setState(() => _isLoading = false);
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Face verification error: ${e.toString().length > 100 ? e.toString().substring(0, 100) + "..." : e.toString()}. Please try again.'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 5),
-            action: SnackBarAction(
-              label: 'Retry',
-              textColor: Colors.white,
-              onPressed: () {
-                // Clear current photo to allow user to retake
-                _clearCapturedImage();
-              },
-            ),
-          ),
-        );
-        // Delay logout to avoid crash during error handling
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) {
-            try {
-              authService.logout();
-            } catch (logoutError) {
-              debugPrint('Error during logout: $logoutError');
-            }
-          }
-        });
-      }
-    }
-  }
   
   /// Clean up captured image resources
   void _clearCapturedImage() {
@@ -633,7 +575,6 @@ class _LoginPageState extends State<LoginPage> {
     required String email,
     String? userId,
     String? userName,
-    double? similarity,
   }) async {
     try {
       final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
@@ -642,7 +583,6 @@ class _LoginPageState extends State<LoginPage> {
         'email': email,
         'userId': userId,
         'userName': userName,
-        'faceSimilarity': similarity,
         'createdAt': FieldValue.serverTimestamp(),
         'createdBy': currentAdminId ?? userId,
       });
@@ -677,8 +617,6 @@ class _LoginPageState extends State<LoginPage> {
     required String email,
     String? userId,
     String? userName,
-    required double similarity,
-    required double threshold,
   }) async {
     try {
       final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
@@ -687,8 +625,6 @@ class _LoginPageState extends State<LoginPage> {
         'email': email,
         'userId': userId,
         'userName': userName,
-        'similarity': similarity,
-        'threshold': threshold,
         'reason': 'Face mismatch - similarity below threshold',
         'createdAt': FieldValue.serverTimestamp(),
         'createdBy': currentAdminId ?? userId,

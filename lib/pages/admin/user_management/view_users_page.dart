@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:fyp_project/models/admin/user_model.dart';
 import 'package:fyp_project/models/admin/role_model.dart';
 import 'package:fyp_project/services/admin/user_service.dart';
@@ -10,6 +13,7 @@ import 'package:fyp_project/services/admin/auth_service.dart';
 import 'package:fyp_project/services/admin/role_service.dart';
 import 'package:fyp_project/services/admin/profile_pic_service.dart';
 import 'package:fyp_project/services/admin/admin_user_service.dart';
+import 'package:fyp_project/services/admin/face_recognition_service.dart';
 import 'package:fyp_project/models/admin/add_admin_form_model.dart';
 import 'package:fyp_project/pages/admin/user_management/user_detail_page.dart';
 import 'package:fyp_project/widgets/user/location_autocomplete_field.dart';
@@ -30,6 +34,7 @@ class ViewUsersPage extends StatefulWidget {
 class _ViewUsersPageState extends State<ViewUsersPage> {
   final UserService _userService = UserService();
   final RoleService _roleService = RoleService();
+  final FaceRecognitionService _faceService = FaceRecognitionService();
   List<UserModel> _users = [];
   List<UserModel> _filteredUsers = [];
   List<String> _availableRoles = [];
@@ -950,24 +955,32 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     
     String selectedRole = _adminRoles.isNotEmpty ? _adminRoles.first.name : 'staff';
     String? selectedGender;
-    bool obscurePassword = true;
-    bool obscureConfirmPassword = true;
-    bool obscureCurrentPassword = true;
     
     final selectedImageBase64Notifier = ValueNotifier<String?>(null);
     final selectedImageFileTypeNotifier = ValueNotifier<String?>(null);
     final isPickingImageNotifier = ValueNotifier<bool>(false);
     final isImageUploadedNotifier = ValueNotifier<bool>(false);
+    final faceDetectedNotifier = ValueNotifier<bool?>(null); // null = not checked, true = detected, false = not detected
+    final isDetectingFaceNotifier = ValueNotifier<bool>(false);
     
     final pageController = PageController(initialPage: 0);
     final currentPageNotifier = ValueNotifier<int>(0);
     
-    String? nameError;
-    String? emailError;
-    String? passwordError;
-    String? confirmPasswordError;
-    String? ageError;
-    String? phoneNumberError;
+    // Use ValueNotifier for error states to optimize performance
+    final nameErrorNotifier = ValueNotifier<String?>(null);
+    final emailErrorNotifier = ValueNotifier<String?>(null);
+    final passwordErrorNotifier = ValueNotifier<String?>(null);
+    final confirmPasswordErrorNotifier = ValueNotifier<String?>(null);
+    final ageErrorNotifier = ValueNotifier<String?>(null);
+    final phoneNumberErrorNotifier = ValueNotifier<String?>(null);
+    
+    // Use ValueNotifier for password visibility to avoid setDialogState
+    final obscurePasswordNotifier = ValueNotifier<bool>(true);
+    final obscureConfirmPasswordNotifier = ValueNotifier<bool>(true);
+    final obscureCurrentPasswordNotifier = ValueNotifier<bool>(true);
+    
+    // Cache keyboard height to avoid frequent MediaQuery calls
+    final keyboardHeightNotifier = ValueNotifier<double>(0.0);
 
     showModalBottomSheet(
       context: pageContext,
@@ -975,15 +988,24 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
       backgroundColor: Colors.transparent,
       isDismissible: true,
       enableDrag: true,
+      useSafeArea: false,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => Container(
-          height: MediaQuery.of(context).size.height * 0.9,
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            children: [
+        builder: (context, setDialogState) {
+          final mediaQuery = MediaQuery.of(context);
+          // Update keyboard height when it changes (cache to avoid frequent rebuilds)
+          final currentKeyboardHeight = mediaQuery.viewInsets.bottom;
+          if ((keyboardHeightNotifier.value - currentKeyboardHeight).abs() > 1.0) {
+            keyboardHeightNotifier.value = currentKeyboardHeight;
+          }
+          
+          return Container(
+            height: mediaQuery.size.height * 0.9,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
               // Header
               Container(
                 padding: const EdgeInsets.all(16),
@@ -1030,6 +1052,8 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                       selectedImageFileTypeNotifier,
                       isPickingImageNotifier,
                       isImageUploadedNotifier,
+                      faceDetectedNotifier,
+                      isDetectingFaceNotifier,
                       () {
                         pageController.nextPage(
                           duration: const Duration(milliseconds: 300),
@@ -1052,38 +1076,40 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                       currentPasswordController,
                       selectedRole,
                       selectedGender,
-                      obscurePassword,
-                      obscureConfirmPassword,
-                      obscureCurrentPassword,
-                      nameError,
-                      emailError,
-                      passwordError,
-                      confirmPasswordError,
-                      ageError,
-                      phoneNumberError,
+                      obscurePasswordNotifier,
+                      obscureConfirmPasswordNotifier,
+                      obscureCurrentPasswordNotifier,
+                      nameErrorNotifier,
+                      emailErrorNotifier,
+                      passwordErrorNotifier,
+                      confirmPasswordErrorNotifier,
+                      ageErrorNotifier,
+                      phoneNumberErrorNotifier,
                       selectedImageBase64Notifier,
                       selectedImageFileTypeNotifier,
+                      keyboardHeightNotifier,
                       (role) => selectedRole = role,
                       (gender) => selectedGender = gender,
-                      (obscure) => obscurePassword = obscure,
-                      (obscure) => obscureConfirmPassword = obscure,
-                      (obscure) => obscureCurrentPassword = obscure,
+                      (obscure) => obscurePasswordNotifier.value = obscure,
+                      (obscure) => obscureConfirmPasswordNotifier.value = obscure,
+                      (obscure) => obscureCurrentPasswordNotifier.value = obscure,
                       (errors) {
-                        nameError = errors['name'];
-                        emailError = errors['email'];
-                        passwordError = errors['password'];
-                        confirmPasswordError = errors['confirmPassword'];
-                        ageError = errors['age'];
-                        phoneNumberError = errors['phoneNumber'];
+                        nameErrorNotifier.value = errors['name'];
+                        emailErrorNotifier.value = errors['email'];
+                        passwordErrorNotifier.value = errors['password'];
+                        confirmPasswordErrorNotifier.value = errors['confirmPassword'];
+                        ageErrorNotifier.value = errors['age'];
+                        phoneNumberErrorNotifier.value = errors['phoneNumber'];
                       },
                       () => Navigator.pop(context),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -1095,6 +1121,8 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     ValueNotifier<String?> selectedImageFileTypeNotifier,
     ValueNotifier<bool> isPickingImageNotifier,
     ValueNotifier<bool> isImageUploadedNotifier,
+    ValueNotifier<bool?> faceDetectedNotifier,
+    ValueNotifier<bool> isDetectingFaceNotifier,
     VoidCallback onNext,
   ) {
     return SingleChildScrollView(
@@ -1135,26 +1163,21 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                       final cleanBase64 = imageData['base64']!.trim().replaceAll(RegExp(r'\s+'), '');
                       selectedImageBase64Notifier.value = cleanBase64;
                       selectedImageFileTypeNotifier.value = imageData['fileType'];
-                      isImageUploadedNotifier.value = true;
                       isPickingImageNotifier.value = false;
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Row(
-                              children: [
-                                Icon(Icons.check_circle, color: Colors.white, size: 20),
-                                SizedBox(width: 12),
-                                Expanded(
-                                  child: Text('Image uploaded successfully!'),
-                                ),
-                              ],
-                            ),
-                            backgroundColor: Colors.green,
-                            behavior: SnackBarBehavior.floating,
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      }
+                      
+                      // Reset face detection status
+                      faceDetectedNotifier.value = null;
+                      
+                      // Detect face in image
+                      await _detectFaceInImage(
+                        context,
+                        cleanBase64,
+                        faceDetectedNotifier,
+                        isDetectingFaceNotifier,
+                      );
+                      
+                      // Only mark as uploaded if face is detected
+                      isImageUploadedNotifier.value = faceDetectedNotifier.value == true;
                     } else {
                       isPickingImageNotifier.value = false;
                       isImageUploadedNotifier.value = false;
@@ -1211,6 +1234,102 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
             ),
           ),
           const SizedBox(height: 24),
+          // Face Detection Status
+          ValueListenableBuilder<bool?>(
+            valueListenable: faceDetectedNotifier,
+            builder: (context, faceDetected, _) => ValueListenableBuilder<bool>(
+              valueListenable: isDetectingFaceNotifier,
+              builder: (context, isDetectingFace, _) {
+                if (selectedImageBase64Notifier.value == null) {
+                  return const SizedBox.shrink();
+                }
+                if (isDetectingFace) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.blue[200]!),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue[700]!),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Detecting face...',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.blue,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                if (faceDetected == true) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.green[200]!),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green[700], size: 20),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Face detected',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.green,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                if (faceDetected == false) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange[200]!),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.warning_amber_rounded, color: Colors.orange[700], size: 20),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'No face detected',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.orange,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+          const SizedBox(height: 16),
           // Preview and Remove buttons
           ValueListenableBuilder<String?>(
             valueListenable: selectedImageBase64Notifier,
@@ -1242,6 +1361,8 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                         selectedImageBase64Notifier.value = null;
                         selectedImageFileTypeNotifier.value = null;
                         isImageUploadedNotifier.value = false;
+                        faceDetectedNotifier.value = null;
+                        isDetectingFaceNotifier.value = false;
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red[50],
@@ -1296,6 +1417,81 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     );
   }
 
+  // Detect face in image
+  Future<void> _detectFaceInImage(
+    BuildContext context,
+    String imageBase64,
+    ValueNotifier<bool?> faceDetectedNotifier,
+    ValueNotifier<bool> isDetectingFaceNotifier,
+  ) async {
+    isDetectingFaceNotifier.value = true;
+    faceDetectedNotifier.value = null;
+    
+    try {
+      // Initialize face service if not already initialized
+      await _faceService.initialize();
+      
+      // Decode base64 image
+      final imageBytes = base64Decode(imageBase64);
+      
+      // Save image to temporary file, then use file path for detection (more reliable)
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File('${tempDir.path}/face_detection_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      await tempFile.writeAsBytes(imageBytes);
+      
+      // Create InputImage using file path (more reliable method)
+      final inputImage = InputImage.fromFilePath(tempFile.path);
+      
+      final faces = await _faceService.detectFaces(inputImage);
+      
+      // Clean up temporary file
+      try {
+        await tempFile.delete();
+      } catch (e) {
+        debugPrint('Failed to delete temp file: $e');
+      }
+      
+      if (context.mounted) {
+        faceDetectedNotifier.value = faces.isNotEmpty;
+        isDetectingFaceNotifier.value = false;
+        
+        if (faces.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No face detected. Please take another photo with your face clearly visible.'),
+              backgroundColor: Colors.orange,
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Face detected! ${faces.length} face(s) found.'),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        faceDetectedNotifier.value = false;
+        isDetectingFaceNotifier.value = false;
+        debugPrint('Error detecting face: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error detecting face: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
   // Helper method to build preview image
   Widget _buildPreviewImage(String base64String) {
     try {
@@ -1343,17 +1539,18 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     TextEditingController currentPasswordController,
     String selectedRole,
     String? selectedGender,
-    bool obscurePassword,
-    bool obscureConfirmPassword,
-    bool obscureCurrentPassword,
-    String? nameError,
-    String? emailError,
-    String? passwordError,
-    String? confirmPasswordError,
-    String? ageError,
-    String? phoneNumberError,
+    ValueNotifier<bool> obscurePasswordNotifier,
+    ValueNotifier<bool> obscureConfirmPasswordNotifier,
+    ValueNotifier<bool> obscureCurrentPasswordNotifier,
+    ValueNotifier<String?> nameErrorNotifier,
+    ValueNotifier<String?> emailErrorNotifier,
+    ValueNotifier<String?> passwordErrorNotifier,
+    ValueNotifier<String?> confirmPasswordErrorNotifier,
+    ValueNotifier<String?> ageErrorNotifier,
+    ValueNotifier<String?> phoneNumberErrorNotifier,
     ValueNotifier<String?> selectedImageBase64Notifier,
     ValueNotifier<String?> selectedImageFileTypeNotifier,
+    ValueNotifier<double> keyboardHeightNotifier,
     Function(String) onRoleChanged,
     Function(String?) onGenderChanged,
     Function(bool) onObscurePasswordChanged,
@@ -1362,15 +1559,19 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     Function(Map<String, String?>) onErrorsChanged,
     VoidCallback onCancel,
   ) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Container: All Information
-          Container(
-            padding: const EdgeInsets.all(20),
+    return Column(
+      children: [
+        // Scrollable content
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Container: All Information
+                Container(
+                  padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.grey[50],
               borderRadius: BorderRadius.circular(12),
@@ -1393,211 +1594,249 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
                 
                 // Full Name Field
-                TextField(
-                  controller: nameController,
-                  onChanged: (value) {
-                    if (nameError != null) {
-                      setDialogState(() => nameError = null);
-                    }
-                  },
-                  decoration: InputDecoration(
-                    labelText: 'Full Name *',
-                    hintText: 'Enter full name',
-                    errorText: nameError,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: nameError != null ? Colors.red : Colors.grey),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: nameError != null ? Colors.red : Colors.grey),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: nameError != null ? Colors.red : Colors.blue, width: 2),
-                    ),
-                    errorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.red, width: 2),
-                    ),
-                    focusedErrorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.red, width: 2),
-                    ),
-                    prefixIcon: Icon(Icons.person_outline, color: nameError != null ? Colors.red : Colors.grey),
-                    filled: true,
-                    fillColor: nameError != null ? Colors.red[50] : Colors.grey[50],
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 16,
-                    ),
+                RepaintBoundary(
+                  child: ValueListenableBuilder<String?>(
+                    valueListenable: nameErrorNotifier,
+                    builder: (context, nameError, _) {
+                      final hasError = nameError != null;
+                      return TextField(
+                        controller: nameController,
+                        onChanged: (value) {
+                          if (nameError != null) {
+                            nameErrorNotifier.value = null;
+                          }
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Full Name *',
+                          hintText: 'Enter full name',
+                          errorText: nameError,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.red, width: 2),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.red, width: 2),
+                          ),
+                          prefixIcon: Icon(Icons.person_outline, color: hasError ? Colors.red : Colors.grey),
+                          filled: true,
+                          fillColor: hasError ? Colors.red[50] : Colors.grey[50],
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                        textCapitalization: TextCapitalization.words,
+                      );
+                    },
                   ),
-                  textCapitalization: TextCapitalization.words,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 
                 // Email Field
-                TextField(
-                  controller: emailController,
-                  onChanged: (value) {
-                    if (emailError != null) {
-                      setDialogState(() => emailError = null);
-                    }
-                  },
-                  decoration: InputDecoration(
-                    labelText: 'Email Address *',
-                    hintText: 'example@email.com',
-                    errorText: emailError,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: emailError != null ? Colors.red : Colors.grey),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: emailError != null ? Colors.red : Colors.grey),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: emailError != null ? Colors.red : Colors.blue, width: 2),
-                    ),
-                    errorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.red, width: 2),
-                    ),
-                    focusedErrorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.red, width: 2),
-                    ),
-                    prefixIcon: Icon(Icons.email_outlined, color: emailError != null ? Colors.red : Colors.grey),
-                    filled: true,
-                    fillColor: emailError != null ? Colors.red[50] : Colors.grey[50],
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 16,
-                    ),
+                RepaintBoundary(
+                  child: ValueListenableBuilder<String?>(
+                    valueListenable: emailErrorNotifier,
+                    builder: (context, emailError, _) {
+                      final hasError = emailError != null;
+                      return TextField(
+                        controller: emailController,
+                        onChanged: (value) {
+                          if (emailError != null) {
+                            emailErrorNotifier.value = null;
+                          }
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Email Address *',
+                          hintText: 'example@email.com',
+                          errorText: emailError,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.red, width: 2),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.red, width: 2),
+                          ),
+                          prefixIcon: Icon(Icons.email_outlined, color: hasError ? Colors.red : Colors.grey),
+                          filled: true,
+                          fillColor: hasError ? Colors.red[50] : Colors.grey[50],
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                        keyboardType: TextInputType.emailAddress,
+                        textCapitalization: TextCapitalization.none,
+                      );
+                    },
                   ),
-                  keyboardType: TextInputType.emailAddress,
-                  textCapitalization: TextCapitalization.none,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 
                 // Password Field
-                TextField(
-                  controller: passwordController,
-                  onChanged: (value) {
-                    if (passwordError != null) {
-                      setDialogState(() => passwordError = null);
-                    }
-                    if (confirmPasswordError != null && value == confirmPasswordController.text) {
-                      setDialogState(() => confirmPasswordError = null);
-                    }
-                  },
-                  decoration: InputDecoration(
-                    labelText: 'Password *',
-                    hintText: 'Minimum 6 characters',
-                    errorText: passwordError,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: passwordError != null ? Colors.red : Colors.grey),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: passwordError != null ? Colors.red : Colors.grey),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: passwordError != null ? Colors.red : Colors.blue, width: 2),
-                    ),
-                    errorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.red, width: 2),
-                    ),
-                    focusedErrorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.red, width: 2),
-                    ),
-                    prefixIcon: Icon(Icons.lock_outline, color: passwordError != null ? Colors.red : Colors.grey),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                        color: passwordError != null ? Colors.red : Colors.grey[600],
-                      ),
-                      onPressed: () {
-                        setDialogState(() {
-                          obscurePassword = !obscurePassword;
-                          onObscurePasswordChanged(obscurePassword);
-                        });
-                      },
-                    ),
-                    filled: true,
-                    fillColor: passwordError != null ? Colors.red[50] : Colors.grey[50],
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 16,
-                    ),
+                RepaintBoundary(
+                  child: ValueListenableBuilder<String?>(
+                    valueListenable: passwordErrorNotifier,
+                    builder: (context, passwordError, _) {
+                      final hasError = passwordError != null;
+                      return TextField(
+                        controller: passwordController,
+                        onChanged: (value) {
+                          if (passwordError != null) {
+                            passwordErrorNotifier.value = null;
+                          }
+                          if (confirmPasswordErrorNotifier.value != null && value == confirmPasswordController.text) {
+                            confirmPasswordErrorNotifier.value = null;
+                          }
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Password *',
+                          hintText: 'Minimum 6 characters',
+                          errorText: passwordError,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.red, width: 2),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.red, width: 2),
+                          ),
+                          prefixIcon: Icon(Icons.lock_outline, color: hasError ? Colors.red : Colors.grey),
+                          suffixIcon: ValueListenableBuilder<bool>(
+                            valueListenable: obscurePasswordNotifier,
+                            builder: (context, obscurePassword, _) {
+                              return IconButton(
+                                icon: Icon(
+                                  obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                  color: hasError ? Colors.red : Colors.grey[600],
+                                ),
+                                onPressed: () {
+                                  obscurePasswordNotifier.value = !obscurePassword;
+                                  onObscurePasswordChanged(obscurePasswordNotifier.value);
+                                },
+                              );
+                            },
+                          ),
+                          filled: true,
+                          fillColor: hasError ? Colors.red[50] : Colors.grey[50],
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                        obscureText: obscurePasswordNotifier.value,
+                      );
+                    },
                   ),
-                  obscureText: obscurePassword,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 
                 // Confirm Password Field
-                TextField(
-                  controller: confirmPasswordController,
-                  onChanged: (value) {
-                    if (confirmPasswordError != null && value == passwordController.text) {
-                      setDialogState(() => confirmPasswordError = null);
-                    }
-                  },
-                  decoration: InputDecoration(
-                    labelText: 'Confirm Password *',
-                    hintText: 'Re-enter password',
-                    errorText: confirmPasswordError,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: confirmPasswordError != null ? Colors.red : Colors.grey),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: confirmPasswordError != null ? Colors.red : Colors.grey),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: confirmPasswordError != null ? Colors.red : Colors.blue, width: 2),
-                    ),
-                    errorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.red, width: 2),
-                    ),
-                    focusedErrorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.red, width: 2),
-                    ),
-                    prefixIcon: Icon(Icons.lock_outline, color: confirmPasswordError != null ? Colors.red : Colors.grey),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        obscureConfirmPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                        color: confirmPasswordError != null ? Colors.red : Colors.grey[600],
-                      ),
-                      onPressed: () {
-                        setDialogState(() {
-                          obscureConfirmPassword = !obscureConfirmPassword;
-                          onObscureConfirmPasswordChanged(obscureConfirmPassword);
-                        });
-                      },
-                    ),
-                    filled: true,
-                    fillColor: confirmPasswordError != null ? Colors.red[50] : Colors.grey[50],
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 16,
-                    ),
+                RepaintBoundary(
+                  child: ValueListenableBuilder<String?>(
+                    valueListenable: confirmPasswordErrorNotifier,
+                    builder: (context, confirmPasswordError, _) {
+                      final hasError = confirmPasswordError != null;
+                      return TextField(
+                        controller: confirmPasswordController,
+                        onChanged: (value) {
+                          if (confirmPasswordError != null && value == passwordController.text) {
+                            confirmPasswordErrorNotifier.value = null;
+                          }
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Confirm Password *',
+                          hintText: 'Re-enter password',
+                          errorText: confirmPasswordError,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.red, width: 2),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.red, width: 2),
+                          ),
+                          prefixIcon: Icon(Icons.lock_outline, color: hasError ? Colors.red : Colors.grey),
+                          suffixIcon: ValueListenableBuilder<bool>(
+                            valueListenable: obscureConfirmPasswordNotifier,
+                            builder: (context, obscureConfirmPassword, _) {
+                              return IconButton(
+                                icon: Icon(
+                                  obscureConfirmPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                  color: hasError ? Colors.red : Colors.grey[600],
+                                ),
+                                onPressed: () {
+                                  obscureConfirmPasswordNotifier.value = !obscureConfirmPassword;
+                                  onObscureConfirmPasswordChanged(obscureConfirmPasswordNotifier.value);
+                                },
+                              );
+                            },
+                          ),
+                          filled: true,
+                          fillColor: hasError ? Colors.red[50] : Colors.grey[50],
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                        obscureText: obscureConfirmPasswordNotifier.value,
+                      );
+                    },
                   ),
-                  obscureText: obscureConfirmPassword,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 
                 // Location Field
                 LocationAutocompleteField(
@@ -1612,102 +1851,118 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                     }
                   },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 
                 // Age Field
-                TextField(
-                  controller: ageController,
-                  onChanged: (value) {
-                    if (ageError != null) {
-                      setDialogState(() => ageError = null);
-                    }
-                  },
-                  decoration: InputDecoration(
-                    labelText: 'Age (Optional)',
-                    hintText: 'Enter age (18-80)',
-                    errorText: ageError,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: ageError != null ? Colors.red : Colors.grey),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: ageError != null ? Colors.red : Colors.grey),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: ageError != null ? Colors.red : Colors.blue, width: 2),
-                    ),
-                    errorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.red, width: 2),
-                    ),
-                    focusedErrorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.red, width: 2),
-                    ),
-                    prefixIcon: Icon(Icons.cake_outlined, color: ageError != null ? Colors.red : Colors.grey),
-                    filled: true,
-                    fillColor: ageError != null ? Colors.red[50] : Colors.grey[50],
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 16,
-                    ),
+                RepaintBoundary(
+                  child: ValueListenableBuilder<String?>(
+                    valueListenable: ageErrorNotifier,
+                    builder: (context, ageError, _) {
+                      final hasError = ageError != null;
+                      return TextField(
+                        controller: ageController,
+                        onChanged: (value) {
+                          if (ageError != null) {
+                            ageErrorNotifier.value = null;
+                          }
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Age (Optional)',
+                          hintText: 'Enter age (18-80)',
+                          errorText: ageError,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.red, width: 2),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.red, width: 2),
+                          ),
+                          prefixIcon: Icon(Icons.cake_outlined, color: hasError ? Colors.red : Colors.grey),
+                          filled: true,
+                          fillColor: hasError ? Colors.red[50] : Colors.grey[50],
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                        keyboardType: TextInputType.number,
+                      );
+                    },
                   ),
-                  keyboardType: TextInputType.number,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 
                 // Phone Number Field
-                TextField(
-                  controller: phoneNumberController,
-                  onChanged: (value) {
-                    if (phoneNumberError != null) {
-                      final digitsOnly = value.replaceAll(RegExp(r'[^\d]'), '');
-                      if (digitsOnly.length == 10) {
-                        setDialogState(() => phoneNumberError = null);
-                      }
-                    }
-                  },
-                  inputFormatters: [
-                    PhoneNumberFormatter(),
-                  ],
-                  decoration: InputDecoration(
-                    labelText: 'Phone Number (Optional)',
-                    hintText: 'XXX-XXX XXXX',
-                    errorText: phoneNumberError,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: phoneNumberError != null ? Colors.red : Colors.grey),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: phoneNumberError != null ? Colors.red : Colors.grey),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: phoneNumberError != null ? Colors.red : Colors.blue, width: 2),
-                    ),
-                    errorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.red, width: 2),
-                    ),
-                    focusedErrorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.red, width: 2),
-                    ),
-                    prefixIcon: Icon(Icons.phone_outlined, color: phoneNumberError != null ? Colors.red : Colors.grey),
-                    filled: true,
-                    fillColor: phoneNumberError != null ? Colors.red[50] : Colors.grey[50],
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 16,
-                    ),
+                RepaintBoundary(
+                  child: ValueListenableBuilder<String?>(
+                    valueListenable: phoneNumberErrorNotifier,
+                    builder: (context, phoneNumberError, _) {
+                      final hasError = phoneNumberError != null;
+                      return TextField(
+                        controller: phoneNumberController,
+                        onChanged: (value) {
+                          if (phoneNumberError != null) {
+                            final digitsOnly = value.replaceAll(RegExp(r'[^\d]'), '');
+                            if (digitsOnly.length == 10) {
+                              phoneNumberErrorNotifier.value = null;
+                            }
+                          }
+                        },
+                        inputFormatters: [
+                          PhoneNumberFormatter(),
+                        ],
+                        decoration: InputDecoration(
+                          labelText: 'Phone Number (Optional)',
+                          hintText: 'XXX-XXX XXXX',
+                          errorText: phoneNumberError,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.red, width: 2),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.red, width: 2),
+                          ),
+                          prefixIcon: Icon(Icons.phone_outlined, color: hasError ? Colors.red : Colors.grey),
+                          filled: true,
+                          fillColor: hasError ? Colors.red[50] : Colors.grey[50],
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                        keyboardType: TextInputType.phone,
+                        maxLength: 13,
+                      );
+                    },
                   ),
-                  keyboardType: TextInputType.phone,
-                  maxLength: 13,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 
                 // Gender Field
                 const Text(
@@ -1761,7 +2016,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 
                 // Role Field
                 const Text(
@@ -1828,11 +2083,11 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           
           // Current Password Field (to stay logged in)
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.orange[50],
               borderRadius: BorderRadius.circular(12),
@@ -1855,16 +2110,16 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Text(
                   'Enter your current password to stay logged in after creating the new admin. If left empty, you will need to log in again.',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 11,
                     color: Colors.orange[900],
-                    height: 1.4,
+                    height: 1.3,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 TextField(
                   controller: currentPasswordController,
                   decoration: InputDecoration(
@@ -1883,35 +2138,38 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                       borderSide: BorderSide(color: Colors.orange[700]!, width: 2),
                     ),
                     prefixIcon: Icon(Icons.lock_outline, color: Colors.orange[700]),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        obscureCurrentPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                        color: Colors.grey[600],
-                      ),
-                      onPressed: () {
-                        setDialogState(() {
-                          obscureCurrentPassword = !obscureCurrentPassword;
-                          onObscureCurrentPasswordChanged(obscureCurrentPassword);
-                        });
+                    suffixIcon: ValueListenableBuilder<bool>(
+                      valueListenable: obscureCurrentPasswordNotifier,
+                      builder: (context, obscureCurrentPassword, _) {
+                        return IconButton(
+                          icon: Icon(
+                            obscureCurrentPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                            color: Colors.grey[600],
+                          ),
+                          onPressed: () {
+                            obscureCurrentPasswordNotifier.value = !obscureCurrentPassword;
+                            onObscureCurrentPasswordChanged(obscureCurrentPasswordNotifier.value);
+                          },
+                        );
                       },
                     ),
                     filled: true,
                     fillColor: Colors.white,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16,
-                      vertical: 16,
+                      vertical: 12,
                     ),
                   ),
-                  obscureText: obscureCurrentPassword,
+                  obscureText: obscureCurrentPasswordNotifier.value,
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 12),
           
           // Info Box
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: Colors.blue[50],
               borderRadius: BorderRadius.circular(12),
@@ -1920,49 +2178,75 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
+                Icon(Icons.info_outline, color: Colors.blue[700], size: 18),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'The new admin will be able to log in immediately with the provided credentials.',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       color: Colors.blue[900],
-                      height: 1.4,
+                      height: 1.3,
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 24),
-          
-          // Footer with Actions
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: onCancel,
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+          const SizedBox(height: 12),
+              ],
+            ),
+          ),
+        ),
+        
+        // Fixed Footer with Actions (always visible above keyboard)
+        SafeArea(
+          top: false,
+          child: ValueListenableBuilder<double>(
+            valueListenable: keyboardHeightNotifier,
+            builder: (context, keyboardHeight, _) {
+              return Container(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 12,
+                  bottom: keyboardHeight > 0 ? keyboardHeight + 8 : 12,
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: ElevatedButton.icon(
-                  onPressed: () async {
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 4,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: onCancel,
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
                     final name = nameController.text.trim();
                     final email = emailController.text.trim();
                     final password = passwordController.text;
@@ -2021,17 +2305,13 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                       }
                     }
 
-                    // Update error states
-                    setDialogState(() {
-                      onErrorsChanged({
-                        'name': nameErr,
-                        'email': emailErr,
-                        'password': passwordErr,
-                        'confirmPassword': confirmPasswordErr,
-                        'age': ageErr,
-                        'phoneNumber': phoneNumberErr,
-                      });
-                    });
+                    // Update error states using ValueNotifier (no need for setDialogState)
+                    nameErrorNotifier.value = nameErr;
+                    emailErrorNotifier.value = emailErr;
+                    passwordErrorNotifier.value = passwordErr;
+                    confirmPasswordErrorNotifier.value = confirmPasswordErr;
+                    ageErrorNotifier.value = ageErr;
+                    phoneNumberErrorNotifier.value = phoneNumberErr;
 
                     if (hasError) {
                       return;
@@ -2141,31 +2421,33 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                         }
                       }
                     }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryDark,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryDark,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                        icon: const Icon(Icons.person_add, size: 20),
+                        label: const Text(
+                          'Complete',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                     ),
-                    elevation: 0,
-                  ),
-                  icon: const Icon(Icons.person_add, size: 20),
-                  label: const Text(
-                    'Complete',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  ],
                 ),
-              ),
-            ],
+              );
+            },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
-
 }

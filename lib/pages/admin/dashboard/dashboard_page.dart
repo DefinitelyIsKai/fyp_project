@@ -63,11 +63,14 @@ class _DashboardPageState extends State<DashboardPage> {
     _setupRealtimeUpdates();
   }
 
+  // Setup realtime stream subscriptions for dashboard stats
+  // Staff role doesn't see reports count, so skip that subscription
   void _setupRealtimeUpdates() {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentRole = authService.currentAdmin?.role.toLowerCase() ?? '';
     final isStaff = currentRole == 'staff';
     
+    // Only subscribe to reports if not staff
     if (!isStaff) {
       _reportsSubscription = _dashboardService.streamUnresolvedReportsCount().listen(
         (count) {
@@ -81,7 +84,7 @@ class _DashboardPageState extends State<DashboardPage> {
           debugPrint('Error listening to reports stream: $error');
           if (mounted) {
             setState(() {
-              _unresolvedReports = 0; // Set to 0 on error
+              _unresolvedReports = 0; // Reset to 0 on error
             });
           }
           _reportsSubscription?.cancel();
@@ -90,7 +93,7 @@ class _DashboardPageState extends State<DashboardPage> {
       );
     }
 
-    // Listen to real-time updates for pending posts
+    // Always listen to pending posts count (all roles need this)
     _pendingPostsSubscription = _dashboardService.streamPendingPostsCount().listen(
       (count) {
         if (mounted) {
@@ -103,7 +106,7 @@ class _DashboardPageState extends State<DashboardPage> {
         debugPrint('Error listening to pending posts stream: $error');
         if (mounted) {
           setState(() {
-            _pendingPosts = 0; // Set to 0 on error
+            _pendingPosts = 0; // Reset to 0 on error
           });
         }
         _pendingPostsSubscription?.cancel();

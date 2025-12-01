@@ -448,6 +448,8 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
     return nonAdminWallets;
   }
 
+  // Filter out admin wallets and sort by user name
+  // Only show wallets for regular users (jobseekers and recruiters)
   Future<List<QueryDocumentSnapshot>> _filterNonAdminWallets(List<QueryDocumentSnapshot> wallets) async {
     final walletUserPairs = <Map<String, dynamic>>[];
     
@@ -461,7 +463,7 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
           final userData = userDoc.data();
           final role = userData?['role'] as String?;
           
-          // Exclude admin roles (manager, hr, staff)
+          // Skip admin roles - only show regular user wallets
           if (role != 'manager' && role != 'hr' && role != 'staff') {
             final userName = userData?['fullName'] as String? ?? 'Unknown User';
             walletUserPairs.add({
@@ -471,16 +473,16 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
           }
         }
       } catch (e) {
-        // Error checking user role - continue with next wallet
+        // Skip this wallet if we can't check the role
       }
     }
     
-    // Sort by user name alphabetically
+    // Sort alphabetically by name for easier browsing
     walletUserPairs.sort((a, b) => 
       (a['userName'] as String).toLowerCase().compareTo((b['userName'] as String).toLowerCase())
     );
     
-    // Return only the wallets in sorted order
+    // Extract just the wallet docs in sorted order
     return walletUserPairs.map((pair) => pair['wallet'] as QueryDocumentSnapshot).toList();
   }
 
@@ -1028,6 +1030,8 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
     return DateFormat('dd MMM yyyy').format(date);
   }
 
+  // Add credit to user wallet using firestore transaction
+  // Also creates transaction record and sends notification
   Future<void> _addCredit(String userId, double amount, String reason, String userName) async {
     // Show loading dialog
     if (!mounted) return;
@@ -1087,7 +1091,7 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
       final transactionsRef = walletRef.collection('transactions');
       final txnRef = transactionsRef.doc();
       
-      // Ensure wallet exists first
+      // Create wallet if it doesn't exist yet
       final walletDoc = await walletRef.get();
       if (!walletDoc.exists) {
         await walletRef.set({
@@ -1098,7 +1102,8 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
         });
       }
 
-      // Use Firestore transaction to atomically update balance and create transaction record
+      // Use transaction to ensure balance update and transaction record are atomic
+      // Prevents race conditions if multiple credits added at same time
       await FirebaseFirestore.instance.runTransaction((tx) async {
         final snap = await tx.get(walletRef);
         final data = snap.data() ?? <String, dynamic>{'balance': 0};
@@ -1112,7 +1117,7 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
           'updatedAt': FieldValue.serverTimestamp(),
         });
         
-        // Create transaction record in subcollection
+        // Create transaction record in subcollection for history
         tx.set(txnRef, {
           'id': txnRef.id,
           'userId': userId,

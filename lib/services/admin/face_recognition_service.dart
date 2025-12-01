@@ -203,6 +203,16 @@ class FaceRecognitionService {
     img.Image capturedImage,
     Face? capturedFace,
   ) async {
+    print('========== compareFaces Called ==========');
+    print('Profile image base64 length: ${profileImageBase64.length}');
+    print('Captured image size: ${capturedImage.width}x${capturedImage.height}');
+    print('Captured face provided: ${capturedFace != null}');
+    if (capturedFace != null) {
+      final bbox = capturedFace.boundingBox;
+      print('Face bounding box: left=${bbox.left}, top=${bbox.top}, right=${bbox.right}, bottom=${bbox.bottom}');
+      print('Face size: ${bbox.width}x${bbox.height}');
+    }
+    print('Time: ${DateTime.now()}');
     try {
       print('Starting face comparison, all processing will be executed in background thread...');
       
@@ -258,7 +268,11 @@ class FaceRecognitionService {
         }
         
         final similarity = (result['similarity'] as num).toDouble();
+        print('========== compareFaces Result ==========');
         print('Final similarity score: $similarity');
+        print('Similarity percentage: ${(similarity * 100).toStringAsFixed(2)}%');
+        print('Threshold check: ${similarity >= 0.96 ? "PASS" : "FAIL"} (threshold: 0.96)');
+        print('=========================================');
         return similarity;
       } finally {
         // Explicitly clean up all temporary data to avoid closure accumulation
@@ -413,12 +427,15 @@ class FaceRecognitionService {
       }
       
       // 5. Calculate Hamming distance and similarity
+      print('Calculating Hamming distance between hashes...');
       final hammingDist = _hammingDistanceStatic(profileHash, capturedHash);
-      print('Hamming distance: $hammingDist (max 256)');
+      print('Hamming distance: $hammingDist / 256');
+      print('Bit match percentage: ${((256 - hammingDist) / 256 * 100).toStringAsFixed(2)}%');
       
       // Calculate similarity: 1.0 - (distance / max_distance)
       // Using 256 as max distance since we now use 16x16 (256 bits) instead of 8x8 (64 bits)
       double similarity = (1.0 - (hammingDist / 256.0)).clamp(0.0, 1.0);
+      print('Raw similarity calculation: 1.0 - ($hammingDist / 256.0) = $similarity');
         
       // Additional strict validation: Maximum allowed Hamming distance for acceptance
       // For 256-bit hash, we require Hamming distance <= 12 (extremely strict - ~95% bit match required)

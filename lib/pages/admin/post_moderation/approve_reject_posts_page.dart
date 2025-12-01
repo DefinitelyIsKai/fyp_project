@@ -314,6 +314,8 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
     return _userNameCache[ownerId] ?? 'Loading...';
   }
 
+  // Throttle stream updates to avoid too many rebuilds
+  // Only update UI if posts actually changed (check first/last/middle items)
   void _handlePostsUpdate(List<JobPostModel> posts) {
     final nonDraftPosts = posts.where((p) => p.isDraft != true).toList();
     
@@ -326,14 +328,17 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
       final postsToProcess = _pendingPostsUpdate!;
       _pendingPostsUpdate = null;
       
+      // Fetch user names in background
       _batchFetchUserNames(postsToProcess);
       
       if (!mounted) return;
       
+      // Quick check if data actually changed - compare length, first, last, and some middle items
       bool hasChanged = false;
       if (_allPosts.length != postsToProcess.length) {
         hasChanged = true;
       } else if (_allPosts.isNotEmpty && postsToProcess.isNotEmpty) {
+        // Check first and last items first
         if (_allPosts.first.id != postsToProcess.first.id ||
             _allPosts.last.id != postsToProcess.last.id) {
           hasChanged = true;
@@ -360,6 +365,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
       if (hasChanged) {
         setState(() {
           _allPosts = postsToProcess;
+          // Split into status categories and sort by date (newest first)
           _pendingPosts = _allPosts.where((p) => p.status == 'pending').toList()
             ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
           _activePosts = _allPosts.where((p) => p.status == 'active').toList()
@@ -374,6 +380,8 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
     });
   }
   
+  // Fetch user names in batches to avoid hitting firestore limits
+  // Only fetch IDs that aren't already cached, max 20 at a time
   Future<void> _batchFetchUserNames(List<JobPostModel> posts) async {
     final uncachedIds = <String>{};
     for (final post in posts) {
@@ -387,9 +395,11 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
     
     if (uncachedIds.isEmpty) return;
     
+    // Limit to 20 to avoid too many requests
     final idsToFetch = uncachedIds.take(20).toList();
     
     try {
+      // Process in batches of 10 with small delay between batches
       for (var i = 0; i < idsToFetch.length; i += 10) {
         final batch = idsToFetch.skip(i).take(10);
         final futures = batch.map((id) async {

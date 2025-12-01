@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:fyp_project/services/admin/post_analytics_service.dart';
+import 'package:fyp_project/widgets/admin/cards/content_analytics_budget_card.dart';
+import 'package:fyp_project/widgets/admin/dialogs/date_range_picker_dialog.dart' as custom;
+import 'package:fyp_project/widgets/admin/common/content_analytics_quick_stats.dart';
+import 'package:fyp_project/widgets/admin/common/content_analytics_date_range_selector.dart';
+import 'package:fyp_project/widgets/admin/common/content_analytics_comparison_widgets.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -72,10 +77,10 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
   }
 
   Future<void> _selectDateTimeRange() async {
-    final result = await showDialog<Map<String, DateTime>>(
-      context: context,
-      builder: (context) =>
-          _DateTimeRangePickerDialog(startDate: _startDate, endDate: _endDate),
+    final result = await custom.DateRangePickerDialog.show(
+      context,
+      startDate: _startDate,
+      endDate: _endDate,
     );
 
     if (result != null && mounted) {
@@ -1033,66 +1038,9 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           ),
 
           // Date Time Range Selector
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  spreadRadius: 1,
-                  blurRadius: 3,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: _selectDateTimeRange,
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.calendar_today, color: Colors.blue[700]),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Date Range',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _getDateRangeText(),
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
-                          ),
-                          Icon(Icons.arrow_drop_down, color: Colors.grey[600]),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          ContentAnalyticsDateRangeSelector(
+            dateRangeText: _getDateRangeText(),
+            onTap: _selectDateTimeRange,
           ),
 
           // Content
@@ -1107,11 +1055,14 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Quick Stats
-                        _buildQuickStats(),
+                        ContentAnalyticsQuickStats(analytics: _analytics!),
                         const SizedBox(height: 20),
 
                         // Period Comparison
-                        _buildPeriodComparison(),
+                        ContentAnalyticsPeriodComparison(
+                          totalPosts: _analytics!['totalPosts'] as int,
+                          postsInPeriod: _analytics!['postsInPeriod'] as int,
+                        ),
                         const SizedBox(height: 20),
 
                         // Daily Trend Chart
@@ -1123,7 +1074,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                         const SizedBox(height: 20),
 
                         // Status Comparison
-                        _buildStatusComparison(),
+                        ContentAnalyticsStatusComparison(analytics: _analytics!),
                         const SizedBox(height: 20),
 
                         // Event Breakdown
@@ -1131,7 +1082,11 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                         const SizedBox(height: 20),
 
                         // Event Comparison
-                        _buildEventComparison(),
+                        ContentAnalyticsBreakdownComparison(
+                          title: 'Top Events: All Time vs Selected Period',
+                          allTime: _analytics!['eventBreakdown'] as Map<String, dynamic>? ?? {},
+                          period: _analytics!['eventBreakdownInPeriod'] as Map<String, dynamic>? ?? {},
+                        ),
                         const SizedBox(height: 20),
 
                         // Tags Breakdown
@@ -1139,7 +1094,11 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                         const SizedBox(height: 20),
 
                         // Tags Comparison
-                        _buildTagsComparison(),
+                        ContentAnalyticsBreakdownComparison(
+                          title: 'Top Tags: All Time vs Selected Period',
+                          allTime: _analytics!['tagsBreakdown'] as Map<String, dynamic>? ?? {},
+                          period: _analytics!['tagsBreakdownInPeriod'] as Map<String, dynamic>? ?? {},
+                        ),
                         const SizedBox(height: 20),
 
                         // Industry Breakdown
@@ -1147,7 +1106,12 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                         const SizedBox(height: 20),
 
                         // Industry Comparison
-                        _buildIndustryComparison(),
+                        ContentAnalyticsBreakdownComparison(
+                          title: 'Top Industries: All Time vs Selected Period',
+                          subtitle: 'Based on event field from posts collection',
+                          allTime: _analytics!['industryBreakdown'] as Map<String, dynamic>? ?? {},
+                          period: _analytics!['industryBreakdownInPeriod'] as Map<String, dynamic>? ?? {},
+                        ),
                         const SizedBox(height: 20),
 
                         // Job Type Breakdown
@@ -1155,7 +1119,12 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                         const SizedBox(height: 20),
 
                         // Job Type Comparison
-                        _buildJobTypeComparison(),
+                        ContentAnalyticsBreakdownComparison(
+                          title: 'Job Types: All Time vs Selected Period',
+                          allTime: _analytics!['jobTypeBreakdown'] as Map<String, dynamic>? ?? {},
+                          period: _analytics!['jobTypeBreakdownInPeriod'] as Map<String, dynamic>? ?? {},
+                          topCount: 10,
+                        ),
                         const SizedBox(height: 20),
 
                         // Location Breakdown
@@ -1163,7 +1132,11 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                         const SizedBox(height: 20),
 
                         // Location Comparison
-                        _buildLocationComparison(),
+                        ContentAnalyticsBreakdownComparison(
+                          title: 'Top Locations: All Time vs Selected Period',
+                          allTime: _analytics!['locationBreakdown'] as Map<String, dynamic>? ?? {},
+                          period: _analytics!['locationBreakdownInPeriod'] as Map<String, dynamic>? ?? {},
+                        ),
                         const SizedBox(height: 20),
 
                         // Budget Analysis
@@ -1185,158 +1158,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
     );
   }
 
-  Widget _buildQuickStats() {
-    final analytics = _analytics!;
-    return SizedBox(
-      height: 140,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.only(right: 50),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: MediaQuery.of(context).size.width * 0.45,
-                  child: _StatCard(
-                    title: 'Total Posts',
-                    value: analytics['totalPosts'].toString(),
-                    subtitle: 'All Time',
-                    icon: Icons.article,
-                    color: Colors.blue,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                SizedBox(
-                  width: MediaQuery.of(context).size.width * 0.45,
-                  child: _StatCard(
-                    title: 'In Period',
-                    value: analytics['postsInPeriod'].toString(),
-                    subtitle: 'Selected Range',
-                    icon: Icons.timeline,
-                    color: Colors.purple,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                SizedBox(
-                  width: MediaQuery.of(context).size.width * 0.45,
-                  child: _StatCard(
-                    title: 'Active',
-                    value: analytics['active'].toString(),
-                    subtitle: '${analytics['activeInPeriod']} in period',
-                    icon: Icons.check_circle,
-                    color: Colors.green,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                SizedBox(
-                  width: MediaQuery.of(context).size.width * 0.45,
-                  child: _StatCard(
-                    title: 'Pending',
-                    value: analytics['pending'].toString(),
-                    subtitle: '${analytics['pendingInPeriod']} in period',
-                    icon: Icons.pending,
-                    color: Colors.orange,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            right: 0,
-            top: 0,
-            bottom: 0,
-            child: IgnorePointer(
-              child: Container(
-                width: 50,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    colors: [
-                      Colors.white.withOpacity(0),
-                      Colors.white.withOpacity(0.8),
-                      Colors.white,
-                    ],
-                  ),
-                ),
-                child: Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.arrow_forward_ios,
-                        size: 16,
-                        color: Colors.grey[600],
-                      ),
-                      const SizedBox(width: 2),
-                      Text(
-                        'Scroll',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey[600],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPeriodComparison() {
-    final analytics = _analytics!;
-    final totalPosts = analytics['totalPosts'] as int;
-    final postsInPeriod = analytics['postsInPeriod'] as int;
-    final periodPercentage = totalPosts > 0
-        ? (postsInPeriod / totalPosts * 100)
-        : 0.0;
-
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Period Overview',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _ComparisonItem(
-                    label: 'Posts in Selected Period',
-                    value: postsInPeriod.toString(),
-                    percentage: periodPercentage,
-                    color: Colors.blue,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _ComparisonItem(
-                    label: 'Total Posts (All Time)',
-                    value: totalPosts.toString(),
-                    percentage: 100.0,
-                    color: Colors.grey,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildDailyTrendChart() {
     final analytics = _analytics!;
@@ -2161,7 +1982,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
               children: [
                 if (avgBudgetMin != null)
                   Expanded(
-                    child: _BudgetCard(
+                    child: ContentAnalyticsBudgetCard(
                       label: 'Average Min Budget',
                       value: 'RM ${avgBudgetMin.toStringAsFixed(2)}',
                       icon: Icons.arrow_downward,
@@ -2172,7 +1993,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                   const SizedBox(width: 16),
                 if (avgBudgetMax != null)
                   Expanded(
-                    child: _BudgetCard(
+                    child: ContentAnalyticsBudgetCard(
                       label: 'Average Max Budget',
                       value: 'RM ${avgBudgetMax.toStringAsFixed(2)}',
                       icon: Icons.arrow_upward,
@@ -2187,237 +2008,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
     );
   }
 
-  Widget _buildStatusComparison() {
-    final analytics = _analytics!;
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Status Distribution: All Time vs Selected Period',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            _buildComparisonHeader(),
-            _buildComparisonRow('Active', analytics['active'], analytics['activeInPeriod']),
-            _buildComparisonRow('Pending', analytics['pending'], analytics['pendingInPeriod']),
-            _buildComparisonRow('Completed', analytics['completed'], analytics['completedInPeriod']),
-            _buildComparisonRow('Rejected', analytics['rejected'], analytics['rejectedInPeriod']),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEventComparison() {
-    final analytics = _analytics!;
-    final allTime = analytics['eventBreakdown'] as Map<String, dynamic>? ?? {};
-    final period = analytics['eventBreakdownInPeriod'] as Map<String, dynamic>? ?? {};
-    
-    if (allTime.isEmpty && period.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    // Get top 5 from each
-    final allTimeTop = allTime.entries.toList()
-      ..sort((a, b) => (b.value as int).compareTo(a.value as int));
-    final periodTop = period.entries.toList()
-      ..sort((a, b) => (b.value as int).compareTo(a.value as int));
-
-    final allKeys = {...allTimeTop.take(5).map((e) => e.key), ...periodTop.take(5).map((e) => e.key)};
-
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Top Events: All Time vs Selected Period',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            _buildComparisonHeader(),
-            ...allKeys.take(5).map((key) => _buildComparisonRow(
-              key,
-              allTime[key] ?? 0,
-              period[key] ?? 0,
-            )),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTagsComparison() {
-    final analytics = _analytics!;
-    final allTime = analytics['tagsBreakdown'] as Map<String, dynamic>? ?? {};
-    final period = analytics['tagsBreakdownInPeriod'] as Map<String, dynamic>? ?? {};
-    
-    if (allTime.isEmpty && period.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    final allTimeTop = allTime.entries.toList()
-      ..sort((a, b) => (b.value as int).compareTo(a.value as int));
-    final periodTop = period.entries.toList()
-      ..sort((a, b) => (b.value as int).compareTo(a.value as int));
-
-    final allKeys = {...allTimeTop.take(5).map((e) => e.key), ...periodTop.take(5).map((e) => e.key)};
-
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Top Tags: All Time vs Selected Period',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            _buildComparisonHeader(),
-            ...allKeys.take(5).map((key) => _buildComparisonRow(
-              key,
-              allTime[key] ?? 0,
-              period[key] ?? 0,
-            )),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildIndustryComparison() {
-    final analytics = _analytics!;
-    final allTime = analytics['industryBreakdown'] as Map<String, dynamic>? ?? {};
-    final period = analytics['industryBreakdownInPeriod'] as Map<String, dynamic>? ?? {};
-    
-    if (allTime.isEmpty && period.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    final allTimeTop = allTime.entries.toList()
-      ..sort((a, b) => (b.value as int).compareTo(a.value as int));
-    final periodTop = period.entries.toList()
-      ..sort((a, b) => (b.value as int).compareTo(a.value as int));
-
-    final allKeys = {...allTimeTop.take(5).map((e) => e.key), ...periodTop.take(5).map((e) => e.key)};
-
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Top Industries: All Time vs Selected Period',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Based on event field from posts collection',
-              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 16),
-            _buildComparisonHeader(),
-            ...allKeys.take(5).map((key) => _buildComparisonRow(
-              key,
-              allTime[key] ?? 0,
-              period[key] ?? 0,
-            )),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildJobTypeComparison() {
-    final analytics = _analytics!;
-    final allTime = analytics['jobTypeBreakdown'] as Map<String, dynamic>? ?? {};
-    final period = analytics['jobTypeBreakdownInPeriod'] as Map<String, dynamic>? ?? {};
-    
-    if (allTime.isEmpty && period.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    final allKeys = {...allTime.keys, ...period.keys};
-
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Job Types: All Time vs Selected Period',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            _buildComparisonHeader(),
-            ...allKeys.map((key) => _buildComparisonRow(
-              key,
-              allTime[key] ?? 0,
-              period[key] ?? 0,
-            )),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLocationComparison() {
-    final analytics = _analytics!;
-    final allTime = analytics['locationBreakdown'] as Map<String, dynamic>? ?? {};
-    final period = analytics['locationBreakdownInPeriod'] as Map<String, dynamic>? ?? {};
-    
-    if (allTime.isEmpty && period.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    final allTimeTop = allTime.entries.toList()
-      ..sort((a, b) => (b.value as int).compareTo(a.value as int));
-    final periodTop = period.entries.toList()
-      ..sort((a, b) => (b.value as int).compareTo(a.value as int));
-
-    final allKeys = {...allTimeTop.take(5).map((e) => e.key), ...periodTop.take(5).map((e) => e.key)};
-
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Top Locations: All Time vs Selected Period',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            _buildComparisonHeader(),
-            ...allKeys.take(5).map((key) => _buildComparisonRow(
-              key,
-              allTime[key] ?? 0,
-              period[key] ?? 0,
-            )),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildBudgetComparison() {
     final analytics = _analytics!;
@@ -2443,19 +2033,19 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            _buildComparisonHeader(),
+            const ContentAnalyticsComparisonHeader(),
             if (allTimeMin != null || periodMin != null)
-              _buildComparisonRow(
-                'Average Min Budget',
-                allTimeMin != null ? 'RM ${allTimeMin.toStringAsFixed(2)}' : 'N/A',
-                periodMin != null ? 'RM ${periodMin.toStringAsFixed(2)}' : 'N/A',
+              ContentAnalyticsComparisonRow(
+                label: 'Average Min Budget',
+                allTimeValue: allTimeMin != null ? 'RM ${allTimeMin.toStringAsFixed(2)}' : 'N/A',
+                periodValue: periodMin != null ? 'RM ${periodMin.toStringAsFixed(2)}' : 'N/A',
                 isString: true,
               ),
             if (allTimeMax != null || periodMax != null)
-              _buildComparisonRow(
-                'Average Max Budget',
-                allTimeMax != null ? 'RM ${allTimeMax.toStringAsFixed(2)}' : 'N/A',
-                periodMax != null ? 'RM ${periodMax.toStringAsFixed(2)}' : 'N/A',
+              ContentAnalyticsComparisonRow(
+                label: 'Average Max Budget',
+                allTimeValue: allTimeMax != null ? 'RM ${allTimeMax.toStringAsFixed(2)}' : 'N/A',
+                periodValue: periodMax != null ? 'RM ${periodMax.toStringAsFixed(2)}' : 'N/A',
                 isString: true,
               ),
           ],
@@ -2479,297 +2069,45 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            _buildComparisonHeader(),
-            _buildComparisonRow(
-              'Approval Rate',
-              '${(analytics['approvalRate'] as double).toStringAsFixed(1)}%',
-              '${(analytics['approvalRateInPeriod'] as double).toStringAsFixed(1)}%',
+            const ContentAnalyticsComparisonHeader(),
+            ContentAnalyticsComparisonRow(
+              label: 'Approval Rate',
+              allTimeValue: '${(analytics['approvalRate'] as double).toStringAsFixed(1)}%',
+              periodValue: '${(analytics['approvalRateInPeriod'] as double).toStringAsFixed(1)}%',
               isString: true,
             ),
-            _buildComparisonRow(
-              'Rejection Rate',
-              '${(analytics['rejectionRate'] as double).toStringAsFixed(1)}%',
-              '${(analytics['rejectionRateInPeriod'] as double).toStringAsFixed(1)}%',
+            ContentAnalyticsComparisonRow(
+              label: 'Rejection Rate',
+              allTimeValue: '${(analytics['rejectionRate'] as double).toStringAsFixed(1)}%',
+              periodValue: '${(analytics['rejectionRateInPeriod'] as double).toStringAsFixed(1)}%',
               isString: true,
             ),
-            _buildComparisonRow('Active Posts', analytics['active'], analytics['activeInPeriod']),
-            _buildComparisonRow('Pending Posts', analytics['pending'], analytics['pendingInPeriod']),
-            _buildComparisonRow('Completed Posts', analytics['completed'], analytics['completedInPeriod']),
-            _buildComparisonRow('Rejected Posts', analytics['rejected'], analytics['rejectedInPeriod']),
+            ContentAnalyticsComparisonRow(
+              label: 'Active Posts',
+              allTimeValue: analytics['active'],
+              periodValue: analytics['activeInPeriod'],
+            ),
+            ContentAnalyticsComparisonRow(
+              label: 'Pending Posts',
+              allTimeValue: analytics['pending'],
+              periodValue: analytics['pendingInPeriod'],
+            ),
+            ContentAnalyticsComparisonRow(
+              label: 'Completed Posts',
+              allTimeValue: analytics['completed'],
+              periodValue: analytics['completedInPeriod'],
+            ),
+            ContentAnalyticsComparisonRow(
+              label: 'Rejected Posts',
+              allTimeValue: analytics['rejected'],
+              periodValue: analytics['rejectedInPeriod'],
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildComparisonHeader() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: Text(
-              'Metric',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[700],
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              'All Time',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[700],
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Selected Period',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue[700],
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildComparisonRow(String label, dynamic allTimeValue, dynamic periodValue, {bool isString = false}) {
-    final allTimeStr = isString ? allTimeValue.toString() : allTimeValue.toString();
-    final periodStr = isString ? periodValue.toString() : periodValue.toString();
-    
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-            ),
-          ),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                allTimeStr,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.blue[50],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                periodStr,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue[700],
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final String title;
-  final String value;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-
-  const _StatCard({
-    required this.title,
-    required this.value,
-    required this.subtitle,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(icon, size: 20, color: color),
-                ),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            if (subtitle.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ComparisonItem extends StatelessWidget {
-  final String label;
-  final String value;
-  final double percentage;
-  final Color color;
-
-  const _ComparisonItem({
-    required this.label,
-    required this.value,
-    required this.percentage,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 8),
-          LinearProgressIndicator(
-            value: percentage / 100,
-            backgroundColor: Colors.grey[200],
-            valueColor: AlwaysStoppedAnimation<Color>(color),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${percentage.toStringAsFixed(1)}%',
-            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BudgetCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _BudgetCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class ChartData {
@@ -2778,238 +2116,4 @@ class ChartData {
   final Color color;
 
   ChartData(this.label, this.value, this.color);
-}
-
-class _DateTimeRangePickerDialog extends StatefulWidget {
-  final DateTime startDate;
-  final DateTime endDate;
-
-  const _DateTimeRangePickerDialog({
-    required this.startDate,
-    required this.endDate,
-  });
-
-  @override
-  State<_DateTimeRangePickerDialog> createState() =>
-      _DateTimeRangePickerDialogState();
-}
-
-class _DateTimeRangePickerDialogState
-    extends State<_DateTimeRangePickerDialog> {
-  late DateTime _tempStartDate;
-  late DateTime _tempEndDate;
-
-  @override
-  void initState() {
-    super.initState();
-    // Extract just the date part
-    _tempStartDate = DateTime(widget.startDate.year, widget.startDate.month, widget.startDate.day);
-    _tempEndDate = DateTime(widget.endDate.year, widget.endDate.month, widget.endDate.day);
-  }
-
-  Future<void> _selectStartDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _tempStartDate,
-      firstDate: DateTime(2020),
-      lastDate: _tempEndDate,
-    );
-    if (picked != null && mounted) {
-      setState(() {
-        _tempStartDate = DateTime(picked.year, picked.month, picked.day);
-      });
-    }
-  }
-
-  Future<void> _selectEndDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _tempEndDate,
-      firstDate: _tempStartDate,
-      lastDate: DateTime.now(),
-    );
-    if (picked != null && mounted) {
-      setState(() {
-        _tempEndDate = DateTime(picked.year, picked.month, picked.day);
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Select Date Range'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Start Date
-            const Text(
-              'Start Date',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            InkWell(
-              onTap: _selectStartDate,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey[300]!),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      DateFormat('dd/MM/yyyy').format(_tempStartDate),
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                    const Icon(Icons.calendar_today, size: 18),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // End Date
-            const Text(
-              'End Date',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            InkWell(
-              onTap: _selectEndDate,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey[300]!),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      DateFormat('dd/MM/yyyy').format(_tempEndDate),
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                    const Icon(Icons.calendar_today, size: 18),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Quick Presets
-            const Text(
-              'Quick Presets',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _QuickDateButton(
-                  label: 'Today',
-                  onTap: () {
-                    final now = DateTime.now();
-                    setState(() {
-                      _tempStartDate = DateTime(now.year, now.month, now.day);
-                      _tempEndDate = DateTime(now.year, now.month, now.day);
-                    });
-                  },
-                ),
-                _QuickDateButton(
-                  label: 'Last 7 Days',
-                  onTap: () {
-                    final now = DateTime.now();
-                    final startDate = now.subtract(const Duration(days: 7));
-                    setState(() {
-                      _tempStartDate = DateTime(startDate.year, startDate.month, startDate.day);
-                      _tempEndDate = DateTime(now.year, now.month, now.day);
-                    });
-                  },
-                ),
-                _QuickDateButton(
-                  label: 'Last 30 Days',
-                  onTap: () {
-                    final now = DateTime.now();
-                    final startDate = now.subtract(const Duration(days: 30));
-                    setState(() {
-                      _tempStartDate = DateTime(startDate.year, startDate.month, startDate.day);
-                      _tempEndDate = DateTime(now.year, now.month, now.day);
-                    });
-                  },
-                ),
-                _QuickDateButton(
-                  label: 'This Month',
-                  onTap: () {
-                    final now = DateTime.now();
-                    setState(() {
-                      _tempStartDate = DateTime(now.year, now.month, 1);
-                      _tempEndDate = DateTime(now.year, now.month, now.day);
-                    });
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            if (_tempStartDate.isAfter(_tempEndDate)) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Start date must be before end date'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-              return;
-            }
-            Navigator.pop(context, {
-              'start': _tempStartDate,
-              'end': _tempEndDate,
-            });
-          },
-          child: const Text('Apply'),
-        ),
-      ],
-    );
-  }
-}
-
-class _QuickDateButton extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-
-  const _QuickDateButton({required this.label, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.blue[50],
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.blue[200]!),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.blue[700],
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
 }
