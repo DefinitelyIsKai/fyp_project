@@ -74,9 +74,9 @@ class HybridMatchingEngine {
   static const int _maxJobsPerRecruiter = 25;
   static const int _maxCandidatesPerRecruiter = 60;
 
-  // Cache for matching rule weights
-  _MatchingWeights? _cachedWeights;
-  DateTime? _weightsCacheTimestamp;
+  // Cache for matching rule weights (static to share across all instances)
+  static _MatchingWeights? _cachedWeights;
+  static DateTime? _weightsCacheTimestamp;
   static const _weightsCacheExpiryDuration = Duration(minutes: 15);
 
   // Cache for candidate reliability scores
@@ -106,39 +106,63 @@ class HybridMatchingEngine {
   /// Fetch matching rule weights from Firestore with caching
   Future<_MatchingWeights> _getMatchingWeights() async {
     final now = DateTime.now();
+    
+    // Safety check: ensure _weightsCacheTimestamp is a valid DateTime
     if (_cachedWeights != null &&
-        _weightsCacheTimestamp != null &&
-        now.difference(_weightsCacheTimestamp!) < _weightsCacheExpiryDuration) {
-      return _cachedWeights!;
+        _weightsCacheTimestamp != null) {
+      try {
+        // Verify timestamp is actually a DateTime
+        if (_weightsCacheTimestamp is! DateTime) {
+          debugPrint('Warning: _weightsCacheTimestamp is not DateTime, clearing cache');
+          _cachedWeights = null;
+          _weightsCacheTimestamp = null;
+        } else if (now.difference(_weightsCacheTimestamp!) < _weightsCacheExpiryDuration) {
+          debugPrint('Using cached weights (age: ${now.difference(_weightsCacheTimestamp!).inSeconds}s)');
+          debugPrint('Cached weights: textSimilarity=${_cachedWeights!.textSimilarity}, tagMatching=${_cachedWeights!.tagMatching}, requiredSkills=${_cachedWeights!.requiredSkills}, distance=${_cachedWeights!.distance}');
+          return _cachedWeights!;
+        } else {
+          debugPrint('Cache expired (age: ${now.difference(_weightsCacheTimestamp!).inSeconds}s), fetching fresh weights');
+        }
+      } catch (e) {
+        debugPrint('Error checking cache timestamp: $e, clearing cache');
+        _cachedWeights = null;
+        _weightsCacheTimestamp = null;
+      }
     }
 
     try {
+      debugPrint('=== Fetching weights from Firestore ===');
+      // Get ALL rules (both enabled and disabled) to check their status
       final snapshot = await _firestore
           .collection('matching_rules')
-          .where('isEnabled', isEqualTo: true)
           .get();
 
-      if (snapshot.docs.isEmpty) {
-        // No rules found, use defaults
-        _cachedWeights = _defaultWeights;
-        _weightsCacheTimestamp = now;
-        return _defaultWeights;
-      }
+      debugPrint('Found ${snapshot.docs.length} total rules in Firestore');
 
-      // Map rule IDs to weights
-      double textSimilarity = _defaultWeights.textSimilarity;
-      double tagMatching = _defaultWeights.tagMatching;
-      double requiredSkills = _defaultWeights.requiredSkills;
-      double distance = _defaultWeights.distance;
-      double jobTypePreference = _defaultWeights.jobTypePreference;
+      // Initialize all weights to 0 (disabled by default)
+      // Only enabled rules will have their weights applied
+      double textSimilarity = 0.0;
+      double tagMatching = 0.0;
+      double requiredSkills = 0.0;
+      double distance = 0.0;
+      double jobTypePreference = 0.0;
       double maxDistanceKm = _defaultWeights.maxDistanceKm;
       double decayFactor = _defaultWeights.decayFactor;
 
       for (final doc in snapshot.docs) {
         final data = doc.data();
         final ruleId = doc.id;
+        final isEnabled = data['isEnabled'] as bool? ?? false;
         final weight = (data['weight'] as num?)?.toDouble() ?? 0.0;
         final parameters = Map<String, dynamic>.from(data['parameters'] ?? {});
+
+        // Only apply weight if rule is enabled
+        if (!isEnabled) {
+          debugPrint('Rule $ruleId: DISABLED (weight=0.0)');
+          continue;
+        }
+
+        debugPrint('Rule $ruleId: ENABLED, weight=$weight (from Firestore)');
 
         switch (ruleId) {
           case 'text_similarity':
@@ -171,6 +195,17 @@ class HybridMatchingEngine {
         decayFactor: decayFactor,
       );
 
+      // Debug: Log loaded weights
+      debugPrint('=== Matching Weights Loaded ===');
+      debugPrint('textSimilarity: ${weights.textSimilarity}');
+      debugPrint('tagMatching: ${weights.tagMatching}');
+      debugPrint('requiredSkills: ${weights.requiredSkills}');
+      debugPrint('distance: ${weights.distance}');
+      debugPrint('jobTypePreference: ${weights.jobTypePreference}');
+      debugPrint('maxDistanceKm: ${weights.maxDistanceKm}');
+      debugPrint('decayFactor: ${weights.decayFactor}');
+      debugPrint('================================');
+
       _cachedWeights = weights;
       _weightsCacheTimestamp = now;
       return weights;
@@ -178,6 +213,27 @@ class HybridMatchingEngine {
       // Return cached weights if available, otherwise defaults
       return _cachedWeights ?? _defaultWeights;
     }
+  }
+
+  /// Clear the cached matching weights to force refresh from Firestore
+  /// This is useful when matching rules are updated and you want immediate effect
+  /// Static method to clear cache across ALL instances
+  static void clearWeightsCache() {
+    final hadCache = _cachedWeights != null;
+    _cachedWeights = null;
+    _weightsCacheTimestamp = null;
+    debugPrint('=== Matching Weights Cache Cleared ===');
+    debugPrint('Had cached weights: $hadCache');
+    debugPrint('Cache cleared at: ${DateTime.now()}');
+    debugPrint('Next _getMatchingWeights() call will fetch from Firestore');
+    debugPrint('======================================');
+  }
+  
+  /// Reset all static caches (for debugging/recovery)
+  static void resetAllCaches() {
+    _cachedWeights = null;
+    _weightsCacheTimestamp = null;
+    debugPrint('All matching caches reset');
   }
 
   /// Get category IDs that represent skill-related tags
@@ -946,6 +1002,8 @@ class HybridMatchingEngine {
       if (!_meetsGenderRequirement(candidate, job.post)) continue;
       
       // Calculate score from jobseeker's perspective
+      // Debug: Log weights before scoring
+      debugPrint('Before _scoreJobseekerMatch: weights.tagMatching=${weights.tagMatching}, weights.textSimilarity=${weights.textSimilarity}');
       final jobseekerScore = await _scoreJobseekerMatch(
         candidate,
         job,
@@ -965,8 +1023,15 @@ class HybridMatchingEngine {
       // This ensures jobseeker gets what they want, while considering mutual fit
       final weightedScore = (jobseekerScore * 0.6) + (jobScore * 0.4);
       
+      // Debug: Log scoring details for first few jobs
+      if (weightedCompatibility.length < 3) {
+        debugPrint('Job ${job.post.id}: jobseekerScore=$jobseekerScore, jobScore=$jobScore, weightedScore=$weightedScore');
+      }
+      
       if (weightedScore > 0.05) {
         weightedCompatibility[job.post.id] = weightedScore;
+      } else {
+        debugPrint('Job ${job.post.id} filtered out: weightedScore=$weightedScore <= 0.05');
       }
     }
 
@@ -1699,6 +1764,9 @@ Future<double> _scoreJobseekerMatch(
   double similarity,
   _MatchingWeights weights,
 ) async {
+  // Debug: Verify weights object at function entry
+  debugPrint('_scoreJobseekerMatch entry: weights.tagMatching=${weights.tagMatching}, weights.textSimilarity=${weights.textSimilarity}, weights.hashCode=${weights.hashCode}');
+  
   // Base score from embedding similarity (tags, skills, description similarity)
   var score = similarity * weights.textSimilarity;
 
@@ -1711,7 +1779,11 @@ Future<double> _scoreJobseekerMatch(
   if (postTags.isNotEmpty) {
     // Calculate tag overlap percentage
     final tagOverlap = matchedTags.length / postTags.length;
-    score += weights.tagMatching * tagOverlap;
+    final tagContribution = weights.tagMatching * tagOverlap;
+    score += tagContribution;
+    
+    // Debug: Log tag matching details for ALL jobs (to diagnose weight issues)
+    debugPrint('Job ${job.post.id}: tagOverlap=$tagOverlap, tagMatchingWeight=${weights.tagMatching}, tagContribution=$tagContribution, score=$score');
   }
 
   // Step 4: Required skills matching (post.requiredSkills vs jobseeker skill tags)
@@ -1767,6 +1839,9 @@ Future<double> _scoreRecruiterMatch(
   double similarity,
   _MatchingWeights weights,
 ) async {
+  // Debug: Log weights being used in recruiter scoring
+  debugPrint('Recruiter scoring - weights: textSimilarity=${weights.textSimilarity}, tagMatching=${weights.tagMatching}, requiredSkills=${weights.requiredSkills}, distance=${weights.distance}');
+  
   // Base score from embedding similarity
   var score = similarity * weights.textSimilarity;
 

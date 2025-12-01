@@ -80,6 +80,27 @@ class _NotificationsPageState extends State<NotificationsPage> {
     }
   }
 
+  Future<void> _refreshNotifications() async {
+    setState(() {
+      _pages.clear();
+      _currentPage = 0;
+      _hasMore = true;
+      _isLoading = false;
+      _isLoadingMore = false;
+    });
+    
+    // Reset page controller to first page
+    if (_pageController.hasClients) {
+      await _pageController.animateToPage(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+    
+    await _loadInitialNotifications();
+  }
+
   void _listenForNewNotifications() {
     _newNotificationsSubscription = _notificationService.streamNewNotifications(limit: 1).listen((newNotifications) {
       if (!mounted || newNotifications.isEmpty || _isInitialLoad || _pages.isEmpty) return;
@@ -283,17 +304,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                     ],
                   ),
                 )
-              : RefreshIndicator(
-                  onRefresh: () async {
-                    setState(() {
-                      // Force refresh by clearing pages
-                      _pages.clear();
-                      _currentPage = 0;
-                    });
-                    await Future.delayed(const Duration(milliseconds: 100));
-                  },
-                  color: const Color(0xFF00C8A0),
-                  child: Column(
+              : Column(
                   children: [
                     _buildUnreadHeader(),
                     Expanded(
@@ -318,28 +329,21 @@ class _NotificationsPageState extends State<NotificationsPage> {
                           
                           final pageNotifications = _pages[pageIndex];
                           return RefreshIndicator(
-                            onRefresh: () async {
-                              setState(() {
-                                // Force refresh by clearing pages
-                                _pages.clear();
-                                _currentPage = 0;
-                              });
-                              await Future.delayed(const Duration(milliseconds: 100));
-                            },
+                            onRefresh: _refreshNotifications,
                             color: const Color(0xFF00C8A0),
                             child: ListView.separated(
                               physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            itemCount: pageNotifications.length,
-                            separatorBuilder: (_, index) {
-                              if (index < pageNotifications.length - 1) {
-                                return const Divider(height: 1, indent: 72);
-                              }
-                              return const SizedBox.shrink();
-                            },
-                            itemBuilder: (context, index) {
-                              return _buildNotificationCard(pageNotifications[index]);
-                            },
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              itemCount: pageNotifications.length,
+                              separatorBuilder: (_, index) {
+                                if (index < pageNotifications.length - 1) {
+                                  return const Divider(height: 1, indent: 72);
+                                }
+                                return const SizedBox.shrink();
+                              },
+                              itemBuilder: (context, index) {
+                                return _buildNotificationCard(pageNotifications[index]);
+                              },
                             ),
                           );
                         },
@@ -354,7 +358,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
                         ),
                       ),
                   ],
-                ),
                 ),
     );
   }
@@ -535,6 +538,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
         return Icons.warning_amber_rounded;
       case NotificationCategory.account_unsuspension:
         return Icons.check_circle_outline_rounded;
+      case NotificationCategory.report_resolved:
+        return Icons.warning_amber_rounded;
     }
   }
 
@@ -562,6 +567,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
         return Colors.red.withOpacity(0.15);
       case NotificationCategory.account_unsuspension:
         return Colors.green.withOpacity(0.1);
+      case NotificationCategory.report_resolved:
+        return Colors.red.withOpacity(0.1);
     }
   }
 
@@ -589,6 +596,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
         return Colors.red[800]!;
       case NotificationCategory.account_unsuspension:
         return Colors.green;
+      case NotificationCategory.report_resolved:
+        return Colors.red;
     }
   }
 

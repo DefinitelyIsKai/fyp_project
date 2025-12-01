@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/matching_rule_model.dart';
 import 'package:fyp_project/services/admin/system_config_service.dart';
 import 'package:fyp_project/services/admin/auth_service.dart';
+import 'package:fyp_project/services/user/matching_service.dart';
 import 'package:provider/provider.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 
@@ -14,6 +15,7 @@ class MatchingRulesPage extends StatefulWidget {
 
 class _MatchingRulesPageState extends State<MatchingRulesPage> {
   final SystemConfigService _configService = SystemConfigService();
+  // Using static MatchingService.clearWeightsCache() instead of instance
   List<MatchingRuleModel> _rules = [];
   bool _isLoading = true;
 
@@ -73,9 +75,16 @@ class _MatchingRulesPageState extends State<MatchingRulesPage> {
     if (confirm == true) {
       try {
         await _configService.initializeDefaultMatchingRules();
+        
+        // Clear matching weights cache to apply changes immediately (static method clears all instances)
+        MatchingService.clearWeightsCache();
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Rules reset to defaults successfully')),
+            const SnackBar(
+              content: Text('Rules reset to defaults successfully. Matching cache cleared.'),
+              backgroundColor: Colors.green,
+            ),
           );
           _loadRules();
         }
@@ -95,9 +104,16 @@ class _MatchingRulesPageState extends State<MatchingRulesPage> {
       final updatedBy = authService.currentAdmin?.email;
       
       await _configService.updateMatchingRule(rule, updatedBy: updatedBy);
+      
+      // Clear matching weights cache to apply changes immediately (static method clears all instances)
+      MatchingService.clearWeightsCache();
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Rule updated successfully')),
+          const SnackBar(
+            content: Text('Rule updated successfully. Matching cache cleared.'),
+            backgroundColor: Colors.green,
+          ),
         );
         _loadRules();
       }

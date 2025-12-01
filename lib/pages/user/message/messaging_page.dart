@@ -16,7 +16,14 @@ class MessagingPage extends StatefulWidget {
 class _MessagingPageState extends State<MessagingPage> {
   final MessagingService _messagingService = MessagingService();
   final AuthService _authService = AuthService();
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,9 +46,26 @@ class _MessagingPageState extends State<MessagingPage> {
                 ],
               ),
               child: TextField(
+                controller: _searchController,
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value.toLowerCase().trim();
+                  });
+                },
                 decoration: InputDecoration(
                   hintText: 'Search conversations...',
                   prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(Icons.clear, color: Colors.grey[600]),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {
+                              _searchQuery = '';
+                            });
+                          },
+                        )
+                      : null,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
                     borderSide: BorderSide.none,
@@ -99,7 +123,17 @@ class _MessagingPageState extends State<MessagingPage> {
                   );
                 }
 
-                final conversations = snapshot.data ?? [];
+                final allConversations = snapshot.data ?? [];
+                
+                // Filter conversations based on search query (participant name only)
+                final conversations = _searchQuery.isEmpty
+                    ? allConversations
+                    : allConversations.where((conversation) {
+                        final currentUserId = _authService.currentUserId;
+                        final otherName = conversation.getOtherParticipantName(currentUserId).toLowerCase();
+                        // Search by participant name only
+                        return otherName.contains(_searchQuery);
+                      }).toList();
 
                 if (conversations.isEmpty) {
                   return Center(

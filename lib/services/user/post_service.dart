@@ -275,17 +275,7 @@ class PostService {
     // Initialize approvedApplicants to 0 for new posts
     data['approvedApplicants'] = 0;
 
-    // Hold 200 credits if publishing (not draft) - credits are held, not deducted yet
-    // Credits will be deducted when post is approved (status changes to active)
-    // Credits will be released when post is rejected
-    if (!post.isDraft) {
-      try {
-        await _walletService.holdPostCreationCredits(postId: doc.id, feeCredits: 200);
-      } catch (e) {
-        throw Exception('Failed to hold credits for post creation: $e');
-      }
-    }
-
+    // Save post to Firestore first, so that holdPostCreationCredits can retrieve the title
     try {
       await doc.set(data, SetOptions(merge: true)).timeout(
         const Duration(seconds: 10),
@@ -298,6 +288,22 @@ class PostService {
         rethrow;
       }
       throw Exception('Failed to save post to Firestore: $e');
+    }
+
+    // Hold 200 credits if publishing (not draft) - credits are held, not deducted yet
+    // Credits will be deducted when post is approved (status changes to active)
+    // Credits will be released when post is rejected
+    // Note: This is called AFTER saving the post so that _getPostTitle() can retrieve the title
+    if (!post.isDraft) {
+      try {
+        await _walletService.holdPostCreationCredits(postId: doc.id, feeCredits: 200);
+      } catch (e) {
+        // If holding credits fails, we should still keep the post but log the error
+        // Optionally, we could delete the post or mark it as draft
+        print('Warning: Failed to hold credits for post creation: $e');
+        // Re-throw to let caller handle the error
+        throw Exception('Failed to hold credits for post creation: $e');
+      }
     }
     
     // Increment jobCount for the category/event when post is not a draft
