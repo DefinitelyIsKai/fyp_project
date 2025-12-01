@@ -1,4 +1,3 @@
-import 'dart:collection';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
@@ -52,9 +51,9 @@ const _defaultWeights = _MatchingWeights(
   decayFactor: 3.0,
 );
 
-/// A hybrid matching engine that supports two strategies:
-/// - Embeddings + ANN: Quick recommendation for browsing
-/// - Gale-Shapley + Hungarian: Precise matching for optimal assignment
+/// A hybrid matching engine that supports Content-Based Filtering:
+/// - Embeddings + ANN: Fast similarity search
+/// - Weighted Sorting: Optimal ranking based on bidirectional preferences
 class HybridMatchingEngine {
   HybridMatchingEngine({
     FirebaseFirestore? firestore,
@@ -283,10 +282,10 @@ class HybridMatchingEngine {
     if (genderFilteredJobs.isEmpty) return;
 
     final recruiterLabels = await _fetchUserLabels(
-      ageFilteredJobs.map((job) => job.ownerId).toSet(),
+      genderFilteredJobs.map((job) => job.ownerId).toSet(),
     );
 
-    final jobVectors = ageFilteredJobs
+    final jobVectors = genderFilteredJobs
         .map(
           (job) => _JobVector.fromPost(
             job,
@@ -467,7 +466,7 @@ class HybridMatchingEngine {
         )
         .toList();
 
-    // Step 2: Use Gale-Shapley + Hungarian for optimal matching (Jobseeker perspective)
+    // Step 2: Use weighted sorting for optimal matching (Jobseeker perspective)
     final optimalMatches = await _runJobseekerOptimalMatching(
       candidate,
       jobVectors,
@@ -489,7 +488,7 @@ class HybridMatchingEngine {
           recruiterId: match.job.post.ownerId,
           matchPercentage: (match.score * 100).clamp(1, 100).round(),
           matchedSkills: matchedSkills,
-          matchingStrategy: 'stable_optimal',
+          matchingStrategy: 'cbf_topk',
         ),
       );
     }
@@ -872,23 +871,13 @@ class HybridMatchingEngine {
 
     final resolvedPairs = <String, String>{};
 
-    if (strategy == MatchingStrategy.stableOptimal) {
-      // Strategy B: Gale-Shapley + Hungarian (Precise matching)
-      resolvedPairs.addAll(await _runStableOptimalMatching(
-        compatibility,
-        jobVectors,
-        candidateProfiles,
-        weights,
-      ));
-    } else {
-      // Strategy A: Simple score-based selection (Quick recommendation)
-      for (final jobId in compatibility.keys) {
-        final scores = compatibility[jobId]!;
-        final sortedCandidates = scores.entries.toList()
-          ..sort((a, b) => b.value.compareTo(a.value));
-        if (sortedCandidates.isNotEmpty && sortedCandidates.first.value > 0) {
-          resolvedPairs[jobId] = sortedCandidates.first.key;
-        }
+    // Simple score-based selection (all strategies use the same approach)
+    for (final jobId in compatibility.keys) {
+      final scores = compatibility[jobId]!;
+      final sortedCandidates = scores.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      if (sortedCandidates.isNotEmpty && sortedCandidates.first.value > 0) {
+        resolvedPairs[jobId] = sortedCandidates.first.key;
       }
     }
 
@@ -927,8 +916,8 @@ class HybridMatchingEngine {
     // await _persistMatches(pendingMatches);
   }
 
-  /// Run optimal matching for a single jobseeker using Gale-Shapley + Hungarian algorithms
-  /// This function is designed for the jobseeker perspective: one candidate matching with multiple jobs
+  /// Run optimal matching for a single jobseeker using weighted sorting
+  /// This function uses Content-Based Filtering with bidirectional preferences
   Future<List<_JobseekerOptimalMatch>> _runJobseekerOptimalMatching(
     _CandidateProfile candidate,
     List<_JobVector> jobVectors,
@@ -946,18 +935,14 @@ class HybridMatchingEngine {
 
     if (annResults.isEmpty) return [];
 
-    // Step 2: Calculate bidirectional preferences
-    final jobseekerPreferences = <String, double>{}; // Jobseeker → Job scores
-    final jobPreferences = <String, double>{}; // Job → Jobseeker scores
-    final compatibility = <String, double>{}; // Combined compatibility scores
+    // Step 2: Calculate bidirectional preferences and weighted compatibility
+    final weightedCompatibility = <String, double>{};
 
     for (final neighbor in annResults) {
       final job = neighbor.payload;
       
-      // Age filter
+      // Hard filters
       if (!_meetsAgeRequirement(candidate, job.post)) continue;
-      
-      // Gender filter
       if (!_meetsGenderRequirement(candidate, job.post)) continue;
       
       // Calculate score from jobseeker's perspective
@@ -976,86 +961,30 @@ class HybridMatchingEngine {
         weights,
       );
       
-      // Combined compatibility score: average of both perspectives
-      // This ensures we consider both what the jobseeker wants and what the job wants
-      final combinedScore = (jobseekerScore + jobScore) / 2.0;
-      
-      if (combinedScore > 0.05) {
-        jobseekerPreferences[job.post.id] = jobseekerScore;
-        jobPreferences[job.post.id] = jobScore;
-        compatibility[job.post.id] = combinedScore;
-      }
-    }
-
-    if (compatibility.isEmpty) return [];
-
-    // Step 3: Apply optimal matching algorithms
-    // For a single jobseeker, we use a weighted approach that prioritizes
-    // jobseeker preference but considers job preference for stability
-    
-    // Weighted compatibility: 60% jobseeker preference, 40% job preference
-    // This ensures jobseeker gets what they want, while considering mutual fit
-    final weightedCompatibility = <String, double>{};
-    for (final jobId in compatibility.keys) {
-      final jobseekerScore = jobseekerPreferences[jobId] ?? 0.0;
-      final jobScore = jobPreferences[jobId] ?? 0.0;
-      
-      // Weighted score: prioritize jobseeker's preference but consider job's perspective
+      // Weighted compatibility: 60% jobseeker preference, 40% job preference
+      // This ensures jobseeker gets what they want, while considering mutual fit
       final weightedScore = (jobseekerScore * 0.6) + (jobScore * 0.4);
-      weightedCompatibility[jobId] = weightedScore;
-    }
-    
-    // Step 4: Use Gale-Shapley for stability check
-    // Build preference lists: jobseeker ranks jobs, jobs rank the jobseeker
-    final jobseekerPrefList = jobseekerPreferences.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    
-    final jobPrefLists = <String, List<String>>{};
-    // Sort jobs by their preference for this candidate
-    final jobPrefEntries = jobPreferences.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    
-    for (final entry in jobPrefEntries) {
-      jobPrefLists[entry.key] = [candidate.id];
-    }
-    
-    // Run Gale-Shapley: jobseeker proposes to jobs
-    final jobseekerPrefMap = <String, List<String>>{
-      candidate.id: jobseekerPrefList.map((e) => e.key).toList(),
-    };
-    
-    final galeShapley = GaleShapleyMatcher();
-    final stablePairs = galeShapley.match(jobseekerPrefMap, jobPrefLists);
-    
-    // Step 5: Combine weighted compatibility with stable matching
-    // Start with stable matches from Gale-Shapley
-    final matchedJobs = <String, double>{};
-    
-    for (final entry in stablePairs.entries) {
-      if (entry.key == candidate.id && weightedCompatibility.containsKey(entry.value)) {
-        matchedJobs[entry.value] = weightedCompatibility[entry.value]!;
-      }
-    }
-    
-    // If no stable matches or we want more results, add top weighted matches
-    if (matchedJobs.isEmpty || matchedJobs.length < 20) {
-      final sorted = weightedCompatibility.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
       
-      for (final entry in sorted) {
-        if (matchedJobs.length >= 20) break;
-        matchedJobs[entry.key] = entry.value;
+      if (weightedScore > 0.05) {
+        weightedCompatibility[job.post.id] = weightedScore;
       }
     }
 
-    // Step 7: Build result list
+    if (weightedCompatibility.isEmpty) return [];
+
+    // Step 3: Use TopK algorithm to get top 20 (more efficient than full sort)
+    const k = 20;
+    final topKEntries = _getTopK(
+      weightedCompatibility.entries.toList(),
+      k,
+      (entry) => entry.value,
+    );
+    
+    // Step 4: Build result list (top 20)
     final results = <_JobseekerOptimalMatch>[];
     final jobById = {for (final job in jobVectors) job.post.id: job};
     
-    final sortedMatches = matchedJobs.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    
-    for (final entry in sortedMatches) {
+    for (final entry in topKEntries) {
       final jobId = entry.key;
       final score = entry.value;
       final job = jobById[jobId];
@@ -1070,96 +999,110 @@ class HybridMatchingEngine {
     return results;
   }
 
-  /// Run stable optimal matching using Gale-Shapley + Hungarian algorithms
-  Future<Map<String, String>> _runStableOptimalMatching(
-    Map<String, Map<String, double>> compatibility,
-    List<_JobVector> jobVectors,
-    List<_CandidateProfile> candidateProfiles,
-    _MatchingWeights weights,
-  ) async {
-    // Step 1: Calculate candidate preferences (candidate → job scores)
-    final candidatePreferences = <String, Map<String, double>>{};
-    final annMatcher = _EmbeddingAnnMatcher<_JobVector>();
+  /// TopK algorithm: Efficiently get top K elements using heap-based approach
+  /// Time Complexity: O(n log k) where n = total items, k = top K
+  /// Space Complexity: O(k)
+  /// 
+  /// Algorithm: Maintain a min-heap of size k to track top K largest elements
+  List<T> _getTopK<T>(
+    List<T> items,
+    int k,
+    double Function(T) getValue,
+  ) {
+    if (items.isEmpty || k <= 0) return [];
+    if (k >= items.length) {
+      // If k >= n, sort all items (no need for TopK optimization)
+      final sorted = items.toList()
+        ..sort((a, b) => getValue(b).compareTo(getValue(a)));
+      return sorted;
+    }
 
-    for (final candidate in candidateProfiles) {
-      final jobScores = <String, double>{};
+    // Heap-based TopK: Maintain a min-heap of size k
+    // The heap stores the top K largest elements, with the smallest at the top
+    final heap = <T>[];
+    
+    for (final item in items) {
+      final value = getValue(item);
       
-      // Find nearest jobs for this candidate
-      final annResults = annMatcher.findNearest(
-        query: candidate.featureVector,
-        items: jobVectors,
-        topK: 20,
-      );
-
-      for (final neighbor in annResults) {
-        final job = neighbor.payload;
-        
-        // Age filter
-        if (!_meetsAgeRequirement(candidate, job.post)) continue;
-        
-        // Gender filter
-        if (!_meetsGenderRequirement(candidate, job.post)) continue;
-        
-        // Calculate score from candidate's perspective
-        final score = await _scoreJobseekerMatch(candidate, job, neighbor.similarity, weights);
-        if (score > 0.05) {
-          jobScores[job.post.id] = score;
+      if (heap.length < k) {
+        // Heap not full, add item
+        heap.add(item);
+        _heapifyUp(heap, heap.length - 1, getValue, ascending: true);
+      } else {
+        // Heap is full, compare with smallest element
+        final smallestValue = getValue(heap[0]);
+        if (value > smallestValue) {
+          // Replace smallest element with current item
+          heap[0] = item;
+          _heapifyDown(heap, 0, getValue, ascending: true);
         }
       }
-
-      if (jobScores.isNotEmpty) {
-        candidatePreferences[candidate.id] = jobScores;
-      }
     }
-
-    // Step 2: Build preference lists for Gale-Shapley
-    final jobPreferences = <String, List<String>>{};
-    for (final jobId in compatibility.keys) {
-      final scores = compatibility[jobId]!;
-      final sorted = scores.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-      jobPreferences[jobId] = sorted.map((e) => e.key).toList();
-    }
-
-    final candidatePrefLists = <String, List<String>>{};
-    for (final candidateId in candidatePreferences.keys) {
-      final scores = candidatePreferences[candidateId]!;
-      final sorted = scores.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-      candidatePrefLists[candidateId] = sorted.map((e) => e.key).toList();
-    }
-
-    // Step 3: Run Hungarian algorithm for optimal assignment
-    final hungarian = HungarianMatcher();
-    final optimizedPairs = hungarian.maximise(compatibility);
-
-    // Step 4: Run Gale-Shapley for stable matching
-    final galeShapley = GaleShapleyMatcher();
-    final stablePairs = galeShapley.match(jobPreferences, candidatePrefLists);
-
-    // Step 5: Resolve conflicts (prefer Hungarian, fallback to Gale-Shapley)
-    final resolvedPairs = <String, String>{};
-    for (final jobId in compatibility.keys) {
-      if (optimizedPairs[jobId] != null) {
-        // Prefer Hungarian result (optimal assignment)
-        resolvedPairs[jobId] = optimizedPairs[jobId]!;
-        continue;
-      }
-      if (stablePairs[jobId] != null) {
-        // Fallback to Gale-Shapley result (stable matching)
-        resolvedPairs[jobId] = stablePairs[jobId]!;
-        continue;
-      }
-      // Final fallback: highest score
-      final fallback = compatibility[jobId]!.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-      if (fallback.isNotEmpty && fallback.first.value > 0) {
-        resolvedPairs[jobId] = fallback.first.key;
-      }
-    }
-
-    return resolvedPairs;
+    
+    // Sort the heap to get descending order (largest first)
+    heap.sort((a, b) => getValue(b).compareTo(getValue(a)));
+    
+    return heap;
   }
+
+  /// Helper: Heapify up (bubble up) for min-heap
+  void _heapifyUp<T>(List<T> heap, int index, double Function(T) getValue, {required bool ascending}) {
+    while (index > 0) {
+      final parentIndex = (index - 1) ~/ 2;
+      final currentValue = getValue(heap[index]);
+      final parentValue = getValue(heap[parentIndex]);
+      
+      final shouldSwap = ascending
+          ? currentValue < parentValue
+          : currentValue > parentValue;
+      
+      if (!shouldSwap) break;
+      
+      // Swap with parent
+      final temp = heap[index];
+      heap[index] = heap[parentIndex];
+      heap[parentIndex] = temp;
+      
+      index = parentIndex;
+    }
+  }
+
+  /// Helper: Heapify down (bubble down) for min-heap
+  void _heapifyDown<T>(List<T> heap, int index, double Function(T) getValue, {required bool ascending}) {
+    while (true) {
+      int smallest = index;
+      final left = 2 * index + 1;
+      final right = 2 * index + 2;
+      
+      if (left < heap.length) {
+        final leftValue = getValue(heap[left]);
+        final smallestValue = getValue(heap[smallest]);
+        if (ascending ? leftValue < smallestValue : leftValue > smallestValue) {
+          smallest = left;
+        }
+      }
+      
+      if (right < heap.length) {
+        final rightValue = getValue(heap[right]);
+        final smallestValue = getValue(heap[smallest]);
+        if (ascending ? rightValue < smallestValue : rightValue > smallestValue) {
+          smallest = right;
+        }
+      }
+      
+      if (smallest == index) break;
+      
+      // Swap with smallest child
+      final temp = heap[index];
+      heap[index] = heap[smallest];
+      heap[smallest] = temp;
+      
+      index = smallest;
+    }
+  }
+
+  /// Removed _runStableOptimalMatching - no longer needed
+  /// Recruiter matching now uses simple score-based sorting
 
   /// Check if candidate meets age requirement for a job
   bool _meetsAgeRequirement(_CandidateProfile candidate, Post job) {
@@ -1926,198 +1869,7 @@ Post _postFromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
   return Post.fromMap({...data, 'id': doc.id, 'createdAt': data['createdAt']});
 }
 
-/// Gale-Shapley stable matching algorithm
-/// Finds stable one-to-one matches between jobs (proposers) and candidates (acceptors)
-class GaleShapleyMatcher {
-  Map<String, String> match(
-    Map<String, List<String>> proposerPreferences,
-    Map<String, List<String>> acceptorPreferences,
-  ) {
-    final freeProposers = Queue<String>()..addAll(proposerPreferences.keys);
-    final nextProposalIndex = <String, int>{};
-    final engagements = <String, String>{}; // acceptor -> proposer
-
-    while (freeProposers.isNotEmpty) {
-      final proposer = freeProposers.removeFirst();
-      final preferences = proposerPreferences[proposer];
-      if (preferences == null || preferences.isEmpty) {
-        continue;
-      }
-
-      final proposalIndex = nextProposalIndex.update(
-        proposer,
-        (value) => value + 1,
-        ifAbsent: () => 0,
-      );
-
-      if (proposalIndex >= preferences.length) {
-        continue;
-      }
-
-      final candidate = preferences[proposalIndex];
-      final currentPartner = engagements[candidate];
-
-      if (currentPartner == null) {
-        engagements[candidate] = proposer;
-        continue;
-      }
-
-      final acceptorPref = acceptorPreferences[candidate];
-      if (acceptorPref == null || acceptorPref.isEmpty) {
-        continue;
-      }
-
-      if (_prefers(acceptorPref, proposer, currentPartner)) {
-        engagements[candidate] = proposer;
-        freeProposers.add(currentPartner);
-      } else {
-        freeProposers.add(proposer);
-      }
-    }
-
-    final result = <String, String>{};
-    engagements.forEach((candidate, proposer) {
-      result[proposer] = candidate;
-    });
-    return result;
-  }
-
-  bool _prefers(
-    List<String> preferenceList,
-    String newOption,
-    String currentOption,
-  ) {
-    final newIndex = preferenceList.indexOf(newOption);
-    if (newIndex == -1) return false;
-    final currentIndex = preferenceList.indexOf(currentOption);
-    if (currentIndex == -1) return true;
-    return newIndex < currentIndex;
-  }
-}
-
-/// Hungarian algorithm for optimal assignment
-/// Finds one-to-one assignment that maximizes total score
-class HungarianMatcher {
-  Map<String, String> maximise(Map<String, Map<String, double>> scores) {
-    if (scores.isEmpty) return const {};
-
-    final jobIds = scores.keys.toList();
-    final candidateIds = scores.values.fold<Set<String>>(<String>{}, (
-      set,
-      value,
-    ) {
-      set.addAll(value.keys);
-      return set;
-    }).toList();
-
-    if (candidateIds.isEmpty) return const {};
-
-    final rows = jobIds.length;
-    final cols = candidateIds.length;
-    final size = max(rows, cols);
-    final matrix = List.generate(size, (_) => List<double>.filled(size, 0));
-
-    double maxValue = 0;
-    for (var i = 0; i < rows; i++) {
-      final jobId = jobIds[i];
-      final row = scores[jobId] ?? {};
-      for (var j = 0; j < cols; j++) {
-        final candidateId = candidateIds[j];
-        final value = row[candidateId] ?? 0;
-        matrix[i][j] = value;
-        if (value > maxValue) {
-          maxValue = value;
-        }
-      }
-    }
-
-    if (maxValue == 0) return const {};
-
-    final costMatrix = List.generate(size, (i) => List<double>.filled(size, 0));
-    for (var i = 0; i < size; i++) {
-      for (var j = 0; j < size; j++) {
-        costMatrix[i][j] = maxValue - matrix[i][j];
-      }
-    }
-
-    final assignment = _hungarian(costMatrix);
-    final result = <String, String>{};
-
-    for (var i = 0; i < assignment.length; i++) {
-      final col = assignment[i];
-      if (col == -1) continue;
-      if (i < rows && col < cols) {
-        final score = matrix[i][col];
-        if (score > 0) {
-          result[jobIds[i]] = candidateIds[col];
-        }
-      }
-    }
-
-    return result;
-  }
-
-  List<int> _hungarian(List<List<double>> costMatrix) {
-    final n = costMatrix.length;
-    final m = costMatrix[0].length;
-    final u = List<double>.filled(n + 1, 0);
-    final v = List<double>.filled(m + 1, 0);
-    final p = List<int>.filled(m + 1, 0);
-    final way = List<int>.filled(m + 1, 0);
-
-    for (var i = 1; i <= n; i++) {
-      p[0] = i;
-      var j0 = 0;
-      final minv = List<double>.filled(m + 1, double.infinity);
-      final used = List<bool>.filled(m + 1, false);
-
-      do {
-        used[j0] = true;
-        final i0 = p[j0];
-        var delta = double.infinity;
-        var j1 = 0;
-
-        for (var j = 1; j <= m; j++) {
-          if (used[j]) continue;
-          final cur = costMatrix[i0 - 1][j - 1] - u[i0] - v[j];
-          if (cur < minv[j]) {
-            minv[j] = cur;
-            way[j] = j0;
-          }
-          if (minv[j] < delta) {
-            delta = minv[j];
-            j1 = j;
-          }
-        }
-
-        for (var j = 0; j <= m; j++) {
-          if (used[j]) {
-            u[p[j]] += delta;
-            v[j] -= delta;
-          } else {
-            minv[j] -= delta;
-          }
-        }
-
-        j0 = j1;
-      } while (p[j0] != 0);
-
-      do {
-        final j1 = way[j0];
-        p[j0] = p[j1];
-        j0 = j1;
-      } while (j0 != 0);
-    }
-
-    final answer = List<int>.filled(n, -1);
-    for (var j = 1; j <= m; j++) {
-      if (p[j] != 0 && p[j] - 1 < n && j - 1 < m) {
-        answer[p[j] - 1] = j - 1;
-      }
-    }
-
-    return answer;
-  }
-}
+/// Removed Gale-Shapley and Hungarian algorithms - not suitable for one-to-many recommendation scenario
+/// Current implementation uses weighted sorting which is more appropriate for the use case
 
 
