@@ -89,17 +89,14 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
         ),
         backgroundColor: AppColors.cardRed,
         foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              setState(() {});
-            },
-            tooltip: 'Refresh',
-          ),
-        ],
       ),
-      body: Column(
+      body: RefreshIndicator(
+        onRefresh: () async {
+          setState(() {});
+        },
+        color: Colors.blue[700],
+        backgroundColor: Colors.white,
+        child: Column(
         children: [
           // Header
           Container(
@@ -316,23 +313,42 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
               stream: _getReportsStream(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (snapshot.hasError) {
-                  return Center(
+                  return const Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
-                        const SizedBox(height: 16),
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
                         Text(
-                          'Error loading reports: ${snapshot.error}',
-                          style: TextStyle(color: Colors.grey[600]),
-                          textAlign: TextAlign.center,
+                          'Loading reports...',
+                          style: TextStyle(color: Colors.grey),
                         ),
                       ],
                     ),
+                  );
+                }
+
+                if (snapshot.hasError) {
+                  return CustomScrollView(
+                    slivers: [
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Error loading reports: ${snapshot.error}',
+                                style: TextStyle(color: Colors.grey[600]),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   );
                 }
 
@@ -340,29 +356,36 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
                 final filteredReports = _filterReports(allReports);
 
                 if (filteredReports.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.flag_outlined, size: 64, color: Colors.grey[400]),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No flagged content found',
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.grey[600],
-                            fontWeight: FontWeight.w500,
+                  return CustomScrollView(
+                    slivers: [
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.flag_outlined, size: 64, color: Colors.grey[400]),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No flagged content found',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  color: Colors.grey[600],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'All reports have been reviewed',
+                                style: TextStyle(
+                                  color: Colors.grey[500],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'All reports have been reviewed',
-                          style: TextStyle(
-                            color: Colors.grey[500],
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   );
                 }
 
@@ -405,6 +428,7 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
             ),
           ),
         ],
+        ),
       ),
     );
   }

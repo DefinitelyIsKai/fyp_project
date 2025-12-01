@@ -31,9 +31,9 @@ class JobPostModel {
   final double? longitude;
   final int? minAgeRequirement;
   final int? maxAgeRequirement;
-  final String? workTimeStart; // Format: "HH:mm" (e.g., "09:00")
-  final String? workTimeEnd; // Format: "HH:mm" (e.g., "17:00")
-  final String? genderRequirement; // Gender requirement: "male", "female", or "any"
+  final String? workTimeStart;
+  final String? workTimeEnd;
+  final String? genderRequirement;
   final int? views;
 
   JobPostModel({

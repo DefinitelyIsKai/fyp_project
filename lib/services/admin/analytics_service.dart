@@ -127,7 +127,6 @@ class AnalyticsService {
         resolvedReports: reportAnalytics['resolvedReports'] ?? 0,
         dismissedReports: reportAnalytics['dismissedReports'] ?? 0,
         profileViews: userAnalytics['profileViews'] ?? 0,
-        avgSessionDuration: userAnalytics['avgSessionDuration'] ?? 0.0,
         engagementRate: currentEngagementRate,
         totalCreditsUsed: paymentAnalytics['totalCreditsUsed'] ?? 0,
         activeSubscriptions: paymentAnalytics['activeSubscriptions'] ?? 0,
@@ -198,7 +197,6 @@ class AnalyticsService {
       'activeUsers': activeUsers,
       'newRegistrations': newRegistrations,
       'profileViews': 0, // You'll need to track this separately
-      'avgSessionDuration': 15.0, // You'll need to track this separately
     };
   }
 
@@ -755,7 +753,6 @@ class AnalyticsService {
         resolvedReports: reportAnalytics['resolvedReports'] ?? 0,
         dismissedReports: reportAnalytics['dismissedReports'] ?? 0,
         profileViews: userAnalytics['profileViews'] ?? 0,
-        avgSessionDuration: userAnalytics['avgSessionDuration'] ?? 0.0,
         engagementRate: currentEngagementRate,
         totalCreditsUsed: paymentAnalytics['totalCreditsUsed'] ?? 0,
         activeSubscriptions: paymentAnalytics['activeSubscriptions'] ?? 0,

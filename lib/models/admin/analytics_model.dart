@@ -17,7 +17,6 @@ class AnalyticsModel {
   final int resolvedReports;
   final int dismissedReports;
   final int profileViews;
-  final double avgSessionDuration; // in minutes
   final double engagementRate; // percentage
   final int totalCreditsUsed;
   final int activeSubscriptions;
@@ -60,7 +59,6 @@ class AnalyticsModel {
     this.resolvedReports = 0,
     this.dismissedReports = 0,
     this.profileViews = 0,
-    this.avgSessionDuration = 0.0,
     this.engagementRate = 0.0,
     this.totalCreditsUsed = 0,
     this.activeSubscriptions = 0,
@@ -128,7 +126,6 @@ class AnalyticsModel {
       resolvedReports: json['resolvedReports'] ?? 0,
       dismissedReports: json['dismissedReports'] ?? 0,
       profileViews: json['profileViews'] ?? 0,
-      avgSessionDuration: (json['avgSessionDuration'] ?? 0).toDouble(),
       engagementRate: (json['engagementRate'] ?? 0).toDouble(),
       totalCreditsUsed: json['totalCreditsUsed'] ?? 0,
       activeSubscriptions: json['activeSubscriptions'] ?? 0,
@@ -154,7 +151,6 @@ class AnalyticsModel {
     );
   }
 
-  // Convert to JSON
   Map<String, dynamic> toJson() {
     return {
       'date': date.toIso8601String(),
@@ -170,13 +166,11 @@ class AnalyticsModel {
       'reportedMessages': reportedMessages,
       'additionalMetrics': additionalMetrics,
 
-      // New fields
       'newRegistrations': newRegistrations,
       'rejectedJobPosts': rejectedJobPosts,
       'resolvedReports': resolvedReports,
       'dismissedReports': dismissedReports,
       'profileViews': profileViews,
-      'avgSessionDuration': avgSessionDuration,
       'engagementRate': engagementRate,
       'totalCreditsUsed': totalCreditsUsed,
       'activeSubscriptions': activeSubscriptions,
@@ -202,7 +196,7 @@ class AnalyticsModel {
     };
   }
 
-  // Helper method to create a copy with updated values
+  // Helper method to create a copy
   AnalyticsModel copyWith({
     DateTime? date,
     int? totalUsers,
@@ -221,7 +215,6 @@ class AnalyticsModel {
     int? resolvedReports,
     int? dismissedReports,
     int? profileViews,
-    double? avgSessionDuration,
     double? engagementRate,
     int? totalCreditsUsed,
     int? activeSubscriptions,
@@ -261,7 +254,6 @@ class AnalyticsModel {
       resolvedReports: resolvedReports ?? this.resolvedReports,
       dismissedReports: dismissedReports ?? this.dismissedReports,
       profileViews: profileViews ?? this.profileViews,
-      avgSessionDuration: avgSessionDuration ?? this.avgSessionDuration,
       engagementRate: engagementRate ?? this.engagementRate,
       totalCreditsUsed: totalCreditsUsed ?? this.totalCreditsUsed,
       activeSubscriptions: activeSubscriptions ?? this.activeSubscriptions,

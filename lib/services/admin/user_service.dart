@@ -157,21 +157,35 @@ class UserService {
       // Ensure wallet exists first
       final walletDoc = await _walletsRef.doc(userId).get();
       double currentBalance = 0.0;
+      double currentHeldCredits = 0.0;
       
       if (walletDoc.exists) {
         final data = walletDoc.data();
         currentBalance = (data?['balance'] as num?)?.toDouble() ?? 0.0;
+        currentHeldCredits = (data?['heldCredits'] as num?)?.toDouble() ?? 0.0;
       } else {
         // Create wallet with 0 balance if it doesn't exist
         await _walletsRef.doc(userId).set({
           'userId': userId,
           'balance': 0.0,
+          'heldCredits': 0.0,
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
         currentBalance = 0.0;
+        currentHeldCredits = 0.0;
       }
 
+      // Calculate available balance (balance - heldCredits)
+      final availableBalance = currentBalance - currentHeldCredits;
       final amountInt = amount.toInt();
+      
+      // Validate that deduction doesn't exceed available balance
+      if (amountInt > availableBalance) {
+        return {
+          'success': false,
+          'error': 'Cannot deduct ${amountInt} credits. Available balance is only ${availableBalance.toInt()} credits (Total: ${currentBalance.toInt()}, Held: ${currentHeldCredits.toInt()})',
+        };
+      }
       
       final walletRef = _walletsRef.doc(userId);
       final transactionsRef = walletRef.collection('transactions');
@@ -180,7 +194,7 @@ class UserService {
       // Use Firestore transaction to atomically update balance and create transaction record
       await FirebaseFirestore.instance.runTransaction((tx) async {
         final snap = await tx.get(walletRef);
-        final data = snap.data() ?? <String, dynamic>{'balance': 0};
+        final data = snap.data() ?? <String, dynamic>{'balance': 0, 'heldCredits': 0};
         final int current = (data['balance'] as num?)?.toInt() ?? 0;
         final int next = current - amountInt;
         

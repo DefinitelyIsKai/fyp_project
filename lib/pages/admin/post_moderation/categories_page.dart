@@ -34,9 +34,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
   Future<void> _loadCategories() async {
     setState(() => _isLoading = true);
     try {
-      // Use getAllCategoriesWithJobCounts to get real-time accurate counts
       final categories = await _categoryService.getAllCategoriesWithJobCounts();
-      // Sort categories alphabetically by name
       categories.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
       setState(() => _categories = categories);
       _filterCategories();
@@ -61,7 +59,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
         return matchesSearch && matchesFilter;
       }).toList();
-      // Sort filtered categories alphabetically by name
       _filteredCategories.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     });
   }
@@ -98,7 +95,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
         ),
         child: Column(
           children: [
-            // Header
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -135,7 +131,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Category Icon Preview
                       Center(
                         child: Container(
                           width: 80,
@@ -154,7 +149,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
                       ),
                       const SizedBox(height: 32),
 
-                      // Category Name Field
                       Text(
                         'Category Name',
                         style: TextStyle(
@@ -190,7 +184,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
                       ),
                       const SizedBox(height: 24),
 
-                      // Description Field
                       Text(
                         'Description',
                         style: TextStyle(
@@ -225,7 +218,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
                         ),
                       ),
 
-                      // Status Toggle (for edit mode)
                       if (isEdit) ...[
                         const SizedBox(height: 32),
                         Text(
@@ -301,7 +293,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
               ),
             ),
 
-            // Action Buttons
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -504,13 +495,11 @@ class _CategoriesPageState extends State<CategoriesPage> {
       ),
       body: Column(
         children: [
-          // Search and Filter Section
           Container(
             padding: const EdgeInsets.all(16),
             color: Colors.grey[50],
             child: Column(
               children: [
-                // Search Bar
                 TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
@@ -526,7 +515,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Filter Chips
                 Row(
                   children: [
                     Expanded(
@@ -567,7 +555,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
             ),
           ),
 
-          // Results Count
           if (_filteredCategories.isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -584,7 +571,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
               ),
             ),
 
-          // Categories List with Pull-to-Refresh
           Expanded(
             child: RefreshIndicator(
               onRefresh: _loadCategories,
@@ -761,7 +747,6 @@ class _CategoryCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 16),
-              // Content
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -827,7 +812,6 @@ class _CategoryCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              // Arrow
               Icon(
                 Icons.arrow_forward_ios,
                 size: 16,

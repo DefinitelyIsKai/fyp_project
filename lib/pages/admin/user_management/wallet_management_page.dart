@@ -7,6 +7,10 @@ import 'package:fyp_project/services/admin/user_service.dart';
 import 'package:fyp_project/services/admin/reward_service.dart';
 import 'package:fyp_project/services/user/notification_service.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
+import 'package:fyp_project/widgets/admin/dialogs/user_dialogs/wallet_credit_dialogs.dart';
+import 'package:fyp_project/widgets/admin/dialogs/user_dialogs/reward_system_dialog.dart';
+import 'package:fyp_project/models/admin/user_model.dart';
+import 'package:fyp_project/pages/admin/user_management/user_detail_page.dart';
 import 'package:intl/intl.dart';
 
 class WalletManagementPage extends StatefulWidget {
@@ -53,28 +57,29 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
             onPressed: () => _showRewardSystemDialog(),
             tooltip: 'Monthly Rewards',
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh, size: 22),
-            onPressed: () {
-              setState(() {});
-            },
-            tooltip: 'Refresh',
-          ),
         ],
       ),
-      body: Column(
-        children: [
-          // Header with Stats
-          _buildHeaderSection(),
-          
-          // Search Bar
-          _buildSearchSection(),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          // Force refresh by triggering a rebuild
+          setState(() {});
+        },
+        color: Colors.blue[700],
+        backgroundColor: Colors.white,
+        child: Column(
+          children: [
+            // Header with Stats
+            _buildHeaderSection(),
+            
+            // Search Bar
+            _buildSearchSection(),
 
-          // Wallets List
-          Expanded(
-            child: _buildWalletsList(),
-          ),
-        ],
+            // Wallets List
+            Expanded(
+              child: _buildWalletsList(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -443,6 +448,8 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
     return nonAdminWallets;
   }
 
+  // Filter out admin wallets and sort by user name
+  // Only show wallets for regular users (jobseekers and recruiters)
   Future<List<QueryDocumentSnapshot>> _filterNonAdminWallets(List<QueryDocumentSnapshot> wallets) async {
     final walletUserPairs = <Map<String, dynamic>>[];
     
@@ -456,7 +463,7 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
           final userData = userDoc.data();
           final role = userData?['role'] as String?;
           
-          // Exclude admin roles (manager, hr, staff)
+          // Skip admin roles - only show regular user wallets
           if (role != 'manager' && role != 'hr' && role != 'staff') {
             final userName = userData?['fullName'] as String? ?? 'Unknown User';
             walletUserPairs.add({
@@ -466,16 +473,16 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
           }
         }
       } catch (e) {
-        // Error checking user role - continue with next wallet
+        // Skip this wallet if we can't check the role
       }
     }
     
-    // Sort by user name alphabetically
+    // Sort alphabetically by name for easier browsing
     walletUserPairs.sort((a, b) => 
       (a['userName'] as String).toLowerCase().compareTo((b['userName'] as String).toLowerCase())
     );
     
-    // Return only the wallets in sorted order
+    // Extract just the wallet docs in sorted order
     return walletUserPairs.map((pair) => pair['wallet'] as QueryDocumentSnapshot).toList();
   }
 
@@ -483,6 +490,8 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
     final walletData = walletDoc.data() as Map<String, dynamic>;
     final userId = walletData['userId'] as String? ?? walletDoc.id;
     final balance = (walletData['balance'] as num?)?.toDouble() ?? 0.0;
+    final heldCredits = (walletData['heldCredits'] as num?)?.toDouble() ?? 0.0;
+    final availableBalance = balance - heldCredits;
     final updatedAt = walletData['updatedAt'] as Timestamp?;
 
     return FutureBuilder<DocumentSnapshot>(
@@ -507,7 +516,7 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
 
         final userRole = userData?['role'] as String? ?? 'user';
         final initials = _getInitials(userName);
-        final isPositive = balance >= 0;
+        final isPositive = availableBalance >= 0;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
@@ -533,7 +542,32 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
               ),
               child: InkWell(
                 borderRadius: BorderRadius.circular(16),
-                onTap: () {},
+                onTap: () {
+                  if (userSnapshot.data?.exists == true && userData != null) {
+                    try {
+                      final user = UserModel.fromJson(userData, userId);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => UserDetailPage(user: user),
+                        ),
+                      ).then((refreshed) {
+                        if (refreshed == true) {
+                          setState(() {});
+                        }
+                      });
+                    } catch (e) {
+                      debugPrint('Error navigating to user detail: $e');
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error loading user details: $e'),
+                          backgroundColor: Colors.red,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                  }
+                },
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -656,43 +690,59 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: isPositive
-                                    ? [Colors.green[50]!, Colors.green[100]!]
-                                    : [Colors.red[50]!, Colors.red[100]!],
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: isPositive ? Colors.green[200]! : Colors.red[200]!,
-                                width: 1.5,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  '${balance.toStringAsFixed(0)}',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: isPositive ? Colors.green[800] : Colors.red[800],
-                                    letterSpacing: -0.5,
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: isPositive
+                                        ? [Colors.green[50]!, Colors.green[100]!]
+                                        : [Colors.red[50]!, Colors.red[100]!],
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: isPositive ? Colors.green[200]! : Colors.red[200]!,
+                                    width: 1.5,
                                   ),
                                 ),
-                                const SizedBox(width: 4),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      '${availableBalance.toStringAsFixed(0)}',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: isPositive ? Colors.green[800] : Colors.red[800],
+                                        letterSpacing: -0.5,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'credits',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: isPositive ? Colors.green[700] : Colors.red[700],
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (heldCredits > 0) ...[
+                                const SizedBox(height: 4),
                                 Text(
-                                  'credits',
+                                  'Total: ${balance.toStringAsFixed(0)} (Held: ${heldCredits.toStringAsFixed(0)})',
                                   style: TextStyle(
-                                    fontSize: 11,
-                                    color: isPositive ? Colors.green[700] : Colors.red[700],
-                                    fontWeight: FontWeight.w600,
+                                    fontSize: 10,
+                                    color: Colors.grey[600],
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                               ],
-                            ),
+                            ],
                           ),
                           const SizedBox(height: 10),
                           Row(
@@ -700,13 +750,27 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
                               _buildActionButton(
                                 icon: Icons.add_circle_outline,
                                 color: Colors.green,
-                                onTap: () => _showAddCreditDialog(userId, userName, balance),
+                                onTap: () => AddCreditDialog.show(
+                                  context: context,
+                                  userId: userId,
+                                  userName: userName,
+                                  currentBalance: balance,
+                                  onAddCredit: _addCredit,
+                                ),
                               ),
                               const SizedBox(width: 8),
                               _buildActionButton(
                                 icon: Icons.remove_circle_outline,
                                 color: Colors.red,
-                                onTap: () => _showDeductCreditDialog(userId, userName, balance),
+                                onTap: () => DeductCreditDialog.show(
+                                  context: context,
+                                  userId: userId,
+                                  userName: userName,
+                                  currentBalance: balance,
+                                  heldCredits: heldCredits,
+                                  availableBalance: availableBalance,
+                                  onDeductCredit: _deductCredit,
+                                ),
                               ),
                             ],
                           ),
@@ -831,10 +895,18 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
 
   // Loading State
   Widget _buildLoadingState() {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: 6,
-      itemBuilder: (context, index) => _buildWalletCardSkeleton(),
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 16),
+          Text(
+            'Loading wallets...',
+            style: TextStyle(color: Colors.grey),
+          ),
+        ],
+      ),
     );
   }
 
@@ -896,46 +968,53 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
 
   // Empty State
   Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.account_balance_wallet_outlined,
-                size: 48,
-                color: Colors.grey[400],
+    return CustomScrollView(
+      slivers: [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.account_balance_wallet_outlined,
+                      size: 48,
+                      color: Colors.grey[400],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'No Wallets Found',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'There are no wallet accounts created yet.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 24),
-            Text(
-              'No Wallets Found',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'There are no wallet accounts created yet.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 15,
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -951,517 +1030,8 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
     return DateFormat('dd MMM yyyy').format(date);
   }
 
-  void _showAddCreditDialog(String userId, String userName, double currentBalance) {
-    final amountController = TextEditingController();
-    final reasonController = TextEditingController();
-
-    bool isLoading = false;
-    String? amountError;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            color: Colors.white,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.green[50],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(Icons.add_circle, color: Colors.green[700], size: 28),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Add Credit',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'User: $userName',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Current Balance: RM ${currentBalance.toStringAsFixed(2)}',
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 24),
-              TextField(
-                controller: amountController,
-                enabled: !isLoading,
-                onChanged: (value) {
-                  if (amountError != null) {
-                    setDialogState(() => amountError = null);
-                  }
-                },
-                decoration: InputDecoration(
-                  labelText: 'Amount (RM) *',
-                  hintText: 'Enter amount to add',
-                  prefixIcon: Icon(
-                    Icons.attach_money,
-                    color: amountError != null ? Colors.red : Colors.green,
-                  ),
-                  errorText: amountError,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: amountError != null ? Colors.red : Colors.grey[300]!,
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: amountError != null ? Colors.red : Colors.grey[300]!,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: amountError != null ? Colors.red : Colors.green,
-                      width: 2,
-                    ),
-                  ),
-                  errorBorder: const OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(12)),
-                    borderSide: BorderSide(color: Colors.red, width: 2),
-                  ),
-                  focusedErrorBorder: const OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(12)),
-                    borderSide: BorderSide(color: Colors.red, width: 2),
-                  ),
-                  filled: true,
-                  fillColor: amountError != null ? Colors.red[50] : Colors.grey[50],
-                ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                style: const TextStyle(fontSize: 16),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: reasonController,
-                enabled: !isLoading,
-                decoration: InputDecoration(
-                  labelText: 'Reason (Optional)',
-                  hintText: 'Enter reason for adding credit',
-                  prefixIcon: const Icon(Icons.note, color: Colors.green),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey[300]!),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey[300]!),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Colors.green, width: 2),
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey[50],
-                ),
-                maxLines: 3,
-                style: const TextStyle(fontSize: 16),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        side: BorderSide(color: Colors.grey[300]!),
-                      ),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: isLoading
-                          ? null
-                          : () async {
-                              final amountText = amountController.text.trim();
-
-                              // Reset errors
-                              amountError = null;
-
-                              // Validate amount
-                              if (amountText.isEmpty) {
-                                setDialogState(() {
-                                  amountError = 'Please enter an amount';
-                                });
-                                return;
-                              }
-
-                              final amount = double.tryParse(amountText);
-                              if (amount == null || amount <= 0) {
-                                setDialogState(() {
-                                  amountError = 'Please enter a valid amount greater than 0';
-                                });
-                                return;
-                              }
-
-                              isLoading = true;
-                              setDialogState(() {});
-
-                              Navigator.pop(context);
-                              await _addCredit(userId, amount, reasonController.text, userName);
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 2,
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.check_circle, size: 20),
-                          SizedBox(width: 8),
-                          Text(
-                            'Add Credit',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-      ),
-    );
-  }
-
-  void _showDeductCreditDialog(String userId, String userName, double currentBalance) {
-    final amountController = TextEditingController();
-    final reasonController = TextEditingController();
-
-    bool isLoading = false;
-    String? amountError;
-    String? reasonError;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            color: Colors.white,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.red[50],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(Icons.remove_circle, color: Colors.red[700], size: 28),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Deduct Credit',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'User: $userName',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Current Balance: RM ${currentBalance.toStringAsFixed(2)}',
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 14,
-                ),
-              ),
-              if (currentBalance < 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.warning, color: Colors.red[700], size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        'User has negative balance',
-                        style: TextStyle(
-                          color: Colors.red[700],
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              const SizedBox(height: 24),
-              TextField(
-                controller: amountController,
-                enabled: !isLoading,
-                onChanged: (value) {
-                  if (amountError != null) {
-                    setDialogState(() => amountError = null);
-                  }
-                },
-                decoration: InputDecoration(
-                  labelText: 'Amount (RM) *',
-                  hintText: 'Enter amount to deduct',
-                  prefixIcon: Icon(
-                    Icons.attach_money,
-                    color: amountError != null ? Colors.red : Colors.red,
-                  ),
-                  errorText: amountError,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: amountError != null ? Colors.red : Colors.grey[300]!,
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: amountError != null ? Colors.red : Colors.grey[300]!,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: amountError != null ? Colors.red : Colors.red,
-                      width: 2,
-                    ),
-                  ),
-                  errorBorder: const OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(12)),
-                    borderSide: BorderSide(color: Colors.red, width: 2),
-                  ),
-                  focusedErrorBorder: const OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(12)),
-                    borderSide: BorderSide(color: Colors.red, width: 2),
-                  ),
-                  filled: true,
-                  fillColor: amountError != null ? Colors.red[50] : Colors.grey[50],
-                ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                style: const TextStyle(fontSize: 16),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: reasonController,
-                enabled: !isLoading,
-                onChanged: (value) {
-                  if (reasonError != null) {
-                    setDialogState(() => reasonError = null);
-                  }
-                },
-                decoration: InputDecoration(
-                  labelText: 'Reason (Required) *',
-                  hintText: 'Enter reason for deducting credit',
-                  prefixIcon: Icon(
-                    Icons.note,
-                    color: reasonError != null ? Colors.red : Colors.red,
-                  ),
-                  errorText: reasonError,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: reasonError != null ? Colors.red : Colors.grey[300]!,
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: reasonError != null ? Colors.red : Colors.grey[300]!,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: reasonError != null ? Colors.red : Colors.red,
-                      width: 2,
-                    ),
-                  ),
-                  errorBorder: const OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(12)),
-                    borderSide: BorderSide(color: Colors.red, width: 2),
-                  ),
-                  focusedErrorBorder: const OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(12)),
-                    borderSide: BorderSide(color: Colors.red, width: 2),
-                  ),
-                  filled: true,
-                  fillColor: reasonError != null ? Colors.red[50] : Colors.grey[50],
-                ),
-                maxLines: 3,
-                style: const TextStyle(fontSize: 16),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        side: BorderSide(color: Colors.grey[300]!),
-                      ),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: isLoading
-                          ? null
-                          : () async {
-                              final amountText = amountController.text.trim();
-                              final reasonText = reasonController.text.trim();
-
-                              // Reset errors
-                              amountError = null;
-                              reasonError = null;
-
-                              // Validate amount
-                              if (amountText.isEmpty) {
-                                setDialogState(() {
-                                  amountError = 'Please enter an amount';
-                                });
-                                return;
-                              }
-
-                              final amount = double.tryParse(amountText);
-                              if (amount == null || amount <= 0) {
-                                setDialogState(() {
-                                  amountError = 'Please enter a valid amount greater than 0';
-                                });
-                                return;
-                              }
-
-                              // Validate reason
-                              if (reasonText.isEmpty) {
-                                setDialogState(() {
-                                  reasonError = 'Please enter a reason';
-                                });
-                                return;
-                              }
-
-                              isLoading = true;
-                              setDialogState(() {});
-
-                              Navigator.pop(context);
-                              await _deductCredit(userId, amount, reasonText);
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 2,
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.check_circle, size: 20),
-                          SizedBox(width: 8),
-                          Text(
-                            'Deduct Credit',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-      ),
-    );
-  }
-
+  // Add credit to user wallet using firestore transaction
+  // Also creates transaction record and sends notification
   Future<void> _addCredit(String userId, double amount, String reason, String userName) async {
     // Show loading dialog
     if (!mounted) return;
@@ -1521,7 +1091,7 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
       final transactionsRef = walletRef.collection('transactions');
       final txnRef = transactionsRef.doc();
       
-      // Ensure wallet exists first
+      // Create wallet if it doesn't exist yet
       final walletDoc = await walletRef.get();
       if (!walletDoc.exists) {
         await walletRef.set({
@@ -1532,7 +1102,8 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
         });
       }
 
-      // Use Firestore transaction to atomically update balance and create transaction record
+      // Use transaction to ensure balance update and transaction record are atomic
+      // Prevents race conditions if multiple credits added at same time
       await FirebaseFirestore.instance.runTransaction((tx) async {
         final snap = await tx.get(walletRef);
         final data = snap.data() ?? <String, dynamic>{'balance': 0};
@@ -1546,7 +1117,7 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
           'updatedAt': FieldValue.serverTimestamp(),
         });
         
-        // Create transaction record in subcollection
+        // Create transaction record in subcollection for history
         tx.set(txnRef, {
           'id': txnRef.id,
           'userId': userId,
@@ -1788,1193 +1359,10 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
   }
 
   void _showRewardSystemDialog() {
-    showDialog(
+    RewardSystemDialog.show(
       context: context,
-      builder: (context) => _RewardSystemDialog(
-        rewardService: _rewardService,
-        notificationService: _notificationService,
-      ),
-    );
-  }
-}
-
-class _RewardSystemDialog extends StatefulWidget {
-  final RewardService rewardService;
-  final NotificationService notificationService;
-
-  const _RewardSystemDialog({
-    required this.rewardService,
-    required this.notificationService,
-  });
-
-  @override
-  State<_RewardSystemDialog> createState() => _RewardSystemDialogState();
-}
-
-class _RewardSystemDialogState extends State<_RewardSystemDialog> {
-  final TextEditingController _minRatingController = TextEditingController(text: '4.0');
-  final TextEditingController _minTasksController = TextEditingController(text: '3');
-  final TextEditingController _rewardAmountController = TextEditingController(text: '100');
-  bool _isCalculating = false;
-  int _selectedTab = 0; // 0 = Calculate, 1 = History
-  String? _ratingError;
-  String? _tasksError;
-  String? _amountError;
-
-  @override
-  void dispose() {
-    _minRatingController.dispose();
-    _minTasksController.dispose();
-    _rewardAmountController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Container(
-        width: MediaQuery.of(context).size.width * 0.9,
-        constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          color: Colors.white,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.orange[50],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(Icons.card_giftcard, color: Colors.orange[700], size: 28),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Monthly Reward System',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // Tabs
-            Row(
-              children: [
-                Expanded(
-                  child: _buildTabButton(
-                    label: 'Calculate Rewards',
-                    isSelected: _selectedTab == 0,
-                    onTap: () => setState(() => _selectedTab = 0),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _buildTabButton(
-                    label: 'Reward History',
-                    isSelected: _selectedTab == 1,
-                    onTap: () => setState(() => _selectedTab = 1),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // Content
-            Expanded(
-              child: _selectedTab == 0 ? _buildCalculateTab() : _buildHistoryTab(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTabButton({
-    required String label,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primaryDark : Colors.grey[100],
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: isSelected ? Colors.white : Colors.grey[700],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCalculateTab() {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Info Card
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.blue[50],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue[200]!),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Reward Criteria',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.blue[900],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Users will be rewarded if they meet both criteria:\n'
-                  '• Average rating ≥ minimum rating\n'
-                  '• Approved applications for completed posts ≥ minimum posts',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.blue[800],
-                    height: 1.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Settings
-          Text(
-            'Reward Settings',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[800],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Minimum Rating
-          TextField(
-            controller: _minRatingController,
-            decoration: InputDecoration(
-              labelText: 'Minimum Average Rating',
-              hintText: 'e.g., 4.0',
-              prefixIcon: Icon(Icons.star, color: _ratingError != null ? Colors.red : Colors.orange),
-              errorText: _ratingError,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: _ratingError != null ? Colors.red : Colors.grey[300]!),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: _ratingError != null ? Colors.red : Colors.grey[300]!),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: _ratingError != null ? Colors.red : AppColors.primaryDark,
-                  width: 2,
-                ),
-              ),
-              errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Colors.red, width: 2),
-              ),
-              focusedErrorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Colors.red, width: 2),
-              ),
-              filled: true,
-              fillColor: _ratingError != null ? Colors.red[50] : Colors.grey[50],
-            ),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            style: const TextStyle(fontSize: 16),
-            onChanged: (value) {
-              if (_ratingError != null) {
-                setState(() => _ratingError = null);
-              }
-            },
-          ),
-          const SizedBox(height: 16),
-
-          // Minimum Tasks
-          TextField(
-            controller: _minTasksController,
-            decoration: InputDecoration(
-              labelText: 'Minimum Completed Posts',
-              hintText: 'e.g., 3',
-              prefixIcon: Icon(Icons.task_alt, color: _tasksError != null ? Colors.red : Colors.green),
-              errorText: _tasksError,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: _tasksError != null ? Colors.red : Colors.grey[300]!),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: _tasksError != null ? Colors.red : Colors.grey[300]!),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: _tasksError != null ? Colors.red : AppColors.primaryDark,
-                  width: 2,
-                ),
-              ),
-              errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Colors.red, width: 2),
-              ),
-              focusedErrorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Colors.red, width: 2),
-              ),
-              filled: true,
-              fillColor: _tasksError != null ? Colors.red[50] : Colors.grey[50],
-            ),
-            keyboardType: TextInputType.number,
-            style: const TextStyle(fontSize: 16),
-            onChanged: (value) {
-              if (_tasksError != null) {
-                setState(() => _tasksError = null);
-              }
-            },
-          ),
-          const SizedBox(height: 16),
-
-          // Reward Amount
-          TextField(
-            controller: _rewardAmountController,
-            decoration: InputDecoration(
-              labelText: 'Reward Amount (Credits)',
-              hintText: 'e.g., 100',
-              prefixIcon: Icon(Icons.account_balance_wallet, color: _amountError != null ? Colors.red : Colors.purple),
-              errorText: _amountError,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: _amountError != null ? Colors.red : Colors.grey[300]!),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: _amountError != null ? Colors.red : Colors.grey[300]!),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: _amountError != null ? Colors.red : AppColors.primaryDark,
-                  width: 2,
-                ),
-              ),
-              errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Colors.red, width: 2),
-              ),
-              focusedErrorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Colors.red, width: 2),
-              ),
-              filled: true,
-              fillColor: _amountError != null ? Colors.red[50] : Colors.grey[50],
-            ),
-            keyboardType: TextInputType.number,
-            style: const TextStyle(fontSize: 16),
-            onChanged: (value) {
-              if (_amountError != null) {
-                setState(() => _amountError = null);
-              }
-            },
-          ),
-          const SizedBox(height: 24),
-
-          // Calculate Button
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _isCalculating ? null : _calculateRewards,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 2,
-              ),
-              child: _isCalculating
-                  ? const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        ),
-                        SizedBox(width: 12),
-                        Text(
-                          'Calculating...',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    )
-                  : const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.calculate, size: 20),
-                        SizedBox(width: 8),
-                        Text(
-                          'Calculate & Distribute Rewards',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHistoryTab() {
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: widget.rewardService.streamRewardHistory(limit: 50),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        if (snapshot.hasError) {
-          return Center(
-            child: Text(
-              'Error loading history: ${snapshot.error}',
-              style: TextStyle(color: Colors.red[700]),
-            ),
-          );
-        }
-
-        final rewards = snapshot.data ?? [];
-
-        if (rewards.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.history, size: 64, color: Colors.grey[400]),
-                const SizedBox(height: 16),
-                Text(
-                  'No reward history yet',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.all(8),
-          itemCount: rewards.length,
-          itemBuilder: (context, index) {
-            final distribution = rewards[index];
-            final distributionDate = distribution['distributionDate'] as DateTime?;
-            final month = distribution['month'] as String? ?? 'Unknown';
-            final successCount = distribution['successCount'] as int? ?? 0;
-            final totalAmount = distribution['totalAmount'] as int? ?? 0;
-            final rewardAmount = distribution['rewardAmount'] as int? ?? 0;
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey[200]!),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.orange[100],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(Icons.card_giftcard, color: Colors.orange[700], size: 20),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Month: $month',
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.black87,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            if (distributionDate != null) ...[
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Icon(Icons.access_time, size: 12, color: Colors.grey[600]),
-                                  const SizedBox(width: 4),
-                                  Flexible(
-                                    child: Text(
-                                      DateFormat('dd MMM yyyy').format(distributionDate),
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey[600],
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.orange[50],
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.orange[200]!),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              '$totalAmount',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.orange[700],
-                              ),
-                            ),
-                            Text(
-                              'total',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.orange[600],
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildDistributionStat(
-                          icon: Icons.people,
-                          label: 'Users',
-                          value: successCount.toString(),
-                          color: Colors.blue,
-                        ),
-                      ),
-                      Expanded(
-                        child: _buildDistributionStat(
-                          icon: Icons.account_balance_wallet,
-                          label: 'Per User',
-                          value: '$rewardAmount',
-                          color: Colors.purple,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-
-  Future<void> _calculateRewards() async {
-    // Reset errors
-    setState(() {
-      _ratingError = null;
-      _tasksError = null;
-      _amountError = null;
-    });
-
-    final minRating = double.tryParse(_minRatingController.text);
-    final minTasks = int.tryParse(_minTasksController.text);
-    final rewardAmount = int.tryParse(_rewardAmountController.text);
-
-    bool hasError = false;
-
-    if (minRating == null || minRating <= 0 || minRating > 5) {
-      setState(() {
-        _ratingError = 'Please enter a valid rating';
-      });
-      hasError = true;
-    }
-
-    if (minTasks == null || minTasks <= 0) {
-      setState(() {
-        _tasksError = 'Please enter a valid number of posts';
-      });
-      hasError = true;
-    }
-
-    if (rewardAmount == null || rewardAmount <= 0) {
-      setState(() {
-        _amountError = 'Please enter a valid reward amount';
-      });
-      hasError = true;
-    }
-
-    if (hasError) {
-      return;
-    }
-
-    // At this point, all values are validated and non-null
-    final validMinRating = minRating!;
-    final validMinTasks = minTasks!;
-    final validRewardAmount = rewardAmount!;
-
-    // Show loading while calculating preview
-    setState(() => _isCalculating = true);
-    
-    // Show a non-dismissible loading dialog to prevent user interaction
-    if (!mounted) {
-      return;
-    }
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => WillPopScope(
-        onWillPop: () async => false,
-        child: Dialog(
-          backgroundColor: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircularProgressIndicator(),
-                const SizedBox(height: 16),
-                const Text(
-                  'Calculating rewards...',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'This may take a moment',
-                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    
-    // Force UI to update
-    await Future.microtask(() {});
-    await Future.delayed(Duration.zero);
-    await Future.microtask(() {});
-    
-    if (!mounted) {
-      Navigator.of(context).pop(); // Close loading dialog
-      return;
-    }
-    
-    // Wait for next frame
-    await Future.delayed(const Duration(milliseconds: 200));
-    
-    if (!mounted) {
-      Navigator.of(context).pop(); // Close loading dialog
-      return;
-    }
-
-    try {
-      // Call service directly - it already has UI yielding built in
-      final previewResult = await widget.rewardService.previewEligibleUsers(
-        minRating: validMinRating,
-        minCompletedTasks: validMinTasks,
-        rewardAmount: validRewardAmount,
-      );
-      
-      // Close loading dialog
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-
-      if (!mounted) {
-        Navigator.of(context).pop(); // Close loading dialog if still open
-        return;
-      }
-
-      // Wait for loading dialog to fully close before proceeding
-      await Future.delayed(const Duration(milliseconds: 100));
-      await SchedulerBinding.instance.endOfFrame;
-      await Future.delayed(const Duration(milliseconds: 50));
-
-      setState(() => _isCalculating = false);
-      
-      // Wait for setState to complete
-      await Future.delayed(Duration.zero);
-      await Future.microtask(() {});
-
-      if (previewResult['success'] != true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${previewResult['error'] ?? 'Failed to calculate preview'}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-
-      final eligibleUsers = previewResult['eligibleUsers'] as List<dynamic>? ?? [];
-      final totalEligible = previewResult['totalEligible'] as int? ?? 0;
-      final month = previewResult['month'] as String? ?? 'Unknown';
-      final completedPostsCount = previewResult['completedPostsCount'] as int? ?? 0;
-
-      // Show preview dialog with eligible users count
-      // Yield before showing dialog to ensure UI is ready
-      await Future.delayed(Duration.zero);
-      await Future.microtask(() {});
-      await SchedulerBinding.instance.endOfFrame;
-      await Future.delayed(const Duration(milliseconds: 100));
-      
-      // Use a simpler approach - show dialog with Future.microtask to defer building
-      await Future.microtask(() {});
-      await Future.delayed(const Duration(milliseconds: 50));
-      
-      final confirmed = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) {
-          return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.orange[50],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(Icons.preview, color: Colors.orange[700], size: 24),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Reward Preview',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          ),
-          content: StatefulBuilder(
-            builder: (context, setDialogState) {
-              // Build content after dialog is shown to prevent blocking
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                // Dialog should be visible now
-              });
-              
-              return SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Summary Card
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.blue[50],
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue[200]!),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Month: $month',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.blue[900],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildPreviewStat(
-                                  icon: Icons.work,
-                                  label: 'Completed Posts',
-                                  value: completedPostsCount.toString(),
-                                  color: Colors.blue,
-                                ),
-                              ),
-                              Expanded(
-                                child: _buildPreviewStat(
-                                  icon: Icons.people,
-                                  label: 'Eligible Users',
-                                  value: totalEligible.toString(),
-                                  color: Colors.green,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildPreviewStat(
-                                  icon: Icons.account_balance_wallet,
-                                  label: 'Total Credits',
-                                  value: '${totalEligible * validRewardAmount}',
-                                  color: Colors.purple,
-                                ),
-                              ),
-                              Expanded(
-                                child: _buildPreviewStat(
-                                  icon: Icons.star,
-                                  label: 'Per User',
-                                  value: '$validRewardAmount',
-                                  color: Colors.orange,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    // Criteria
-                    Text(
-                      'Criteria:',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildCriteriaRow('Minimum Rating', validMinRating.toStringAsFixed(1)),
-                    _buildCriteriaRow('Minimum Posts', validMinTasks.toString()),
-                    _buildCriteriaRow('Reward Amount', '$validRewardAmount credits'),
-                    
-                    if (totalEligible > 0) ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        'Eligible Users:',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey[800],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      // Simplify list - build directly without ListView.builder to prevent blocking
-                      ...eligibleUsers.take(10).map((user) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 16,
-                                backgroundColor: Colors.green[100],
-                                child: Text(
-                                  ((user['userName'] as String? ?? '?').isNotEmpty 
-                                      ? (user['userName'] as String)[0].toUpperCase() 
-                                      : '?'),
-                                  style: TextStyle(
-                                    color: Colors.green[700],
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      user['userName'] as String? ?? 'Unknown',
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    Text(
-                                      'Rating: ${(user['averageRating'] as num?)?.toStringAsFixed(1) ?? '0.0'}, Posts: ${user['completedTasks'] ?? 0}',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey[600],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                      if (eligibleUsers.length > 10)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(
-                            '... and ${eligibleUsers.length - 10} more users',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontStyle: FontStyle.italic,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ),
-                    ] else ...[
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.orange[50],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.orange[200]!),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.info_outline, color: Colors.orange[700], size: 20),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                'No users meet the criteria for this month.',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.orange[900],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          completedPostsCount == 0
-                              ? '• No completed posts found in this month'
-                              : '• Found $completedPostsCount completed post(s), but no users with applications meet the criteria\n• Check if users have applications for completed posts\n',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.orange[800],
-                            height: 1.4,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                    ],
-                  ],
-                ),
-              );
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context, false);
-              },
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: totalEligible > 0
-                  ? () {
-                      Navigator.pop(context, true);
-                    }
-                  : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Distribute Rewards'),
-            ),
-          ],
-          );
-        },
-      );
-      
-      if (confirmed != true) {
-        return;
-      }
-
-      // Proceed with distribution
-      setState(() => _isCalculating = true);
-
-      // Show loading dialog immediately to prevent navigation
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => WillPopScope(
-          onWillPop: () async => false,
-          child: Dialog(
-            backgroundColor: Colors.transparent,
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Distributing rewards...',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Please wait, this may take a moment',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-
-      // Wait a moment for loading dialog to show
-      await Future.delayed(const Duration(milliseconds: 100));
-      await Future.microtask(() {});
-      await SchedulerBinding.instance.endOfFrame;
-
-      final result = await widget.rewardService.calculateMonthlyRewards(
-        minRating: validMinRating,
-        minCompletedTasks: validMinTasks,
-        rewardAmount: validRewardAmount,
-      );
-
-      // Close loading dialog first
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-
-      // Wait a moment for loading dialog to fully close
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      if (mounted) {
-        // Close the main reward system dialog - this will return us to wallet_management_page
-        Navigator.of(context).pop();
-        
-        // Wait a frame to ensure dialog is fully closed
-        await Future.delayed(const Duration(milliseconds: 100));
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                result['success'] == true
-                    ? 'Successfully distributed rewards to ${result['successCount']} users!'
-                    : 'Error: ${result['error']}',
-              ),
-              backgroundColor: result['success'] == true ? Colors.green : Colors.red,
-              duration: const Duration(seconds: 4),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      // Close loading dialog if still open
-      if (mounted) {
-        try {
-          Navigator.of(context).pop(); // Close loading dialog
-        } catch (_) {
-          // Loading dialog might already be closed
-        }
-        setState(() => _isCalculating = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
-    } finally {
-      // Ensure loading dialog is closed
-      if (mounted) {
-        try {
-          Navigator.of(context).pop(); // Try to close loading dialog
-        } catch (_) {
-          // Dialog might already be closed
-        }
-        setState(() => _isCalculating = false);
-      }
-    }
-  }
-
-  Widget _buildPreviewStat({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 20),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            color: Colors.grey[600],
-          ),
-          textAlign: TextAlign.center,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCriteriaRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey[700],
-            ),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[900],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDistributionStat({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 20),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: Colors.grey[600],
-          ),
-        ),
-      ],
+      rewardService: _rewardService,
+      notificationService: _notificationService,
     );
   }
 }

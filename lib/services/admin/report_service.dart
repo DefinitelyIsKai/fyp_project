@@ -1,8 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fyp_project/models/admin/report_model.dart';
 
 class ReportService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final CollectionReference<Map<String, dynamic>> _notificationsRef =
+      FirebaseFirestore.instance.collection('notifications');
+  final CollectionReference<Map<String, dynamic>> _logsRef =
+      FirebaseFirestore.instance.collection('logs');
 
   /// Stream all reports in real-time
   Stream<List<ReportModel>> streamAllReports() {
@@ -74,6 +79,12 @@ class ReportService {
     String? reviewedBy,
     String? actionTaken,
   }) async {
+    // Get report data before updating
+    final reportDoc = await _firestore.collection('reports').doc(reportId).get();
+    final reportData = reportDoc.data();
+    final reporterId = reportData?['reporterId']?.toString() ?? '';
+    final reportReason = reportData?['reason']?.toString() ?? '';
+    
     final data = <String, dynamic>{
       'status': status.toString().split('.').last,
       'reviewedAt': FieldValue.serverTimestamp(),
@@ -83,6 +94,89 @@ class ReportService {
     };
 
     await _firestore.collection('reports').doc(reportId).update(data);
+    
+    // Create log entry
+    try {
+      final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
+      final reportType = reportData?['type']?.toString() ?? 'unknown';
+      
+      await _logsRef.add({
+        'actionType': status == ReportStatus.resolved ? 'report_resolved' : 'report_dismissed',
+        'reportId': reportId,
+        'reportType': reportType,
+        'reportReason': reportReason,
+        'status': status.toString().split('.').last,
+        'reporterId': reporterId,
+        if (notes != null) 'notes': notes,
+        if (actionTaken != null) 'actionTaken': actionTaken,
+        'createdAt': FieldValue.serverTimestamp(),
+        'createdBy': currentAdminId,
+      });
+    } catch (logError) {
+      print('Error creating report status log entry: $logError');
+      // Don't fail the operation if logging fails
+    }
+    
+    // Send notification to reporter
+    if (reporterId.isNotEmpty) {
+      await _sendReportStatusNotification(
+        reporterId: reporterId,
+        reportId: reportId,
+        status: status,
+        reason: reportReason,
+        actionTaken: actionTaken,
+      );
+    }
+  }
+  
+  /// Send notification to reporter about report status
+  Future<void> _sendReportStatusNotification({
+    required String reporterId,
+    required String reportId,
+    required ReportStatus status,
+    required String reason,
+    String? actionTaken,
+  }) async {
+    try {
+      String title;
+      String body;
+      String category;
+      
+      if (status == ReportStatus.resolved) {
+        title = 'Report Resolved';
+        if (actionTaken != null && actionTaken.isNotEmpty) {
+          body = 'Your report regarding "$reason" has been resolved. Action taken: $actionTaken';
+        } else {
+          body = 'Your report regarding "$reason" has been resolved. Appropriate action has been taken against the violation.';
+        }
+        category = 'report_resolved';
+      } else if (status == ReportStatus.dismissed) {
+        title = 'Report Dismissed';
+        body = 'Your report regarding "$reason" has been reviewed and dismissed. No action was taken as the report was found to be invalid or no violation was found.';
+        category = 'report_dismissed';
+      } else {
+        // Don't send notification for other statuses
+        return;
+      }
+      
+      await _notificationsRef.add({
+        'userId': reporterId,
+        'title': title,
+        'body': body,
+        'category': category,
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+        'metadata': {
+          'reportId': reportId,
+          'reportReason': reason,
+          'status': status.toString().split('.').last,
+          if (actionTaken != null) 'actionTaken': actionTaken,
+        },
+      });
+    } catch (e) {
+      print('Error sending report status notification: $e');
+      // Don't fail the operation if notification fails
+    }
   }
 
   /// Resolve report

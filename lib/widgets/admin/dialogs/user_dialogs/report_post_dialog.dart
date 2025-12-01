@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../utils/user/button_styles.dart';
+import '../../../../services/user/report_service.dart';
+import '../../../../models/admin/report_category_model.dart';
 
 /// Dialog for reporting a post
 /// Returns a Map with 'reason' and 'description' keys, or null if cancelled
@@ -12,11 +14,43 @@ class ReportPostDialog extends StatefulWidget {
 
 class _ReportPostDialogState extends State<ReportPostDialog> {
   String _selectedReason = '';
+  String? _customReason;
   final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _customReasonController = TextEditingController();
+  final ReportService _reportService = ReportService();
+  List<ReportCategoryModel> _categories = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      // Get categories based on user role (jobseeker reports posts)
+      final categories = await _reportService.getReportCategoriesByUserRole();
+      if (mounted) {
+        setState(() {
+          _categories = categories;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading report categories: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
     _descriptionController.dispose();
+    _customReasonController.dispose();
     super.dispose();
   }
 
@@ -29,15 +63,23 @@ class _ReportPostDialogState extends State<ReportPostDialog> {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             // Header
             Row(
               children: [
@@ -92,48 +134,153 @@ class _ReportPostDialogState extends State<ReportPostDialog> {
               ),
             ),
             const SizedBox(height: 12),
-            ...['Inappropriate Content', 'Misleading Information', 'Spam', 'Fraud', 'Other'].map((reason) {
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: _selectedReason == reason
-                      ? Colors.red.withOpacity(0.05)
-                      : Colors.grey[50],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: _selectedReason == reason
-                        ? Colors.red
-                        : Colors.grey[300]!,
-                    width: _selectedReason == reason ? 2 : 1,
-                  ),
+            if (_isLoading)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(20.0),
+                  child: CircularProgressIndicator(),
                 ),
-                child: RadioListTile<String>(
-                  title: Text(
-                    reason,
-                    style: TextStyle(
-                      fontWeight: _selectedReason == reason
-                          ? FontWeight.w600
-                          : FontWeight.normal,
-                      color: _selectedReason == reason
-                          ? Colors.red[700]
-                          : Colors.black87,
+              )
+            else
+              ...[
+                // Show categories if available
+                if (_categories.isNotEmpty)
+                  ..._categories.map((category) {
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: _selectedReason == category.name
+                          ? Colors.red.withOpacity(0.05)
+                          : Colors.grey[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _selectedReason == category.name
+                            ? Colors.red
+                            : Colors.grey[300]!,
+                        width: _selectedReason == category.name ? 2 : 1,
+                      ),
+                    ),
+                    child: RadioListTile<String>(
+                      title: Text(
+                        category.name,
+                        style: TextStyle(
+                          fontWeight: _selectedReason == category.name
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                          color: _selectedReason == category.name
+                              ? Colors.red[700]
+                              : Colors.black87,
+                        ),
+                      ),
+                      subtitle: category.description.isNotEmpty
+                          ? Text(
+                              category.description,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            )
+                          : null,
+                      value: category.name,
+                      groupValue: _selectedReason,
+                      activeColor: Colors.red,
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedReason = value ?? '';
+                          _customReason = null;
+                          _customReasonController.clear();
+                        });
+                      },
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                    ),
+                  );
+                  }),
+                // Other option (always available)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    color: _selectedReason == 'Other'
+                        ? Colors.red.withOpacity(0.05)
+                        : Colors.grey[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _selectedReason == 'Other'
+                          ? Colors.red
+                          : Colors.grey[300]!,
+                      width: _selectedReason == 'Other' ? 2 : 1,
                     ),
                   ),
-                  value: reason,
-                  groupValue: _selectedReason,
-                  activeColor: Colors.red,
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedReason = value ?? '';
-                    });
-                  },
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
+                  child: RadioListTile<String>(
+                    title: const Text(
+                      'Other',
+                      style: TextStyle(
+                        fontWeight: FontWeight.normal,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    value: 'Other',
+                    groupValue: _selectedReason,
+                    activeColor: Colors.red,
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedReason = value ?? '';
+                        _customReason = '';
+                      });
+                    },
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
                   ),
                 ),
-              );
-            }),
+                // Custom reason input (shown when Other is selected)
+                if (_selectedReason == 'Other')
+                  Container(
+                    margin: const EdgeInsets.only(top: 8, bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.grey[300]!,
+                        width: 1,
+                      ),
+                    ),
+                    child: TextField(
+                      controller: _customReasonController,
+                      decoration: InputDecoration(
+                        hintText: 'Please specify the reason...',
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                        border: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: primaryColor, width: 2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        hintStyle: TextStyle(color: Colors.grey[500]),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          _customReason = value.trim();
+                        });
+                      },
+                    ),
+                  ),
+              ],
             const SizedBox(height: 20),
             // Description Field
             Text(
@@ -198,10 +345,15 @@ class _ReportPostDialogState extends State<ReportPostDialog> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _selectedReason.isEmpty
+                    onPressed: (_selectedReason.isEmpty ||
+                            (_selectedReason == 'Other' &&
+                                (_customReason == null ||
+                                    _customReason!.isEmpty)))
                         ? null
                         : () => Navigator.pop(context, {
-                              'reason': _selectedReason,
+                              'reason': _selectedReason == 'Other'
+                                  ? _customReason!
+                                  : _selectedReason,
                               'description': _descriptionController.text.trim(),
                             }),
                     style: ButtonStyles.destructive(
@@ -218,7 +370,9 @@ class _ReportPostDialogState extends State<ReportPostDialog> {
                 ),
               ],
             ),
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );

@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:fyp_project/models/admin/analytics_model.dart';
 import 'package:fyp_project/services/admin/analytics_service.dart';
+import 'package:fyp_project/utils/admin/analytics_formatter.dart';
+import 'package:fyp_project/widgets/admin/cards/user_analytics_quick_stat_card.dart';
+import 'package:fyp_project/widgets/admin/common/analytics_comparison_item.dart';
+import 'package:fyp_project/widgets/admin/common/user_analytics_metric_row.dart';
+import 'package:fyp_project/widgets/admin/dialogs/date_range_picker_dialog.dart' as custom;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -109,12 +114,10 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
   Future<void> _selectDateRange() async {
     if (!mounted) return;
 
-    final result = await showDialog<Map<String, DateTime>>(
-      context: context,
-      builder: (dialogContext) => _DateRangePickerDialog(
-        startDate: _startDate,
-        endDate: _endDate,
-      ),
+    final result = await custom.DateRangePickerDialog.show(
+      context,
+      startDate: _startDate,
+      endDate: _endDate,
     );
 
     if (result != null && mounted) {
@@ -141,71 +144,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
     return '${_formatDate(_startDate)} - ${_formatDate(_endDate)}';
   }
 
-  String _formatGrowthRate(double rate, String metricType, AnalyticsModel analytics) {
-    const double newDataIndicator = -999.0;
-    if (rate == newDataIndicator) {
-      // Cap percentages at 100%
-      switch (metricType) {
-        case 'userGrowth':
-          return '100.0%';
-        case 'activeUserGrowth':
-          if (analytics.totalUsers > 0) {
-            final calculated = (analytics.activeUsers / analytics.totalUsers * 100);
-            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
-          }
-          return '0.0%';
-        case 'registrationGrowth':
-          if (analytics.totalUsers > 0) {
-            final calculated = (analytics.newRegistrations / analytics.totalUsers * 100);
-            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
-          }
-          return '100.0%';
-        case 'engagementGrowth':
-          return '${_capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%';
-        case 'messageGrowth':
-          if (analytics.totalUsers > 0) {
-            final calculated = (analytics.totalMessages / analytics.totalUsers * 100);
-            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
-          }
-          return '0.0%';
-        case 'applicationGrowth':
-          if (analytics.totalUsers > 0) {
-            final calculated = (analytics.totalApplications / analytics.totalUsers * 100);
-            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
-          }
-          return '0.0%';
-        case 'reportGrowth':
-          if (analytics.totalUsers > 0) {
-            final calculated = (analytics.totalReports / analytics.totalUsers * 100);
-            return '${(calculated > 100 ? 100.0 : calculated).toStringAsFixed(1)}%';
-          }
-          return '0.0%';
-        default:
-          return '0.0%';
-      }
-    }
-    // Hide negative growth rates
-    if (rate < 0 && (metricType == 'registrationGrowth' || metricType == 'engagementGrowth' || metricType == 'applicationGrowth' || metricType == 'messageGrowth')) {
-      return '0.0%';
-    }
-    // Cap ALL growth rates at 100%
-    if (rate > 100) {
-      return '100.0%';
-    }
-    return '${rate.toStringAsFixed(1)}%';
-  }
 
-  double _capEngagementRate(double rate) {
-    return rate > 100.0 ? 100.0 : rate;
-  }
-
-  double _capGrowthRate(double rate) {
-    // Cap growth rate at 100%
-    if (rate > 100.0) return 100.0;
-    // Hide negative growth rates
-    if (rate < 0) return 0.0;
-    return rate;
-  }
 
   Future<void> _downloadPDF() async {
     if (_analytics == null || _allTimeAnalytics == null) return;
@@ -332,7 +271,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
                 ),
                 headers: ['Metric', 'All Time', 'Selected Period'],
                 data: [
-                  ['Engagement Rate', '${_capEngagementRate(allTime.engagementRate).toStringAsFixed(1)}%', '${_capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%'],
+                  ['Engagement Rate', '${AnalyticsFormatter.capEngagementRate(allTime.engagementRate).toStringAsFixed(1)}%', '${AnalyticsFormatter.capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%'],
                   ['Job Applications', allTime.totalApplications.toString(), analytics.totalApplications.toString()],
                   ['Messages Sent', allTime.totalMessages.toString(), analytics.totalMessages.toString()],
                 ],
@@ -406,13 +345,13 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
                 ),
                 headers: ['Metric', 'Growth Rate'],
                 data: [
-                  ['User Growth', _formatGrowthRate(analytics.userGrowthRate, 'userGrowth', analytics)],
-                  ['Active User Growth', _formatGrowthRate(analytics.activeUserGrowth, 'activeUserGrowth', analytics)],
-                  ['Registration Growth', _formatGrowthRate(analytics.registrationGrowth, 'registrationGrowth', analytics)],
-                  ['Engagement Growth', _formatGrowthRate(analytics.engagementGrowth, 'engagementGrowth', analytics)],
-                  ['Message Growth', _formatGrowthRate(analytics.messageGrowth, 'messageGrowth', analytics)],
-                  ['Application Growth', _formatGrowthRate(analytics.applicationGrowth, 'applicationGrowth', analytics)],
-                  ['Report Growth', _formatGrowthRate(analytics.reportGrowth, 'reportGrowth', analytics)],
+                  ['User Growth', AnalyticsFormatter.formatGrowthRateForPDF(analytics.userGrowthRate, 'userGrowth', analytics)],
+                  ['Active User Growth', AnalyticsFormatter.formatGrowthRateForPDF(analytics.activeUserGrowth, 'activeUserGrowth', analytics)],
+                  ['Registration Growth', AnalyticsFormatter.formatGrowthRateForPDF(analytics.registrationGrowth, 'registrationGrowth', analytics)],
+                  ['Engagement Growth', AnalyticsFormatter.formatGrowthRateForPDF(analytics.engagementGrowth, 'engagementGrowth', analytics)],
+                  ['Message Growth', AnalyticsFormatter.formatGrowthRateForPDF(analytics.messageGrowth, 'messageGrowth', analytics)],
+                  ['Application Growth', AnalyticsFormatter.formatGrowthRateForPDF(analytics.applicationGrowth, 'applicationGrowth', analytics)],
+                  ['Report Growth', AnalyticsFormatter.formatGrowthRateForPDF(analytics.reportGrowth, 'reportGrowth', analytics)],
                 ],
               ),
             ];
@@ -561,7 +500,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
                 ),
                 headers: ['Metric', 'All Time', 'Selected Period'],
                 data: [
-                  ['Engagement Rate', '${_capEngagementRate(allTime.engagementRate).toStringAsFixed(1)}%', '${_capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%'],
+                  ['Engagement Rate', '${AnalyticsFormatter.capEngagementRate(allTime.engagementRate).toStringAsFixed(1)}%', '${AnalyticsFormatter.capEngagementRate(analytics.engagementRate).toStringAsFixed(1)}%'],
                   ['Job Applications', allTime.totalApplications.toString(), analytics.totalApplications.toString()],
                   ['Messages Sent', allTime.totalMessages.toString(), analytics.totalMessages.toString()],
                 ],
@@ -635,13 +574,13 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
                 ),
                 headers: ['Metric', 'Growth Rate'],
                 data: [
-                  ['User Growth', _formatGrowthRate(analytics.userGrowthRate, 'userGrowth', analytics)],
-                  ['Active User Growth', _formatGrowthRate(analytics.activeUserGrowth, 'activeUserGrowth', analytics)],
-                  ['Registration Growth', _formatGrowthRate(analytics.registrationGrowth, 'registrationGrowth', analytics)],
-                  ['Engagement Growth', _formatGrowthRate(analytics.engagementGrowth, 'engagementGrowth', analytics)],
-                  ['Message Growth', _formatGrowthRate(analytics.messageGrowth, 'messageGrowth', analytics)],
-                  ['Application Growth', _formatGrowthRate(analytics.applicationGrowth, 'applicationGrowth', analytics)],
-                  ['Report Growth', _formatGrowthRate(analytics.reportGrowth, 'reportGrowth', analytics)],
+                  ['User Growth', AnalyticsFormatter.formatGrowthRateForPDF(analytics.userGrowthRate, 'userGrowth', analytics)],
+                  ['Active User Growth', AnalyticsFormatter.formatGrowthRateForPDF(analytics.activeUserGrowth, 'activeUserGrowth', analytics)],
+                  ['Registration Growth', AnalyticsFormatter.formatGrowthRateForPDF(analytics.registrationGrowth, 'registrationGrowth', analytics)],
+                  ['Engagement Growth', AnalyticsFormatter.formatGrowthRateForPDF(analytics.engagementGrowth, 'engagementGrowth', analytics)],
+                  ['Message Growth', AnalyticsFormatter.formatGrowthRateForPDF(analytics.messageGrowth, 'messageGrowth', analytics)],
+                  ['Application Growth', AnalyticsFormatter.formatGrowthRateForPDF(analytics.applicationGrowth, 'applicationGrowth', analytics)],
+                  ['Report Growth', AnalyticsFormatter.formatGrowthRateForPDF(analytics.reportGrowth, 'reportGrowth', analytics)],
                 ],
               ),
             ];
@@ -676,7 +615,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
           }
         });
       } catch (shareError) {
-        // Handle MissingPluginException specifically
         if (shareError.toString().contains('MissingPluginException') || 
             shareError.toString().contains('missing plugin')) {
           if (mounted) {
@@ -921,43 +859,43 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
         children: [
           SizedBox(
             width: MediaQuery.of(context).size.width * 0.45,
-            child: _QuickStatCard(
+            child: UserAnalyticsQuickStatCard(
               title: 'Total Users',
               value: _analytics!.totalUsers.toString(),
               subtitle: 'All registered',
               color: Colors.blue,
               icon: Icons.people,
-              trend: _capGrowthRate(_analytics!.userGrowthRate),
+              trend: AnalyticsFormatter.capGrowthRate(_analytics!.userGrowthRate),
             ),
           ),
           const SizedBox(width: 10),
           SizedBox(
             width: MediaQuery.of(context).size.width * 0.45,
-            child: _QuickStatCard(
+            child: UserAnalyticsQuickStatCard(
               title: 'Active Users',
               value: _analytics!.activeUsers.toString(),
               subtitle: 'Currently online',
               color: Colors.green,
               icon: Icons.online_prediction,
-              trend: _capGrowthRate(_analytics!.activeUserGrowth),
+              trend: AnalyticsFormatter.capGrowthRate(_analytics!.activeUserGrowth),
             ),
           ),
           const SizedBox(width: 10),
           SizedBox(
             width: MediaQuery.of(context).size.width * 0.45,
-            child:             _QuickStatCard(
+            child: UserAnalyticsQuickStatCard(
               title: 'New Users',
               value: _analytics!.newRegistrations.toString(),
               subtitle: 'This period',
               color: Colors.orange,
               icon: Icons.person_add,
-              trend: _capGrowthRate(_analytics!.registrationGrowth),
+              trend: AnalyticsFormatter.capGrowthRate(_analytics!.registrationGrowth),
             ),
           ),
           const SizedBox(width: 10),
           SizedBox(
             width: MediaQuery.of(context).size.width * 0.45,
-            child: _QuickStatCard(
+            child: UserAnalyticsQuickStatCard(
               title: 'Inactive Users',
               value: _analytics!.inactiveUsers.toString(),
               subtitle: 'Not active',
@@ -995,7 +933,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
             Row(
               children: [
                 Expanded(
-                  child: _ComparisonItem(
+                  child: AnalyticsComparisonItem(
                     label: 'New Users in Period',
                     value: newRegistrations.toString(),
                     percentage: periodPercentage,
@@ -1004,7 +942,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: _ComparisonItem(
+                  child: AnalyticsComparisonItem(
                     label: 'Total Users (All Time)',
                     value: totalUsers.toString(),
                     percentage: 100.0,
@@ -1049,23 +987,23 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
               ],
             ),
             const SizedBox(height: 16),
-            _MetricRow(
+            UserAnalyticsMetricRow(
               label: 'Total Users',
               value: _analytics!.totalUsers.toString(),
-              trend: _capGrowthRate(_analytics!.userGrowthRate),
+              trend: AnalyticsFormatter.capGrowthRate(_analytics!.userGrowthRate),
             ),
-            _MetricRow(
+            UserAnalyticsMetricRow(
               label: 'Active Users',
               value: '${_analytics!.activeUsers.toString()} (${_analytics!.activeUserPercentage.toStringAsFixed(1)}%)',
-              trend: _capGrowthRate(_analytics!.activeUserGrowth),
+              trend: AnalyticsFormatter.capGrowthRate(_analytics!.activeUserGrowth),
               subMetrics: {
                 'Inactive': _analytics!.inactiveUsers.toString(),
               },
             ),
-            _MetricRow(
+            UserAnalyticsMetricRow(
               label: 'New Registrations',
               value: _analytics!.newRegistrations.toString(),
-              trend: _capGrowthRate(_analytics!.registrationGrowth),
+              trend: AnalyticsFormatter.capGrowthRate(_analytics!.registrationGrowth),
             ),
           ],
         ),
@@ -1103,20 +1041,20 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
               ],
             ),
             const SizedBox(height: 16),
-            _MetricRow(
+            UserAnalyticsMetricRow(
               label: 'Engagement Rate',
-              value: '${_capEngagementRate(_analytics!.engagementRate).toStringAsFixed(1)}%',
-              trend: _capGrowthRate(_analytics!.engagementGrowth),
+              value: '${AnalyticsFormatter.capEngagementRate(_analytics!.engagementRate).toStringAsFixed(1)}%',
+              trend: AnalyticsFormatter.capGrowthRate(_analytics!.engagementGrowth),
             ),
-            _MetricRow(
+            UserAnalyticsMetricRow(
               label: 'Messages Sent',
               value: _analytics!.totalMessages.toString(),
-              trend: _capGrowthRate(_analytics!.messageGrowth),
+              trend: AnalyticsFormatter.capGrowthRate(_analytics!.messageGrowth),
             ),
-            _MetricRow(
+            UserAnalyticsMetricRow(
               label: 'Job Applications',
               value: _analytics!.totalApplications.toString(),
-              trend: _capGrowthRate(_analytics!.applicationGrowth),
+              trend: AnalyticsFormatter.capGrowthRate(_analytics!.applicationGrowth),
             ),
           ],
         ),
@@ -1380,17 +1318,17 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
               ],
             ),
             const SizedBox(height: 16),
-            _MetricRow(
+            UserAnalyticsMetricRow(
               label: 'Total Reports',
               value: _analytics!.totalReports.toString(),
-              trend: _capGrowthRate(_analytics!.reportGrowth),
+              trend: AnalyticsFormatter.capGrowthRate(_analytics!.reportGrowth),
               subMetrics: {
                 'Pending': _analytics!.pendingReports.toString(),
                 'Resolved': _analytics!.resolvedReports.toString(),
                 'Dismissed': _analytics!.dismissedReports.toString(),
               },
             ),
-            _MetricRow(
+            UserAnalyticsMetricRow(
               label: 'Report Resolution Rate',
               value: '${_analytics!.reportResolutionRate.toStringAsFixed(1)}%',
               trend: 0.0,
@@ -1462,495 +1400,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
 }
 
 // Helper Widgets
-class _QuickStatCard extends StatelessWidget {
-  final String title;
-  final String value;
-  final String subtitle;
-  final Color color;
-  final IconData icon;
-  final double trend;
-
-  const _QuickStatCard({
-    required this.title,
-    required this.value,
-    required this.subtitle,
-    required this.color,
-    required this.icon,
-    required this.trend,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(icon, size: 20, color: color),
-                ),
-                if (trend != 0)
-                  _TrendBadge(trend),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            if (subtitle.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[500],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ComparisonItem extends StatelessWidget {
-  final String label;
-  final String value;
-  final double percentage;
-  final Color color;
-
-  const _ComparisonItem({
-    required this.label,
-    required this.value,
-    required this.percentage,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 8),
-          LinearProgressIndicator(
-            value: percentage / 100,
-            backgroundColor: Colors.grey[200],
-            valueColor: AlwaysStoppedAnimation<Color>(color),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${percentage.toStringAsFixed(1)}%',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// Helper widget for trend badges
-class _TrendBadge extends StatelessWidget {
-  final double trend;
-
-  const _TrendBadge(this.trend);
-
-  @override
-  Widget build(BuildContext context) {
-    const double newDataIndicator = -999.0;
-    
-    if (trend == newDataIndicator) {
-      return const SizedBox.shrink();
-    }
-    
-    // Regular growth/decline badge
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: trend > 0 ? Colors.green[50] : Colors.red[50],
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: trend > 0 ? Colors.green[100]! : Colors.red[100]!,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            trend > 0 ? Icons.arrow_upward : Icons.arrow_downward,
-            size: 12,
-            color: trend > 0 ? Colors.green[700] : Colors.red[700],
-          ),
-          const SizedBox(width: 2),
-          Text(
-            '${trend.abs().toStringAsFixed(1)}%',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: trend > 0 ? Colors.green[700] : Colors.red[700],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MetricRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final double trend;
-  final Map<String, String>? subMetrics;
-
-  const _MetricRow({
-    required this.label,
-    required this.value,
-    required this.trend,
-    this.subMetrics,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            Row(
-              children: [
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                if (trend != 0 && value != '0' && !value.startsWith('0 '))
-                  _TrendBadge(trend),
-              ],
-            ),
-          ],
-        ),
-        if (subMetrics != null && subMetrics!.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 12,
-            runSpacing: 4,
-            children: subMetrics!.entries.map((entry) {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  '${entry.key}: ${entry.value}',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey[700],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ],
-        const SizedBox(height: 12),
-      ],
-    );
-  }
-}
-
-class _DateRangePickerDialog extends StatefulWidget {
-  final DateTime startDate;
-  final DateTime endDate;
-
-  const _DateRangePickerDialog({
-    required this.startDate,
-    required this.endDate,
-  });
-
-  @override
-  State<_DateRangePickerDialog> createState() => _DateRangePickerDialogState();
-}
-
-class _DateRangePickerDialogState extends State<_DateRangePickerDialog> {
-  late DateTime _tempStartDate;
-  late DateTime _tempEndDate;
-
-  @override
-  void initState() {
-    super.initState();
-    _tempStartDate = DateTime(widget.startDate.year, widget.startDate.month, widget.startDate.day);
-    _tempEndDate = DateTime(widget.endDate.year, widget.endDate.month, widget.endDate.day);
-  }
-
-  Future<void> _selectStartDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _tempStartDate,
-      firstDate: DateTime(2020),
-      lastDate: _tempEndDate,
-    );
-    if (picked != null) {
-      setState(() {
-        _tempStartDate = DateTime(picked.year, picked.month, picked.day);
-      });
-    }
-  }
-
-  Future<void> _selectEndDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _tempEndDate,
-      firstDate: _tempStartDate,
-      lastDate: DateTime.now(),
-    );
-    if (picked != null) {
-      setState(() {
-        _tempEndDate = DateTime(picked.year, picked.month, picked.day);
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Select Date Range'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Start Date
-            const Text(
-              'Start Date',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            InkWell(
-              onTap: _selectStartDate,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey[300]!),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      DateFormat('dd/MM/yyyy').format(_tempStartDate),
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                    const Icon(Icons.calendar_today, size: 18),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // End Date
-            const Text(
-              'End Date',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            InkWell(
-              onTap: _selectEndDate,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey[300]!),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      DateFormat('dd/MM/yyyy').format(_tempEndDate),
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                    const Icon(Icons.calendar_today, size: 18),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Quick Presets
-            const Text(
-              'Quick Presets',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _QuickDateButton(
-                  label: 'Today',
-                  onTap: () {
-                    final now = DateTime.now();
-                    setState(() {
-                      _tempStartDate = DateTime(now.year, now.month, now.day);
-                      _tempEndDate = DateTime(now.year, now.month, now.day);
-                    });
-                  },
-                ),
-                _QuickDateButton(
-                  label: 'Last 7 Days',
-                  onTap: () {
-                    final now = DateTime.now();
-                    final startDate = now.subtract(const Duration(days: 7));
-                    setState(() {
-                      _tempStartDate = DateTime(startDate.year, startDate.month, startDate.day);
-                      _tempEndDate = DateTime(now.year, now.month, now.day);
-                    });
-                  },
-                ),
-                _QuickDateButton(
-                  label: 'Last 30 Days',
-                  onTap: () {
-                    final now = DateTime.now();
-                    final startDate = now.subtract(const Duration(days: 30));
-                    setState(() {
-                      _tempStartDate = DateTime(startDate.year, startDate.month, startDate.day);
-                      _tempEndDate = DateTime(now.year, now.month, now.day);
-                    });
-                  },
-                ),
-                _QuickDateButton(
-                  label: 'This Month',
-                  onTap: () {
-                    final now = DateTime.now();
-                    setState(() {
-                      _tempStartDate = DateTime(now.year, now.month, 1);
-                      _tempEndDate = DateTime(now.year, now.month, now.day);
-                    });
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            if (_tempStartDate.isAfter(_tempEndDate)) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Start date must be before end date'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-              return;
-            }
-            Navigator.pop(context, {
-              'start': _tempStartDate,
-              'end': _tempEndDate,
-            });
-          },
-          child: const Text('Apply'),
-        ),
-      ],
-    );
-  }
-}
-
-class _QuickDateButton extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-
-  const _QuickDateButton({required this.label, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.blue[50],
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.blue[200]!),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.blue[700],
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class ChartData {
   final String label;

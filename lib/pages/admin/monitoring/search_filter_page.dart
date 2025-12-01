@@ -535,7 +535,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
             ),
           ),
 
-          // Results List
+          // Results List with Pull to Refresh
           Expanded(
             child: _isLoading
                 ? const Center(
@@ -554,70 +554,80 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                       ],
                     ),
                   )
-                : _results.isEmpty
-                    ? Center(
-                        child: SingleChildScrollView(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(24),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[50],
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.search_off,
-                                  size: 64,
-                                  color: Colors.grey[400],
+                : RefreshIndicator(
+                    onRefresh: () async {
+                      // Re-perform search when pulled to refresh
+                      await _performSearch();
+                    },
+                    child: _results.isEmpty
+                        ? SingleChildScrollView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            child: SizedBox(
+                              height: MediaQuery.of(context).size.height * 0.6,
+                              child: Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(24),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[50],
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        Icons.search_off,
+                                        size: 64,
+                                        color: Colors.grey[400],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 24),
+                                    Text(
+                                      'No results found',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        color: Colors.grey[800],
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Try adjusting your search criteria or filters',
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 24),
+                                    OutlinedButton.icon(
+                                      onPressed: _clearFilters,
+                                      icon: const Icon(Icons.refresh),
+                                      label: const Text('Clear All Filters'),
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 24,
+                                          vertical: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 24),
-                              Text(
-                                'No results found',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  color: Colors.grey[800],
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Try adjusting your search criteria or filters',
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 14,
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-                              OutlinedButton.icon(
-                                onPressed: _clearFilters,
-                                icon: const Icon(Icons.refresh),
-                                label: const Text('Clear All Filters'),
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                    vertical: 12,
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: _results.length,
+                            itemBuilder: (context, index) {
+                              final result = _results[index];
+                              if (result is UserModel) {
+                                return _buildUserCard(result);
+                              } else if (result is JobPostModel) {
+                                return _buildPostCard(result);
+                              }
+                              return const SizedBox.shrink();
+                            },
                           ),
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _results.length,
-                        itemBuilder: (context, index) {
-                          final result = _results[index];
-                          if (result is UserModel) {
-                            return _buildUserCard(result);
-                          } else if (result is JobPostModel) {
-                            return _buildPostCard(result);
-                          }
-                          return const SizedBox.shrink();
-                        },
-                      ),
+                  ),
           ),
         ],
       ),

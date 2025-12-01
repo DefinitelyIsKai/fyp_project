@@ -4,6 +4,7 @@ class ReportCategoryModel {
   final String description;
   final bool isEnabled;
   final int creditDeduction;
+  final String type; 
   final DateTime updatedAt;
   final String? updatedBy;
 
@@ -13,6 +14,7 @@ class ReportCategoryModel {
     required this.description,
     required this.isEnabled,
     required this.creditDeduction,
+    this.type = 'jobseeker',
     required this.updatedAt,
     this.updatedBy,
   });
@@ -24,6 +26,7 @@ class ReportCategoryModel {
       description: json['description'] ?? '',
       isEnabled: json['isEnabled'] ?? true,
       creditDeduction: (json['creditDeduction'] as num?)?.toInt() ?? 0,
+      type: json['type'] ?? 'jobseeker', 
       updatedAt: json['updatedAt'] != null
           ? (json['updatedAt'] as dynamic).toDate()
           : DateTime.now(),
@@ -37,6 +40,7 @@ class ReportCategoryModel {
       'description': description,
       'isEnabled': isEnabled,
       'creditDeduction': creditDeduction,
+      'type': type,
       'updatedAt': updatedAt,
       'updatedBy': updatedBy,
     };
@@ -48,6 +52,7 @@ class ReportCategoryModel {
     String? description,
     bool? isEnabled,
     int? creditDeduction,
+    String? type,
     DateTime? updatedAt,
     String? updatedBy,
   }) {
@@ -57,6 +62,7 @@ class ReportCategoryModel {
       description: description ?? this.description,
       isEnabled: isEnabled ?? this.isEnabled,
       creditDeduction: creditDeduction ?? this.creditDeduction,
+      type: type ?? this.type,
       updatedAt: updatedAt ?? this.updatedAt,
       updatedBy: updatedBy ?? this.updatedBy,
     );

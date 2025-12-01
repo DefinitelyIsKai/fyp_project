@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/pages/admin/user_management/view_users_page.dart';
 import 'package:fyp_project/pages/admin/user_management/user_actions_page.dart';
 import 'package:fyp_project/pages/admin/user_management/user_analytics_page.dart';
-import 'package:fyp_project/pages/admin/user_management/role_management_page.dart';
 import 'package:fyp_project/pages/admin/user_management/wallet_management_page.dart';
 import 'package:fyp_project/services/admin/auth_service.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
@@ -148,14 +147,6 @@ class UserManagementPage extends StatelessWidget {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentAdmin = authService.currentAdmin;
     final userRole = currentAdmin?.role.toLowerCase() ?? '';
-    final userPermissions = currentAdmin?.permissions ?? [];
-    
-    // Check if user can access role management (staff cannot access role management)
-    final canAccessRoleManagement = userRole != 'staff' &&
-                                    (userRole == 'manager' || 
-                                     userRole == 'hr' ||
-                                     userPermissions.contains('role_management') ||
-                                     userPermissions.contains('all'));
 
     final cards = <Widget>[
       _ManagementCard(
@@ -210,27 +201,6 @@ class UserManagementPage extends StatelessWidget {
                 MaterialPageRoute(builder: (_) => const WalletManagementPage()));
           },
           stats: 'Manage wallets',
-        ),
-      );
-    }
-
-    if (canAccessRoleManagement) {
-      cards.add(
-        _ManagementCard(
-          title: 'Role Management',
-          description: 'Manage roles and control access to system modules',
-          icon: Icons.admin_panel_settings,
-          iconColor: Colors.indigo[700]!,
-          backgroundColor: Colors.indigo[50]!,
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const RoleManagementPage(),
-              ),
-            );
-          },
-          stats: 'Manage roles',
         ),
       );
     }
