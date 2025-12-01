@@ -1707,45 +1707,45 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                     valueListenable: passwordErrorNotifier,
                     builder: (context, passwordError, _) {
                       final hasError = passwordError != null;
-                      return TextField(
-                        controller: passwordController,
-                        onChanged: (value) {
-                          if (passwordError != null) {
-                            passwordErrorNotifier.value = null;
-                          }
-                          if (confirmPasswordErrorNotifier.value != null && value == confirmPasswordController.text) {
-                            confirmPasswordErrorNotifier.value = null;
-                          }
-                        },
-                        decoration: InputDecoration(
-                          labelText: 'Password *',
-                          hintText: 'Minimum 6 characters',
-                          errorText: passwordError,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
-                          ),
-                          errorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Colors.red, width: 2),
-                          ),
-                          focusedErrorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Colors.red, width: 2),
-                          ),
-                          prefixIcon: Icon(Icons.lock_outline, color: hasError ? Colors.red : Colors.grey),
-                          suffixIcon: ValueListenableBuilder<bool>(
-                            valueListenable: obscurePasswordNotifier,
-                            builder: (context, obscurePassword, _) {
-                              return IconButton(
+                      return ValueListenableBuilder<bool>(
+                        valueListenable: obscurePasswordNotifier,
+                        builder: (context, obscurePassword, _) {
+                          return TextField(
+                            controller: passwordController,
+                            onChanged: (value) {
+                              if (passwordError != null) {
+                                passwordErrorNotifier.value = null;
+                              }
+                              if (confirmPasswordErrorNotifier.value != null && value == confirmPasswordController.text) {
+                                confirmPasswordErrorNotifier.value = null;
+                              }
+                            },
+                            decoration: InputDecoration(
+                              labelText: 'Password *',
+                              hintText: 'Minimum 6 characters',
+                              errorText: passwordError,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
+                              ),
+                              errorBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: Colors.red, width: 2),
+                              ),
+                              focusedErrorBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: Colors.red, width: 2),
+                              ),
+                              prefixIcon: Icon(Icons.lock_outline, color: hasError ? Colors.red : Colors.grey),
+                              suffixIcon: IconButton(
                                 icon: Icon(
                                   obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                                   color: hasError ? Colors.red : Colors.grey[600],
@@ -1754,17 +1754,17 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                                   obscurePasswordNotifier.value = !obscurePassword;
                                   onObscurePasswordChanged(obscurePasswordNotifier.value);
                                 },
-                              );
-                            },
-                          ),
-                          filled: true,
-                          fillColor: hasError ? Colors.red[50] : Colors.grey[50],
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                        ),
-                        obscureText: obscurePasswordNotifier.value,
+                              ),
+                              filled: true,
+                              fillColor: hasError ? Colors.red[50] : Colors.grey[50],
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                            ),
+                            obscureText: obscurePassword,
+                          );
+                        },
                       );
                     },
                   ),
@@ -1777,42 +1777,42 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                     valueListenable: confirmPasswordErrorNotifier,
                     builder: (context, confirmPasswordError, _) {
                       final hasError = confirmPasswordError != null;
-                      return TextField(
-                        controller: confirmPasswordController,
-                        onChanged: (value) {
-                          if (confirmPasswordError != null && value == passwordController.text) {
-                            confirmPasswordErrorNotifier.value = null;
-                          }
-                        },
-                        decoration: InputDecoration(
-                          labelText: 'Confirm Password *',
-                          hintText: 'Re-enter password',
-                          errorText: confirmPasswordError,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
-                          ),
-                          errorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Colors.red, width: 2),
-                          ),
-                          focusedErrorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Colors.red, width: 2),
-                          ),
-                          prefixIcon: Icon(Icons.lock_outline, color: hasError ? Colors.red : Colors.grey),
-                          suffixIcon: ValueListenableBuilder<bool>(
-                            valueListenable: obscureConfirmPasswordNotifier,
-                            builder: (context, obscureConfirmPassword, _) {
-                              return IconButton(
+                      return ValueListenableBuilder<bool>(
+                        valueListenable: obscureConfirmPasswordNotifier,
+                        builder: (context, obscureConfirmPassword, _) {
+                          return TextField(
+                            controller: confirmPasswordController,
+                            onChanged: (value) {
+                              if (confirmPasswordError != null && value == passwordController.text) {
+                                confirmPasswordErrorNotifier.value = null;
+                              }
+                            },
+                            decoration: InputDecoration(
+                              labelText: 'Confirm Password *',
+                              hintText: 'Re-enter password',
+                              errorText: confirmPasswordError,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
+                              ),
+                              errorBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: Colors.red, width: 2),
+                              ),
+                              focusedErrorBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: Colors.red, width: 2),
+                              ),
+                              prefixIcon: Icon(Icons.lock_outline, color: hasError ? Colors.red : Colors.grey),
+                              suffixIcon: IconButton(
                                 icon: Icon(
                                   obscureConfirmPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                                   color: hasError ? Colors.red : Colors.grey[600],
@@ -1821,17 +1821,17 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                                   obscureConfirmPasswordNotifier.value = !obscureConfirmPassword;
                                   onObscureConfirmPasswordChanged(obscureConfirmPasswordNotifier.value);
                                 },
-                              );
-                            },
-                          ),
-                          filled: true,
-                          fillColor: hasError ? Colors.red[50] : Colors.grey[50],
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                        ),
-                        obscureText: obscureConfirmPasswordNotifier.value,
+                              ),
+                              filled: true,
+                              fillColor: hasError ? Colors.red[50] : Colors.grey[50],
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                            ),
+                            obscureText: obscureConfirmPassword,
+                          );
+                        },
                       );
                     },
                   ),

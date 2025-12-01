@@ -236,7 +236,7 @@ class _RewardPreviewDialogContent extends StatelessWidget {
                                       ),
                                     ),
                                     Text(
-                                      'Rating: ${(user['averageRating'] as num?)?.toStringAsFixed(1) ?? '0.0'}, Posts: ${user['completedTasks'] ?? 0}',
+                                      'Rating: ${(user['averageRating'] as num?)?.toStringAsFixed(1) ?? '0.0'}, Posts (This Month): ${user['completedTasks'] ?? 0}',
                                       style: TextStyle(
                                         fontSize: 11,
                                         color: Colors.grey[600],

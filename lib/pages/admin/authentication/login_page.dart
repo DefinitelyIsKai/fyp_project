@@ -8,6 +8,7 @@ import 'package:image/image.dart' as img;
 import 'package:fyp_project/services/admin/auth_service.dart';
 import 'package:fyp_project/services/admin/profile_pic_service.dart';
 import 'package:fyp_project/services/admin/face_recognition_service.dart';
+import 'package:fyp_project/services/admin/otp_service.dart';
 import 'package:fyp_project/routes/app_routes.dart';
 import 'package:provider/provider.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
@@ -30,8 +31,10 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _otpController = TextEditingController();
   final _profilePicService = ProfilePicService();
   final _faceService = FaceRecognitionService();
+  final _otpService = OtpService();
   final CollectionReference<Map<String, dynamic>> _logsRef = 
       FirebaseFirestore.instance.collection('logs');
   bool _isLoading = false;
@@ -41,6 +44,15 @@ class _LoginPageState extends State<LoginPage> {
   bool _isDetectingFace = false; // Whether face detection is in progress
   bool? _faceDetected; // Whether face is detected (null = not detected, true = detected, false = not detected)
   Face? _detectedFace; // Detected face object (used for preview display only, not for verification)
+  
+  // OTP related state
+  bool _showOtpInput = false;
+  String? _otpId;
+  String? _pendingEmail;
+  String? _pendingAdminName;
+  bool _isSendingOtp = false;
+  bool _isVerifyingOtp = false;
+  int _otpResendCooldown = 0; // Cooldown in seconds
 
   @override
   void initState() {
@@ -69,6 +81,7 @@ class _LoginPageState extends State<LoginPage> {
     
     _emailController.dispose();
     _passwordController.dispose();
+    _otpController.dispose();
     super.dispose();
   }
 
@@ -404,10 +417,20 @@ class _LoginPageState extends State<LoginPage> {
       if (result.success) {
         // Check if face recognition is enabled
         if (!_enableFaceRecognition) {
-          // Face recognition is disabled, directly navigate to dashboard
-          print('Face recognition is disabled, skipping verification');
-          if (mounted) {
-            Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
+          // Face recognition is disabled, use OTP verification
+          print('Face recognition is disabled, using OTP verification');
+          final currentUser = authService.currentAdmin;
+          if (currentUser != null) {
+            // Send OTP and show OTP input
+            await _sendOtpAndShowInput(
+              email: _emailController.text.trim(),
+              adminName: currentUser.name,
+            );
+          } else {
+            // Fallback: navigate directly if no user info
+            if (mounted) {
+              Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
+            }
           }
           return;
         }
@@ -662,6 +685,203 @@ class _LoginPageState extends State<LoginPage> {
 
   void _navigateToForgotPassword() {
     Navigator.of(context).pushNamed(AppRoutes.adminForgotPassword);
+  }
+
+  /// Send OTP and show OTP input interface
+  Future<void> _sendOtpAndShowInput({
+    required String email,
+    required String adminName,
+  }) async {
+    setState(() {
+      _isSendingOtp = true;
+      _isLoading = false;
+    });
+
+    try {
+      // Check if there's an active OTP (rate limiting)
+      final hasActiveOtp = await _otpService.hasActiveOtp(email);
+      if (hasActiveOtp) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('An OTP has already been sent. Please check your email or wait a moment before requesting a new one.'),
+              backgroundColor: Colors.orange,
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+
+      // Send OTP
+      final otpId = await _otpService.sendOtp(
+        email: email,
+        adminName: adminName,
+      );
+
+      if (mounted) {
+        setState(() {
+          _showOtpInput = true;
+          _otpId = otpId;
+          _pendingEmail = email;
+          _pendingAdminName = adminName;
+          _otpResendCooldown = 60; // 60 seconds cooldown
+          _isSendingOtp = false;
+        });
+
+        // Start cooldown timer
+        _startOtpResendCooldown();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('OTP has been sent to your email. Please check your inbox.'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSendingOtp = false;
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send OTP: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Start OTP resend cooldown timer
+  void _startOtpResendCooldown() {
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(seconds: 1));
+      if (mounted && _otpResendCooldown > 0) {
+        setState(() {
+          _otpResendCooldown--;
+        });
+        return true;
+      }
+      return false;
+    });
+  }
+
+  /// Verify OTP and complete login
+  Future<void> _verifyOtpAndLogin() async {
+    if (_otpId == null || _pendingEmail == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('OTP session expired. Please login again.'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final otp = _otpController.text.trim();
+    if (otp.length != 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid 6-digit OTP.'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isVerifyingOtp = true;
+    });
+
+    try {
+      final result = await _otpService.verifyOtp(
+        otpId: _otpId!,
+        email: _pendingEmail!,
+        otp: otp,
+      );
+
+      if (!mounted) return;
+
+      if (result.success) {
+        // OTP verified successfully, log login success
+        final authService = Provider.of<AuthService>(context, listen: false);
+        final currentUser = authService.currentAdmin;
+        
+        _logLoginSuccess(
+          email: _pendingEmail!,
+          userId: currentUser?.id,
+          userName: currentUser?.name,
+        );
+
+        // Clear OTP state
+        setState(() {
+          _showOtpInput = false;
+          _otpId = null;
+          _pendingEmail = null;
+          _pendingAdminName = null;
+          _otpController.clear();
+          _isVerifyingOtp = false;
+        });
+
+        // Navigate to dashboard
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Welcome, ${currentUser?.name ?? 'Admin'}!'),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
+        }
+      } else {
+        setState(() {
+          _isVerifyingOtp = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.error ?? 'OTP verification failed'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isVerifyingOtp = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('OTP verification error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Resend OTP
+  Future<void> _resendOtp() async {
+    if (_pendingEmail == null || _pendingAdminName == null) return;
+    if (_otpResendCooldown > 0) return;
+
+    await _sendOtpAndShowInput(
+      email: _pendingEmail!,
+      adminName: _pendingAdminName!,
+    );
   }
 
   @override
@@ -1014,11 +1234,138 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
                         ],
+                        // OTP Input Section (shown when face recognition is disabled)
+                        if (_showOtpInput) ...[
+                          const SizedBox(height: 24),
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.blue[300]!),
+                              borderRadius: BorderRadius.circular(12),
+                              color: Colors.blue[50],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.email, color: Colors.blue[700], size: 24),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Enter Verification Code',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.black87,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'A 6-digit code has been sent to ${_pendingEmail ?? "your email"}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[600],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                TextFormField(
+                                  controller: _otpController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Verification Code',
+                                    prefixIcon: Icon(Icons.lock_outline),
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  maxLength: 6,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    letterSpacing: 8,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                  ],
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please enter the verification code';
+                                    }
+                                    if (value.length != 6) {
+                                      return 'Code must be 6 digits';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    TextButton(
+                                      onPressed: (_otpResendCooldown > 0 || _isSendingOtp) ? null : _resendOtp,
+                                      child: Text(
+                                        _isSendingOtp
+                                            ? 'Sending...'
+                                            : _otpResendCooldown > 0
+                                                ? 'Resend in ${_otpResendCooldown}s'
+                                                : 'Resend Code',
+                                        style: TextStyle(
+                                          color: (_otpResendCooldown > 0 || _isSendingOtp)
+                                              ? Colors.grey
+                                              : Colors.blue[700],
+                                        ),
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: () {
+                                        setState(() {
+                                          _showOtpInput = false;
+                                          _otpId = null;
+                                          _pendingEmail = null;
+                                          _pendingAdminName = null;
+                                          _otpController.clear();
+                                          _otpResendCooldown = 0;
+                                        });
+                                      },
+                                      child: Text(
+                                        'Cancel',
+                                        style: TextStyle(color: Colors.grey[700]),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton(
+                                    onPressed: _isVerifyingOtp ? null : _verifyOtpAndLogin,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.blue[700],
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(vertical: 16),
+                                    ),
+                                    child: _isVerifyingOtp
+                                        ? const CircularProgressIndicator(color: Colors.white)
+                                        : const Text('Verify & Login', style: TextStyle(fontSize: 16)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 24),
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handleLogin,
+                            onPressed: (_isLoading || _showOtpInput) ? null : _handleLogin,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primaryDark,
                               foregroundColor: Colors.white,

@@ -144,11 +144,7 @@ class ReportService {
       
       if (status == ReportStatus.resolved) {
         title = 'Report Resolved';
-        if (actionTaken != null && actionTaken.isNotEmpty) {
-          body = 'Your report regarding "$reason" has been resolved. Action taken: $actionTaken';
-        } else {
-          body = 'Your report regarding "$reason" has been resolved. Appropriate action has been taken against the violation.';
-        }
+        body = 'Your report regarding "$reason" has been resolved. Appropriate action has been taken against the violation.';
         category = 'report_resolved';
       } else if (status == ReportStatus.dismissed) {
         title = 'Report Dismissed';
