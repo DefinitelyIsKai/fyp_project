@@ -2199,33 +2199,30 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
           ),
         ),
         
-        // Fixed Footer with Actions (always visible above keyboard)
+        // Fixed Footer with Actions (not sticky, stays at bottom)
         SafeArea(
           top: false,
-          child: ValueListenableBuilder<double>(
-            valueListenable: keyboardHeightNotifier,
-            builder: (context, keyboardHeight, _) {
-              return Container(
-                padding: EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 12,
-                  bottom: keyboardHeight > 0 ? keyboardHeight + 8 : 12,
+          child: Container(
+            padding: const EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 12,
+              bottom: 12,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, -2),
                 ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 4,
-                      offset: const Offset(0, -2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
+              ],
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
                         onPressed: onCancel,
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
@@ -2242,10 +2239,10 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: ElevatedButton.icon(
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton.icon(
                         onPressed: () async {
                     final name = nameController.text.trim();
                     final email = emailController.text.trim();
@@ -2441,10 +2438,8 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                         ),
                       ),
                     ),
-                  ],
-                ),
-              );
-            },
+              ],
+            ),
           ),
         ),
       ],

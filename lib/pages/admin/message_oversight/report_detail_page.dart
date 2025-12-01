@@ -304,7 +304,7 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
         }
         
         if (deductionResult != null && deductionResult['success'] == true) {
-          actionMsg += 'Credits deducted: ${deductAmount?.toStringAsFixed(0) ?? '0'}. New balance: ${deductionResult['newBalance']?.toStringAsFixed(0) ?? '0'}.';
+          actionMsg += 'Credits deducted: ${deductAmount?.toStringAsFixed(0) ?? '0'}.';
         } else if (deductAmount != null && deductAmount > 0) {
           actionMsg += 'Warning issued but credit deduction failed: ${deductionResult?['error'] ?? 'Unknown error'}.';
         }
