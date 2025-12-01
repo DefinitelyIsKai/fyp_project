@@ -213,7 +213,7 @@ class NotificationDetailDialog extends StatelessWidget {
             const SizedBox(height: 24),
             Divider(height: 1, thickness: 1, color: Colors.grey[200]),
             const SizedBox(height: 20),
-            // Full notification body
+            //notification body
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(18),
