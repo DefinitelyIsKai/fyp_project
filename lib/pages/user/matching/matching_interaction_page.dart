@@ -772,10 +772,8 @@ class _ComputedMatchCard extends StatelessWidget {
     switch (raw) {
       case 'embedding_ann':
         return 'Quick Recommendation';
-      case 'stable_optimal':
-        return 'Precise Matching';
-      case 'embedding_ann+stable_hungarian':
-        return 'Stable + Hungarian';
+      case 'cbf_topk':
+        return 'Optimal Matching';
       default:
         return raw.replaceAll('_', ' ').toUpperCase();
     }

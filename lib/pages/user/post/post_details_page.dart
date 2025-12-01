@@ -176,8 +176,8 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
         actions: [
-          //report button post is completed
-          if (_userRole == 'jobseeker' && !_isOwner && widget.post.status == PostStatus.completed)
+          //report button post is active or completed
+          if (_userRole == 'jobseeker' && !_isOwner && (widget.post.status == PostStatus.completed || widget.post.status == PostStatus.active))
             FutureBuilder<bool>(
               future: Future.wait([
                 _applicationService.hasApplied(widget.post.id),
