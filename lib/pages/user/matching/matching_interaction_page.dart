@@ -145,7 +145,8 @@ class _MatchesTabState extends State<_MatchesTab> {
     setState(() => _recomputing = true);
     try {
       if (widget.isRecruiter) {
-        // For recruiters, run the matching algorithm (always using ANN)
+        // For recruiters, clear cache first then run the matching algorithm
+        MatchingService.clearWeightsCache();
         await _matchingService.recomputeMatches(
           role: 'recruiter',
           strategy: _recruiterStrategy,
@@ -153,16 +154,18 @@ class _MatchesTabState extends State<_MatchesTab> {
         if (!mounted) return;
         DialogUtils.showSuccessMessage(
           context: context,
-          message: 'Matching engine refreshed',
+          message: 'Matching engine refreshed (cache cleared)',
         );
       } else {
-        // For jobseekers, the stream will automatically refresh
-        // Just trigger a small delay to show the refresh state
+        // For jobseekers, clear cache and trigger stream refresh
+        MatchingService.clearWeightsCache();
+        _matchingService.refreshComputedMatches();
+        // Small delay to show refresh state
         await Future.delayed(const Duration(milliseconds: 500));
         if (!mounted) return;
         DialogUtils.showSuccessMessage(
           context: context,
-          message: 'Matches refreshed',
+          message: 'Matches refreshed (cache cleared)',
         );
       }
     } catch (e) {

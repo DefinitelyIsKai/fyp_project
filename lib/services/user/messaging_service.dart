@@ -90,67 +90,104 @@ class MessagingService {
   }
 
   // Get conversations for current user
-  Stream<List<Conversation>> streamConversations() async* {
+  Stream<List<Conversation>> streamConversations() {
     // Check if user is authenticated
     if (_auth.currentUser == null) {
-      yield <Conversation>[];
-      return;
+      return Stream.value(<Conversation>[]);
     }
     
     final userId = _authService.currentUserId;
-    final Map<String, Conversation> conversationMap = <String, Conversation>{};
+    final conversationMap = <String, Conversation>{};
+    final controller = StreamController<List<Conversation>>();
+    StreamSubscription? sub1;
+    StreamSubscription? sub2;
 
-    // Listen to both streams (without orderBy to avoid index requirement)
-    try {
-      await for (final snapshot1
-          in _firestore
-              .collection('conversations')
-              .where('participant1Id', isEqualTo: userId)
-              .snapshots()) {
-        // Check if user is still authenticated
-        if (_auth.currentUser == null) {
-          yield <Conversation>[];
-          return;
-          
-        }
-        
+    void emitConversations() {
+      if (_auth.currentUser == null) {
+        controller.add(<Conversation>[]);
+        return;
+      }
+
+      // Filter out conversations with no messages (lastMessage is empty)
+      // Sort in memory by lastMessageTime (descending)
+      final conversations = conversationMap.values
+          .where((conv) => conv.lastMessage.isNotEmpty)
+          .toList();
+      conversations.sort(
+        (a, b) => b.lastMessageTime.compareTo(a.lastMessageTime),
+      );
+      
+      if (!controller.isClosed) {
+        controller.add(conversations);
+      }
+    }
+
+    // Stream 1: conversations where user is participant1
+    final stream1 = _firestore
+        .collection('conversations')
+        .where('participant1Id', isEqualTo: userId)
+        .snapshots();
+
+    // Stream 2: conversations where user is participant2
+    final stream2 = _firestore
+        .collection('conversations')
+        .where('participant2Id', isEqualTo: userId)
+        .snapshots();
+
+    sub1 = stream1.listen(
+      (snapshot1) {
+        if (_auth.currentUser == null || controller.isClosed) return;
+
         // Update conversations from first query
         for (final doc in snapshot1.docs) {
-          final conversation = Conversation.fromFirestore(doc);
-          conversationMap[conversation.id] = conversation;
-        }
-
-        // Also fetch from second query (without orderBy to avoid index requirement)
-        try {
-          final snapshot2 = await _firestore
-              .collection('conversations')
-              .where('participant2Id', isEqualTo: userId)
-              .get();
-
-          for (final doc in snapshot2.docs) {
+          try {
             final conversation = Conversation.fromFirestore(doc);
             conversationMap[conversation.id] = conversation;
-          }
-        } catch (e) {
-          // If second query fails (e.g., user logged out), just use first query results
-          if (_auth.currentUser == null) {
-            yield <Conversation>[];
-            return;
+          } catch (e) {
+            debugPrint('Error parsing conversation ${doc.id}: $e');
           }
         }
+        emitConversations();
+      },
+      onError: (error) {
+        debugPrint('Error in stream1 (participant1Id): $error');
+        if (_auth.currentUser == null && !controller.isClosed) {
+          controller.add(<Conversation>[]);
+        }
+      },
+    );
 
-        // Sort in memory by lastMessageTime (descending) to avoid Firestore index requirement
-        final conversations = conversationMap.values.toList();
-        conversations.sort(
-          (a, b) => b.lastMessageTime.compareTo(a.lastMessageTime),
-        );
-        yield conversations;
-      }
-    } catch (e) {
-      // Handle permission errors gracefully (e.g., user logged out)
-      debugPrint('Error in streamConversations (likely during logout): $e');
-      yield <Conversation>[];
-    }
+    sub2 = stream2.listen(
+      (snapshot2) {
+        if (_auth.currentUser == null || controller.isClosed) return;
+
+        // Update conversations from second query
+        for (final doc in snapshot2.docs) {
+          try {
+            final conversation = Conversation.fromFirestore(doc);
+            conversationMap[conversation.id] = conversation;
+          } catch (e) {
+            debugPrint('Error parsing conversation ${doc.id}: $e');
+          }
+        }
+        emitConversations();
+      },
+      onError: (error) {
+        debugPrint('Error in stream2 (participant2Id): $error');
+        if (_auth.currentUser == null && !controller.isClosed) {
+          controller.add(<Conversation>[]);
+        }
+      },
+    );
+
+    // Clean up when stream is cancelled
+    controller.onCancel = () async {
+      await sub1?.cancel();
+      await sub2?.cancel();
+      await controller.close();
+    };
+
+    return controller.stream;
   }
 
   // Get messages for a conversation
@@ -313,3 +350,4 @@ class MessagingService {
     await _notificationService.markMessageNotificationsAsRead(conversationId);
   }
 }
+

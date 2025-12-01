@@ -148,21 +148,39 @@ class MatchingService {
             userId: userId,
             userData: userData,
           );
-        } catch (error) {
-          // Ignore errors during logout
-          debugPrint('Error computing matches (likely during logout): $error');
+        } catch (error, stackTrace) {
+          // Log full error details for debugging
+          debugPrint('Error computing matches: $error');
+          debugPrint('Stack trace: $stackTrace');
+          
+          // If it's a cache-related error, try to reset caches
+          if (error.toString().contains('microsecondsSinceEpoch') || 
+              error.toString().contains('NoSuchMethodError')) {
+            debugPrint('Detected cache corruption, resetting caches...');
+            try {
+              HybridMatchingEngine.resetAllCaches();
+            } catch (resetError) {
+              debugPrint('Error resetting caches: $resetError');
+            }
+          }
+          
+          // Return empty list instead of crashing
           return <ComputedMatch>[];
         }
-      }).handleError((error) {
+      }).handleError((error, stackTrace) {
         // Ignore permission errors during logout
-        debugPrint('Error in computed matches stream (likely during logout): $error');
+        debugPrint('Error in computed matches stream: $error');
+        debugPrint('Stack trace: $stackTrace');
         return <ComputedMatch>[];
       });
     });
   }
 
   /// Manually trigger a refresh of computed matches
+  /// Also clears weights cache to ensure fresh data
   void refreshComputedMatches() {
+    // Clear weights cache before refreshing
+    MatchingService.clearWeightsCache();
     _refreshController.add(null);
   }
 
@@ -192,5 +210,17 @@ class MatchingService {
       recruiterId: recruiterId,
       strategy: strategy,
     );
+  }
+
+  /// Clear the cached matching weights to force refresh from Firestore
+  /// Call this after updating matching rules to see changes immediately
+  /// This clears cache across ALL MatchingService and HybridMatchingEngine instances
+  static void clearWeightsCache() {
+    HybridMatchingEngine.clearWeightsCache();
+  }
+  
+  /// Reset all caches (for recovery from cache corruption)
+  static void resetAllCaches() {
+    HybridMatchingEngine.resetAllCaches();
   }
 }

@@ -37,11 +37,13 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
   bool _isApplying = false;
   String? _ownerName;
   String? _rejectionReason;
-  int _refreshKey = 0; 
+  int _refreshKey = 0;
+  PostStatus? _currentPostStatus; 
 
   @override
   void initState() {
     super.initState();
+    _currentPostStatus = widget.post.status;
     _loadAttachments();
     _checkUserRoleAndIncrementView();
     _loadOwnerName();
@@ -177,12 +179,18 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
         iconTheme: const IconThemeData(color: Colors.black),
         actions: [
           //report button post is active or completed
-          if (_userRole == 'jobseeker' && !_isOwner && (widget.post.status == PostStatus.completed || widget.post.status == PostStatus.active))
+          if (_userRole == 'jobseeker' && !_isOwner && _currentPostStatus != null && (_currentPostStatus == PostStatus.completed || _currentPostStatus == PostStatus.active))
             FutureBuilder<bool>(
               future: Future.wait([
                 _applicationService.hasApplied(widget.post.id),
                 _reportService.hasReportedPost(widget.post.id),
-              ]).then((results) => results[0] && !results[1]),
+              ]).then((results) {
+                final hasApplied = results[0];
+                final hasReported = results[1];
+                final shouldShow = hasApplied && !hasReported;
+                debugPrint('Report button check - hasApplied: $hasApplied, hasReported: $hasReported, shouldShow: $shouldShow');
+                return shouldShow;
+              }),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const SizedBox.shrink();
@@ -198,7 +206,7 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
               },
             ),
           // recruiter post is completed
-          if (_isOwner && widget.post.status == PostStatus.completed)
+          if (_isOwner && _currentPostStatus != null && _currentPostStatus == PostStatus.completed)
             IconButton(
               icon: const Icon(Icons.flag_outlined, color: Colors.red),
               tooltip: 'Report Jobseeker',
@@ -354,6 +362,16 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
               if (data != null) {
                 try {
                   currentPost = Post.fromMap({...data, 'id': widget.post.id});
+                  // Update current post status for AppBar
+                  if (mounted && _currentPostStatus != currentPost.status) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        setState(() {
+                          _currentPostStatus = currentPost.status;
+                        });
+                      }
+                    });
+                  }
                 } catch (e) {
                   debugPrint('Error parsing post data: $e');
                   currentPost = widget.post;
