@@ -1,8 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/report_category_model.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 
-/// Dialog for editing report category details
 class ReportCategoryDetailsDialog extends StatefulWidget {
   final ReportCategoryModel category;
   final Function(ReportCategoryModel) onUpdate;
@@ -27,7 +26,6 @@ class _ReportCategoryDetailsDialogState extends State<ReportCategoryDetailsDialo
   String? _descriptionError;
   String? _creditError;
   
-  // Callback to update dialog state (from StatefulBuilder)
   void Function(void Function())? _setDialogState;
 
   @override
@@ -48,12 +46,11 @@ class _ReportCategoryDetailsDialogState extends State<ReportCategoryDetailsDialo
   }
 
   Future<void> _saveCategory() async {
-    // Reset errors
+    
     _nameError = null;
     _descriptionError = null;
     _creditError = null;
 
-    // Validate
     final name = _nameController.text.trim();
     final description = _descriptionController.text.trim();
     final creditText = _creditDeductionController.text.trim();
@@ -86,7 +83,6 @@ class _ReportCategoryDetailsDialogState extends State<ReportCategoryDetailsDialo
       return;
     }
 
-    // Update loading state using StatefulBuilder's setState
     if (_setDialogState != null) {
       _setDialogState!(() {
         _isLoading = true;
@@ -101,7 +97,6 @@ class _ReportCategoryDetailsDialogState extends State<ReportCategoryDetailsDialo
       updatedAt: DateTime.now(),
     );
 
-    // Close dialog first, then update 
     Navigator.pop(context);
     await widget.onUpdate(updatedCategory);
   }
@@ -126,7 +121,7 @@ class _ReportCategoryDetailsDialogState extends State<ReportCategoryDetailsDialo
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Header
+                
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -172,7 +167,7 @@ class _ReportCategoryDetailsDialogState extends State<ReportCategoryDetailsDialo
                     ],
                   ),
                 ),
-                // Content
+                
                 Flexible(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(24),
@@ -180,7 +175,7 @@ class _ReportCategoryDetailsDialogState extends State<ReportCategoryDetailsDialo
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Name
+                        
                         TextField(
                           controller: _nameController,
                           enabled: !_isLoading,
@@ -202,7 +197,7 @@ class _ReportCategoryDetailsDialogState extends State<ReportCategoryDetailsDialo
                           },
                         ),
                         const SizedBox(height: 16),
-                        // Description
+                        
                         TextField(
                           controller: _descriptionController,
                           enabled: !_isLoading,
@@ -225,7 +220,7 @@ class _ReportCategoryDetailsDialogState extends State<ReportCategoryDetailsDialo
                           },
                         ),
                         const SizedBox(height: 16),
-                        // Enable/Disable
+                        
                         SwitchListTile(
                           title: const Text('Enable Category'),
                           subtitle: const Text('Turn this report category on or off'),
@@ -241,7 +236,7 @@ class _ReportCategoryDetailsDialogState extends State<ReportCategoryDetailsDialo
                                 },
                         ),
                         const SizedBox(height: 16),
-                        // Type Selection
+                        
                         const Text(
                           'Category Type *',
                           style: TextStyle(
@@ -291,7 +286,7 @@ class _ReportCategoryDetailsDialogState extends State<ReportCategoryDetailsDialo
                           ],
                         ),
                         const SizedBox(height: 16),
-                        // Credit Deduction
+                        
                         TextField(
                           controller: _creditDeductionController,
                           enabled: !_isLoading,
@@ -359,7 +354,7 @@ class _ReportCategoryDetailsDialogState extends State<ReportCategoryDetailsDialo
                           ),
                         ],
                         const SizedBox(height: 24),
-                        // Action Buttons
+                        
                         Row(
                           children: [
                             Expanded(
@@ -428,7 +423,6 @@ class _ReportCategoryDetailsDialogState extends State<ReportCategoryDetailsDialo
   }
 }
 
-/// Dialog for creating a new report category
 class CreateReportCategoryDialog extends StatefulWidget {
   final Function({
     required String name,
@@ -459,7 +453,6 @@ class _CreateReportCategoryDialogState extends State<CreateReportCategoryDialog>
   String? _descriptionError;
   String? _creditError;
   
-  // Callback to update dialog state (from StatefulBuilder)
   void Function(void Function())? _setDialogState;
 
   @override
@@ -471,12 +464,11 @@ class _CreateReportCategoryDialogState extends State<CreateReportCategoryDialog>
   }
 
   Future<void> _createCategory() async {
-    // Reset errors
+    
     _nameError = null;
     _descriptionError = null;
     _creditError = null;
 
-    // Validate
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -513,14 +505,12 @@ class _CreateReportCategoryDialogState extends State<CreateReportCategoryDialog>
       return;
     }
 
-    // Update loading state using StatefulBuilder's setState
     if (_setDialogState != null) {
       _setDialogState!(() {
         _isLoading = true;
       });
     }
 
-    // Close dialog first, then create
     Navigator.pop(context);
     await widget.onCreate(
       name: name,
@@ -553,7 +543,7 @@ class _CreateReportCategoryDialogState extends State<CreateReportCategoryDialog>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Header
+                  
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -580,7 +570,7 @@ class _CreateReportCategoryDialogState extends State<CreateReportCategoryDialog>
                       ],
                     ),
                   ),
-                  // Content
+                  
                   Flexible(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.all(24),
@@ -596,7 +586,7 @@ class _CreateReportCategoryDialogState extends State<CreateReportCategoryDialog>
                             ),
                           ),
                           const SizedBox(height: 24),
-                          // Name
+                          
                           TextField(
                             controller: _nameController,
                             enabled: !_isLoading,
@@ -618,7 +608,7 @@ class _CreateReportCategoryDialogState extends State<CreateReportCategoryDialog>
                             },
                           ),
                           const SizedBox(height: 16),
-                          // Description
+                          
                           TextField(
                             controller: _descriptionController,
                             enabled: !_isLoading,
@@ -641,7 +631,7 @@ class _CreateReportCategoryDialogState extends State<CreateReportCategoryDialog>
                             },
                           ),
                           const SizedBox(height: 16),
-                          // Type Selection
+                          
                           const Text(
                             'Category Type *',
                             style: TextStyle(
@@ -691,7 +681,7 @@ class _CreateReportCategoryDialogState extends State<CreateReportCategoryDialog>
                             ],
                           ),
                           const SizedBox(height: 16),
-                          // Credit Deduction
+                          
                           TextField(
                             controller: _creditDeductionController,
                             enabled: !_isLoading,
@@ -717,7 +707,7 @@ class _CreateReportCategoryDialogState extends State<CreateReportCategoryDialog>
                             },
                           ),
                           const SizedBox(height: 16),
-                          // Enable/Disable
+                          
                           SwitchListTile(
                             title: const Text('Enable Category'),
                             subtitle: const Text('Turn this report category on or off'),
@@ -751,7 +741,7 @@ class _CreateReportCategoryDialogState extends State<CreateReportCategoryDialog>
                             ),
                           ],
                           const SizedBox(height: 24),
-                          // Action Buttons
+                          
                           Row(
                             children: [
                               Expanded(

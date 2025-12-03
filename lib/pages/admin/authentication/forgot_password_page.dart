@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fyp_project/services/admin/auth_service.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
@@ -105,7 +105,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Back Button
+                        
                         Align(
                           alignment: Alignment.centerLeft,
                           child: IconButton(
@@ -125,7 +125,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                           ),
                         ),
                         const SizedBox(height: 20),
-                        // Lock Icon
+                        
                         Container(
                           width: 100,
                           height: 100,
@@ -161,7 +161,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                           ),
                         ),
                         const SizedBox(height: 40),
-                        // Email Field
+                        
                         Text(
                           'Email',
                           style: TextStyle(
@@ -222,7 +222,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                           },
                         ),
                         const SizedBox(height: 32),
-                        // Send Reset Link Button
+                        
                         SizedBox(
                           height: 52,
                           child: ElevatedButton(
@@ -254,7 +254,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                           ),
                         ),
                         const SizedBox(height: 24),
-                        // Back to Login
+                        
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -290,4 +290,3 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     );
   }
 }
-

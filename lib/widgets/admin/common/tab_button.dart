@@ -1,13 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-/// A reusable tab button widget with count badge
-/// Used in pages with tab navigation
 class AdminTabButton extends StatelessWidget {
   final String label;
   final int count;
   final bool isSelected;
   final VoidCallback onTap;
-  final Color? customColor; // Optional custom color, otherwise uses default based on label
+  final Color? customColor; 
 
   const AdminTabButton({
     super.key,
@@ -85,4 +83,3 @@ class AdminTabButton extends StatelessWidget {
     );
   }
 }
-

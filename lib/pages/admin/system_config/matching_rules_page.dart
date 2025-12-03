@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/matching_rule_model.dart';
 import 'package:fyp_project/services/admin/system_config_service.dart';
 import 'package:fyp_project/services/admin/auth_service.dart';
@@ -15,7 +15,7 @@ class MatchingRulesPage extends StatefulWidget {
 
 class _MatchingRulesPageState extends State<MatchingRulesPage> {
   final SystemConfigService _configService = SystemConfigService();
-  // Using static MatchingService.clearWeightsCache() instead of instance
+  
   List<MatchingRuleModel> _rules = [];
   bool _isLoading = true;
 
@@ -76,7 +76,6 @@ class _MatchingRulesPageState extends State<MatchingRulesPage> {
       try {
         await _configService.initializeDefaultMatchingRules();
         
-        // Clear matching weights cache to apply changes immediately (static method clears all instances)
         MatchingService.clearWeightsCache();
         
         if (mounted) {
@@ -105,7 +104,6 @@ class _MatchingRulesPageState extends State<MatchingRulesPage> {
       
       await _configService.updateMatchingRule(rule, updatedBy: updatedBy);
       
-      // Clear matching weights cache to apply changes immediately (static method clears all instances)
       MatchingService.clearWeightsCache();
       
       if (mounted) {
@@ -216,7 +214,7 @@ class _MatchingRulesPageState extends State<MatchingRulesPage> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      // Weight Summary Card
+                      
                       _buildWeightSummaryCard(),
                       const SizedBox(height: 16),
                       ..._rules.map((rule) => _buildRuleCard(rule)),
@@ -518,7 +516,7 @@ class _RuleDetailsDialogState extends State<_RuleDetailsDialog> {
           ),
           onChanged: (value) {
             setState(() {
-              // Trigger rebuild to update error state
+              
             });
           },
           )
@@ -598,7 +596,7 @@ class _RuleDetailsDialogState extends State<_RuleDetailsDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
+            
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -640,14 +638,14 @@ class _RuleDetailsDialogState extends State<_RuleDetailsDialog> {
                 ],
               ),
             ),
-            // Content
+            
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Enable/Disable
+                    
                     SwitchListTile(
                       title: const Text('Enable Rule'),
                       subtitle: const Text('Turn this matching rule on or off'),
@@ -659,7 +657,7 @@ class _RuleDetailsDialogState extends State<_RuleDetailsDialog> {
                       },
                     ),
                     const Divider(),
-                    // Weight Slider
+                    
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -680,7 +678,7 @@ class _RuleDetailsDialogState extends State<_RuleDetailsDialog> {
                           onChanged: (value) {
                             setState(() {
                               _editedRule = _editedRule.copyWith(weight: value);
-                              // Update the weight parameter as well
+                              
                               final updatedParams = Map<String, dynamic>.from(_editedRule.parameters);
                               updatedParams['weight'] = value;
                               _editedRule = _editedRule.copyWith(parameters: updatedParams);
@@ -692,7 +690,7 @@ class _RuleDetailsDialogState extends State<_RuleDetailsDialog> {
                           style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                         ),
                         const SizedBox(height: 8),
-                        // Show current total weight
+                        
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
@@ -716,7 +714,7 @@ class _RuleDetailsDialogState extends State<_RuleDetailsDialog> {
                       ],
                     ),
                     const Divider(),
-                    // Parameters
+                    
                     if (_editedRule.parameters.isNotEmpty && 
                         !_editedRule.parameters.keys.every((k) => k == 'weight' || k == 'description'))
                     ...[
@@ -728,7 +726,7 @@ class _RuleDetailsDialogState extends State<_RuleDetailsDialog> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      // Special handling for distance matching parameters
+                      
                       if (widget.rule.id == 'distance') ...[
                         _buildDistanceParameterField(
                           'maxDistanceKm',
@@ -748,7 +746,7 @@ class _RuleDetailsDialogState extends State<_RuleDetailsDialog> {
                           max: 10.0,
                         ),
                       ] else ...[
-                        // Generic parameter fields for other rules
+                        
                         ..._editedRule.parameters.entries.where((entry) => 
                           entry.key != 'weight' && entry.key != 'description'
                         ).map((entry) {
@@ -771,7 +769,7 @@ class _RuleDetailsDialogState extends State<_RuleDetailsDialog> {
                 ),
               ),
             ),
-            // Actions
+            
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -806,4 +804,3 @@ class _RuleDetailsDialogState extends State<_RuleDetailsDialog> {
     );
   }
 }
-

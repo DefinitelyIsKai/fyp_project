@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class AddSlotDialog extends StatefulWidget {
@@ -20,8 +20,7 @@ class _AddSlotDialogState extends State<AddSlotDialog> {
     super.initState();
     final now = TimeOfDay.now();
     _startTime = now;
-    // Ensure hour stays within valid range (0-23)
-    // If current hour is 23, wrap around to 0
+    
     final nextHour = (now.hour + 1) % 24;
     _endTime = now.replacing(hour: nextHour);
   }
@@ -89,7 +88,7 @@ class _AddSlotDialogState extends State<AddSlotDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header with icon and title
+            
             Row(
               children: [
                 Container(
@@ -146,7 +145,7 @@ class _AddSlotDialogState extends State<AddSlotDialog> {
               ],
             ),
             const SizedBox(height: 24),
-            // Date display
+            
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -197,7 +196,7 @@ class _AddSlotDialogState extends State<AddSlotDialog> {
               ),
             ),
             const SizedBox(height: 16),
-            // Start Time
+            
             InkWell(
               onTap: _selectStartTime,
               borderRadius: BorderRadius.circular(12),
@@ -257,7 +256,7 @@ class _AddSlotDialogState extends State<AddSlotDialog> {
               ),
             ),
             const SizedBox(height: 16),
-            // End Time
+            
             InkWell(
               onTap: _selectEndTime,
               borderRadius: BorderRadius.circular(12),
@@ -317,7 +316,7 @@ class _AddSlotDialogState extends State<AddSlotDialog> {
               ),
             ),
             const SizedBox(height: 24),
-            // Action buttons
+            
             Row(
               children: [
                 Expanded(
@@ -366,4 +365,3 @@ class _AddSlotDialogState extends State<AddSlotDialog> {
     );
   }
 }
-

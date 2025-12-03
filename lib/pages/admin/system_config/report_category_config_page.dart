@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/report_category_model.dart';
 import 'package:fyp_project/services/admin/system_config_service.dart';
 import 'package:fyp_project/services/admin/auth_service.dart';
@@ -58,7 +58,6 @@ class _ReportCategoryConfigPageState extends State<ReportCategoryConfigPage> {
   void _applyFilters() {
     var filtered = List<ReportCategoryModel>.from(_categories);
 
-    // Search filter
     if (_searchController.text.isNotEmpty) {
       final query = _searchController.text.toLowerCase();
       filtered = filtered.where((category) {
@@ -67,12 +66,10 @@ class _ReportCategoryConfigPageState extends State<ReportCategoryConfigPage> {
       }).toList();
     }
 
-    // Type filter
     if (_selectedType != 'all') {
       filtered = filtered.where((category) => category.type == _selectedType).toList();
     }
 
-    // Status filter
     if (_selectedStatus != 'all') {
       if (_selectedStatus == 'enabled') {
         filtered = filtered.where((category) => category.isEnabled).toList();
@@ -124,7 +121,7 @@ class _ReportCategoryConfigPageState extends State<ReportCategoryConfigPage> {
     required String type,
     bool isEnabled = true,
   }) async {
-    // Show loading dialog
+    
     if (mounted) {
       showDialog(
         context: context,
@@ -161,7 +158,7 @@ class _ReportCategoryConfigPageState extends State<ReportCategoryConfigPage> {
       );
       
       if (mounted) {
-        Navigator.pop(context); // Close loading dialog
+        Navigator.pop(context); 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Category created successfully'),
@@ -173,7 +170,7 @@ class _ReportCategoryConfigPageState extends State<ReportCategoryConfigPage> {
       }
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context); // Close loading dialog
+        Navigator.pop(context); 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error creating category: $e'),
@@ -198,7 +195,7 @@ class _ReportCategoryConfigPageState extends State<ReportCategoryConfigPage> {
   }
 
   Future<void> _updateCategory(ReportCategoryModel category) async {
-    // Show loading dialog
+    
     if (mounted) {
       showDialog(
         context: context,
@@ -228,7 +225,7 @@ class _ReportCategoryConfigPageState extends State<ReportCategoryConfigPage> {
       await _configService.updateReportCategory(category, updatedBy: updatedBy);
       
       if (mounted) {
-        Navigator.pop(context); // Close loading dialog
+        Navigator.pop(context); 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Category updated successfully'),
@@ -240,7 +237,7 @@ class _ReportCategoryConfigPageState extends State<ReportCategoryConfigPage> {
       }
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context); // Close loading dialog
+        Navigator.pop(context); 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error updating category: $e'),
@@ -264,7 +261,6 @@ class _ReportCategoryConfigPageState extends State<ReportCategoryConfigPage> {
       ),
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -307,7 +303,7 @@ class _ReportCategoryConfigPageState extends State<ReportCategoryConfigPage> {
                 )
               : Column(
                   children: [
-                    // Search and Filters Section
+                    
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -323,7 +319,7 @@ class _ReportCategoryConfigPageState extends State<ReportCategoryConfigPage> {
                       ),
                       child: Column(
                         children: [
-                          // Search Bar
+                          
                           TextField(
                             controller: _searchController,
                             decoration: InputDecoration(
@@ -345,7 +341,7 @@ class _ReportCategoryConfigPageState extends State<ReportCategoryConfigPage> {
                             onChanged: (_) => _applyFilters(),
                           ),
                           const SizedBox(height: 12),
-                          // Filter Section (Expandable)
+                          
                           InkWell(
                             onTap: () {
                               setState(() {
@@ -403,7 +399,7 @@ class _ReportCategoryConfigPageState extends State<ReportCategoryConfigPage> {
                               ),
                             ),
                           ),
-                          // Expandable Filters Content
+                          
                           ClipRect(
                             child: AnimatedSize(
                               duration: const Duration(milliseconds: 300),
@@ -475,7 +471,7 @@ class _ReportCategoryConfigPageState extends State<ReportCategoryConfigPage> {
                                   : const SizedBox.shrink(),
                             ),
                           ),
-                          // Results Count
+                          
                           if (_filteredCategories.isNotEmpty) ...[
                             const SizedBox(height: 12),
                             Container(
@@ -504,7 +500,7 @@ class _ReportCategoryConfigPageState extends State<ReportCategoryConfigPage> {
                         ],
                       ),
                     ),
-                    // Categories List
+                    
                     Expanded(
                       child: _filteredCategories.isEmpty
                           ? Center(
@@ -647,7 +643,7 @@ class _ReportCategoryConfigPageState extends State<ReportCategoryConfigPage> {
                 ],
               ),
               const SizedBox(height: 12),
-              // Type badge (First Row)
+              
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
@@ -678,7 +674,7 @@ class _ReportCategoryConfigPageState extends State<ReportCategoryConfigPage> {
                 ),
               ),
               const SizedBox(height: 8),
-              // Credit deduction (Second Row)
+              
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -818,7 +814,6 @@ class _ReportCategoryConfigPageState extends State<ReportCategoryConfigPage> {
   }
 }
 
-// Filter Chip Widget
 class _FilterChip extends StatelessWidget {
   final String label;
   final String value;
@@ -889,4 +884,3 @@ class _FilterChip extends StatelessWidget {
     );
   }
 }
-

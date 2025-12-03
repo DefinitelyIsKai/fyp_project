@@ -1,6 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-/// Dialog for adding credits to user wallet
 class AddCreditDialog extends StatefulWidget {
   final String userId;
   final String userName;
@@ -15,7 +14,6 @@ class AddCreditDialog extends StatefulWidget {
     required this.onAddCredit,
   });
 
-  /// Shows the add credit dialog as a bottom sheet
   static Future<void> show({
     required BuildContext context,
     required String userId,
@@ -54,11 +52,10 @@ class _AddCreditDialogState extends State<AddCreditDialog> {
   }
 
   Future<void> _handleAddCredit() async {
-    // Reset errors
+    
     _amountError = null;
     setState(() {});
 
-    // Validate amount
     final amountText = _amountController.text.trim();
     if (amountText.isEmpty) {
       setState(() {
@@ -79,10 +76,8 @@ class _AddCreditDialogState extends State<AddCreditDialog> {
       _isLoading = true;
     });
 
-    // Close dialog first
     Navigator.pop(context);
 
-    // Call the callback
     await widget.onAddCredit(
       widget.userId,
       amount,
@@ -108,7 +103,7 @@ class _AddCreditDialogState extends State<AddCreditDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
+            
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -148,7 +143,7 @@ class _AddCreditDialogState extends State<AddCreditDialog> {
                 ],
               ),
             ),
-            // Content
+            
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
@@ -156,7 +151,7 @@ class _AddCreditDialogState extends State<AddCreditDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Current Balance Info
+                    
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -187,7 +182,7 @@ class _AddCreditDialogState extends State<AddCreditDialog> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    // Amount Field
+                    
                     TextField(
                       controller: _amountController,
                       enabled: !_isLoading,
@@ -238,7 +233,7 @@ class _AddCreditDialogState extends State<AddCreditDialog> {
                       style: const TextStyle(fontSize: 16),
                     ),
                     const SizedBox(height: 16),
-                    // Reason Field
+                    
                     TextField(
                       controller: _reasonController,
                       enabled: !_isLoading,
@@ -268,7 +263,7 @@ class _AddCreditDialogState extends State<AddCreditDialog> {
                 ),
               ),
             ),
-            // Buttons
+            
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -347,7 +342,6 @@ class _AddCreditDialogState extends State<AddCreditDialog> {
   }
 }
 
-/// Dialog for deducting credits from user wallet
 class DeductCreditDialog extends StatefulWidget {
   final String userId;
   final String userName;
@@ -366,7 +360,6 @@ class DeductCreditDialog extends StatefulWidget {
     required this.onDeductCredit,
   });
 
-  /// Shows the deduct credit dialog as a bottom sheet
   static Future<void> show({
     required BuildContext context,
     required String userId,
@@ -410,12 +403,11 @@ class _DeductCreditDialogState extends State<DeductCreditDialog> {
   }
 
   Future<void> _handleDeductCredit() async {
-    // Reset errors
+    
     _amountError = null;
     _reasonError = null;
     setState(() {});
 
-    // Validate amount
     final amountText = _amountController.text.trim();
     if (amountText.isEmpty) {
       setState(() {
@@ -432,7 +424,6 @@ class _DeductCreditDialogState extends State<DeductCreditDialog> {
       return;
     }
 
-    // Check if deduction exceeds available balance
     if (amount > widget.availableBalance) {
       setState(() {
         _amountError = 'Cant deduct more than available balance';
@@ -440,7 +431,6 @@ class _DeductCreditDialogState extends State<DeductCreditDialog> {
       return;
     }
 
-    // Validate reason
     final reasonText = _reasonController.text.trim();
     if (reasonText.isEmpty) {
       setState(() {
@@ -453,10 +443,8 @@ class _DeductCreditDialogState extends State<DeductCreditDialog> {
       _isLoading = true;
     });
 
-    // Close dialog first
     Navigator.pop(context);
 
-    // Call the callback
     await widget.onDeductCredit(
       widget.userId,
       amount,
@@ -481,7 +469,7 @@ class _DeductCreditDialogState extends State<DeductCreditDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
+            
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -521,7 +509,7 @@ class _DeductCreditDialogState extends State<DeductCreditDialog> {
                 ],
               ),
             ),
-            // Content
+            
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
@@ -529,7 +517,7 @@ class _DeductCreditDialogState extends State<DeductCreditDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Balance Information
+                    
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -643,7 +631,7 @@ class _DeductCreditDialogState extends State<DeductCreditDialog> {
                       ),
                     ],
                     const SizedBox(height: 24),
-                    // Amount Field
+                    
                     TextField(
                       controller: _amountController,
                       enabled: !_isLoading,
@@ -694,7 +682,7 @@ class _DeductCreditDialogState extends State<DeductCreditDialog> {
                       style: const TextStyle(fontSize: 16),
                     ),
                     const SizedBox(height: 16),
-                    // Reason Field
+                    
                     TextField(
                       controller: _reasonController,
                       enabled: !_isLoading,
@@ -748,7 +736,7 @@ class _DeductCreditDialogState extends State<DeductCreditDialog> {
                 ),
               ),
             ),
-            // Buttons
+            
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -826,4 +814,3 @@ class _DeductCreditDialogState extends State<DeductCreditDialog> {
     );
   }
 }
-

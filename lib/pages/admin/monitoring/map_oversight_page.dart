@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -48,7 +48,7 @@ class _MapOversightPageState extends State<MapOversightPage> {
   }
 
   void _setupStreamListener() {
-    // Real-time updates using Firestore stream
+    
     _postService.streamAllPosts().listen((posts) {
       if (mounted) {
         setState(() {
@@ -73,7 +73,6 @@ class _MapOversightPageState extends State<MapOversightPage> {
   void _applyFilters() {
     List<JobPostModel> filtered = List.from(_posts);
 
-    // Search filter
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toLowerCase();
       filtered = filtered.where((post) {
@@ -84,22 +83,19 @@ class _MapOversightPageState extends State<MapOversightPage> {
       }).toList();
     }
 
-    // Status filter
     if (_selectedStatus != 'all') {
       filtered = filtered.where((p) => p.status == _selectedStatus).toList();
     } else {
-      // By default, hide rejected and completed posts (only show active and pending)
+      
       filtered = filtered.where((p) => 
         p.status == 'active' || p.status == 'pending'
       ).toList();
     }
 
-    // Category filter
     if (_selectedCategory != 'all') {
       filtered = filtered.where((p) => p.category == _selectedCategory).toList();
     }
 
-    // State filter
     if (_selectedState != 'all') {
       filtered = filtered.where((p) {
         final postState = _extractState(p.location);
@@ -107,7 +103,6 @@ class _MapOversightPageState extends State<MapOversightPage> {
       }).toList();
     }
 
-    // Date range filter
     if (_startDate != null) {
       filtered = filtered.where((p) => p.createdAt.isAfter(_startDate!) || 
           p.createdAt.isAtSameMomentAs(_startDate!)).toList();
@@ -143,7 +138,6 @@ class _MapOversightPageState extends State<MapOversightPage> {
     
     final locationLower = location.toLowerCase();
     
-    // List of Malaysian states and federal territories
     final states = [
       'johor',
       'kedah',
@@ -165,7 +159,6 @@ class _MapOversightPageState extends State<MapOversightPage> {
       'terengganu',
     ];
     
-    // Check for state names in the location string
     for (final state in states) {
       if (locationLower.contains(state)) {
         if (state == 'kuala lumpur') return 'Kuala Lumpur';
@@ -220,7 +213,6 @@ class _MapOversightPageState extends State<MapOversightPage> {
         _isGeocoding = false;
       });
 
-      // Adjust camera to show all markers
       if (_markers.isNotEmpty && _mapController != null) {
         _fitBounds();
       }
@@ -240,7 +232,7 @@ class _MapOversightPageState extends State<MapOversightPage> {
         return coordinates;
       }
     } catch (e) {
-      // If geocoding fails, try with a more specific query
+      
       try {
         List<Location> locations = await locationFromAddress('$location, Malaysia');
         if (locations.isNotEmpty) {
@@ -345,7 +337,7 @@ class _MapOversightPageState extends State<MapOversightPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Handle bar
+                
                 Center(
                   child: Container(
                     width: 40,
@@ -357,7 +349,7 @@ class _MapOversightPageState extends State<MapOversightPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                // Post title
+                
                 Text(
                   post.title,
                   style: const TextStyle(
@@ -366,7 +358,7 @@ class _MapOversightPageState extends State<MapOversightPage> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                // Status badge
+                
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
@@ -383,7 +375,7 @@ class _MapOversightPageState extends State<MapOversightPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                // Post details
+                
                 _DetailRow(icon: Icons.category, label: 'Category', value: post.category),
                 _DetailRow(icon: Icons.location_on, label: 'Location', value: post.location),
                 _DetailRow(icon: Icons.business, label: 'Industry', value: post.industry),
@@ -400,7 +392,7 @@ class _MapOversightPageState extends State<MapOversightPage> {
                     value: 'RM ${post.budgetMin!.toStringAsFixed(0)} - RM ${post.budgetMax!.toStringAsFixed(0)}',
                   ),
                 const SizedBox(height: 20),
-                // Action buttons
+                
                 Row(
                   children: [
                     Expanded(
@@ -530,7 +522,7 @@ class _MapOversightPageState extends State<MapOversightPage> {
       ),
       body: Column(
         children: [
-          // Filters Section
+          
           if (_showFilters)
             Container(
               padding: const EdgeInsets.all(16),
@@ -547,7 +539,7 @@ class _MapOversightPageState extends State<MapOversightPage> {
               ),
               child: Column(
                 children: [
-                  // Search bar
+                  
                   TextField(
                     controller: _searchController,
                     decoration: InputDecoration(
@@ -574,7 +566,7 @@ class _MapOversightPageState extends State<MapOversightPage> {
                     },
                   ),
                   const SizedBox(height: 12),
-                  // Location search
+                  
                   Row(
                     children: [
                       Expanded(
@@ -602,7 +594,7 @@ class _MapOversightPageState extends State<MapOversightPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  // Filter chips row
+                  
                   Row(
                     children: [
                       Expanded(
@@ -693,7 +685,6 @@ class _MapOversightPageState extends State<MapOversightPage> {
               ),
             ),
 
-          // Map/List Section
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -725,7 +716,7 @@ class _MapOversightPageState extends State<MapOversightPage> {
           myLocationButtonEnabled: false,
           zoomControlsEnabled: true,
         ),
-        // Legend
+        
         Positioned(
           top: 16,
           right: 16,
@@ -769,7 +760,7 @@ class _MapOversightPageState extends State<MapOversightPage> {
             ),
           ),
         ),
-        // Stats Card
+        
         Positioned(
           bottom: 16,
           left: 16,

@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 
 class RoleModel {
   final String id;
@@ -68,4 +68,3 @@ class RoleModel {
     );
   }
 }
-

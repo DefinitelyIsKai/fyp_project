@@ -1,9 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../utils/user/dialog_utils.dart';
 
-/// Dialog for changing user password
-/// Shows a form with current password, new password, and confirm password fields
 class ChangePasswordDialog extends StatefulWidget {
   const ChangePasswordDialog({super.key});
 
@@ -67,7 +65,6 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
       return;
     }
 
-    // Validate passwords match
     if (_newPasswordController.text != _confirmPasswordController.text) {
       DialogUtils.showWarningMessage(
         context: context,
@@ -76,7 +73,6 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
       return;
     }
 
-    // Check if new password is different from old
     if (_oldPasswordController.text == _newPasswordController.text) {
       DialogUtils.showWarningMessage(
         context: context,
@@ -95,22 +91,18 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
         throw Exception('User not found. Please log in again.');
       }
 
-      // Re-authenticate with old password
       final credential = EmailAuthProvider.credential(
         email: user.email!,
         password: _oldPasswordController.text,
       );
       await user.reauthenticateWithCredential(credential);
 
-      // Update password
       await user.updatePassword(_newPasswordController.text);
 
       if (!mounted) return;
       
-      // Close dialog first
       Navigator.pop(context);
       
-      // Show success message
       DialogUtils.showSuccessMessage(
         context: context,
         message: 'Password changed successfully!',
@@ -160,7 +152,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header with icon
+              
               Container(
                 width: 60,
                 height: 60,
@@ -193,7 +185,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
-              // Current Password
+              
               TextFormField(
                 controller: _oldPasswordController,
                 decoration: _inputDecoration(
@@ -210,7 +202,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                 },
               ),
               const SizedBox(height: 16),
-              // New Password
+              
               TextFormField(
                 controller: _newPasswordController,
                 decoration: _inputDecoration(
@@ -231,7 +223,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                 },
               ),
               const SizedBox(height: 16),
-              // Confirm Password
+              
               TextFormField(
                 controller: _confirmPasswordController,
                 decoration: _inputDecoration(
@@ -251,7 +243,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                 },
               ),
               const SizedBox(height: 24),
-              // Buttons
+              
               if (_isLoading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 8.0),
@@ -303,4 +295,3 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
     );
   }
 }
-

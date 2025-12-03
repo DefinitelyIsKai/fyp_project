@@ -1,4 +1,4 @@
-enum ReportType {
+﻿enum ReportType {
   jobPost,
   user,
   message,
@@ -89,4 +89,3 @@ class ReportModel {
     };
   }
 }
-

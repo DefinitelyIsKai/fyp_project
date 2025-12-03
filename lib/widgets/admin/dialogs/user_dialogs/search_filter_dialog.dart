@@ -1,10 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../../../../models/user/category.dart';
 import '../../../../services/user/category_service.dart';
 import '../../../../widgets/user/location_autocomplete_field.dart';
 
-/// Filter dialog for search/discovery pages
-/// Allows filtering by location, budget, event type, and distance range
 class SearchFilterDialog extends StatefulWidget {
   final String? location;
   final double? minBudget;
@@ -169,7 +167,7 @@ class _SearchFilterDialogState extends State<SearchFilterDialog> {
                             return 'Min budget cannot be negative';
                           }
                         }
-                        // Trigger validation on max field to check range
+                        
                         if (_maxController.text.isNotEmpty) {
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             _formKey.currentState?.validate();
@@ -178,11 +176,11 @@ class _SearchFilterDialogState extends State<SearchFilterDialog> {
                         return null;
                       },
                       onChanged: (value) {
-                        // Clear error and revalidate when user types
+                        
                         setState(() {
                           _budgetError = null;
                         });
-                        // Trigger validation on max field
+                        
                         if (_maxController.text.isNotEmpty) {
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             _formKey.currentState?.validate();
@@ -223,7 +221,7 @@ class _SearchFilterDialogState extends State<SearchFilterDialog> {
                           if (max < 0) {
                             return 'Max budget cannot be negative';
                           }
-                          // Check if min is set and is greater than max
+                          
                           if (_minController.text.isNotEmpty) {
                             final min = double.tryParse(_minController.text);
                             if (min != null && max < min) {
@@ -240,11 +238,11 @@ class _SearchFilterDialogState extends State<SearchFilterDialog> {
                         return null;
                       },
                       onChanged: (value) {
-                        // Clear error when user types
+                        
                         setState(() {
                           _budgetError = null;
                         });
-                        // Trigger validation on min field to check range
+                        
                         if (_minController.text.isNotEmpty) {
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             _formKey.currentState?.validate();
@@ -416,12 +414,11 @@ class _SearchFilterDialogState extends State<SearchFilterDialog> {
                   const SizedBox(width: 8),
                   ElevatedButton(
                     onPressed: () {
-                      // Validate form before applying filters
+                      
                       if (!_formKey.currentState!.validate()) {
                         return;
                       }
                       
-                      // Additional validation: check if max >= min when both are set
                       final min = _minController.text.isEmpty
                           ? null
                           : double.tryParse(_minController.text);
@@ -473,5 +470,3 @@ class _SearchFilterDialogState extends State<SearchFilterDialog> {
     );
   }
 }
-
-

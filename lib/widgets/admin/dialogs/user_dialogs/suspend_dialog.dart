@@ -1,10 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/user_model.dart';
 import 'package:fyp_project/services/admin/user_service.dart';
 
-/// Dialog for suspending user accounts
 class SuspendDialog {
-  /// Shows the suspend dialog as a bottom sheet
+  
   static Future<void> show({
     required BuildContext context,
     required UserModel user,
@@ -13,7 +12,7 @@ class SuspendDialog {
     required VoidCallback onLoadData,
   }) async {
     final reasonController = TextEditingController();
-    final durationController = TextEditingController(text: '30'); // Default 30 days
+    final durationController = TextEditingController(text: '30'); 
 
     bool isLoading = false;
     String? reasonError;
@@ -37,7 +36,7 @@ class SuspendDialog {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header
+              
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -64,7 +63,7 @@ class SuspendDialog {
                   ],
                 ),
               ),
-              // Content
+              
               Flexible(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(24),
@@ -244,7 +243,7 @@ class SuspendDialog {
                         ),
                       ],
                       const SizedBox(height: 24),
-                      // Action Buttons
+                      
                       Row(
                         children: [
                           Expanded(
@@ -276,11 +275,9 @@ class SuspendDialog {
                                       final suspensionReason = reasonController.text.trim();
                                       final durationText = durationController.text.trim();
 
-                                      // Reset errors
                                       reasonError = null;
                                       durationError = null;
 
-                                      // Validate reason
                                       if (suspensionReason.isEmpty) {
                                         setDialogState(() {
                                           reasonError = 'Please provide a suspension reason';
@@ -288,7 +285,6 @@ class SuspendDialog {
                                         return;
                                       }
 
-                                      // Validate duration - cannot be empty
                                       if (durationText.isEmpty) {
                                         setDialogState(() {
                                           durationError = 'Please enter suspension duration';

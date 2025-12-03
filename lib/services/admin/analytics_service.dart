@@ -1,17 +1,13 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/models/admin/user_model.dart';
 import 'package:fyp_project/models/admin/analytics_model.dart';
 
 class AnalyticsService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // ==================== EXISTING FEATURES ====================
-
-  /// Fetch user analytics for a specific date
   Future<AnalyticsModel> getAnalytics(DateTime date) async {
     final endOfDay = DateTime(date.year, date.month, date.day + 1);
 
-    // Fetch all users created before end of the day
     final snapshot = await _firestore
         .collection('users')
         .where('createdAt', isLessThan: endOfDay)
@@ -31,7 +27,6 @@ class AnalyticsService {
       activeUsers: activeUsers,
       totalReports: totalReports,
 
-      // Set job & message related fields to 0
       totalJobPosts: 0,
       pendingJobPosts: 0,
       approvedJobPosts: 0,
@@ -46,14 +41,11 @@ class AnalyticsService {
     return 'User report generated';
   }
 
-  // ==================== NEW ENHANCED ANALYTICS FEATURES ====================
-
-  /// Get comprehensive analytics for a date range (30 days by default)
   Future<AnalyticsModel> getComprehensiveAnalytics(DateTime endDate) async {
     final startDate = endDate.subtract(const Duration(days: 30));
 
     try {
-      // Execute all queries in parallel for better performance
+      
       final futures = await Future.wait([
         _getEnhancedUserAnalytics(startDate, endDate),
         _getJobPostAnalytics(startDate, endDate),
@@ -72,7 +64,6 @@ class AnalyticsService {
       final paymentAnalytics = futures[5] as Map<String, dynamic>;
       final previousAnalytics = futures[6] as Map<String, dynamic>;
 
-      // Calculate engagement rates for both periods
       final currentEngagementRateUncapped = _calculateEngagementRate(
         activeUsers: userAnalytics['activeUsers'] ?? 0,
         totalUsers: userAnalytics['totalUsers'] ?? 0,
@@ -87,11 +78,9 @@ class AnalyticsService {
         totalMessages: previousAnalytics['totalMessages'] ?? 0,
       );
 
-      // Cap engagement rates at 100% before calculating growth
       final currentEngagementRate = currentEngagementRateUncapped > 100.0 ? 100.0 : currentEngagementRateUncapped;
       final previousEngagementRate = previousEngagementRateUncapped > 100.0 ? 100.0 : previousEngagementRateUncapped;
 
-      // Calculate growth rates
       final growthRates = _calculateGrowthRates(
         currentAnalytics: {
           ...userAnalytics,
@@ -121,7 +110,6 @@ class AnalyticsService {
         totalMessages: messageAnalytics['totalMessages'] ?? 0,
         reportedMessages: messageAnalytics['reportedMessages'] ?? 0,
 
-        // New fields
         newRegistrations: userAnalytics['newRegistrations'] ?? 0,
         rejectedJobPosts: jobPostAnalytics['rejectedJobPosts'] ?? 0,
         resolvedReports: reportAnalytics['resolvedReports'] ?? 0,
@@ -133,7 +121,6 @@ class AnalyticsService {
         revenue: paymentAnalytics['revenue'] ?? 0.0,
         creditPurchases: paymentAnalytics['creditPurchases'] ?? 0,
 
-        // Growth rates
         userGrowthRate: growthRates['userGrowthRate'] ?? 0.0,
         activeUserGrowth: growthRates['activeUserGrowth'] ?? 0.0,
         registrationGrowth: growthRates['registrationGrowth'] ?? 0.0,
@@ -155,36 +142,27 @@ class AnalyticsService {
     }
   }
 
-  // ==================== PRIVATE ANALYTICS METHODS ====================
-
   Future<Map<String, dynamic>> _getEnhancedUserAnalytics(DateTime startDate, DateTime endDate) async {
-    // Total users up to the end date (all users created before or on endDate)
+    
     final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
     final totalUsersSnapshot = await _firestore
         .collection('users')
         .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endOfDay))
         .get();
     
-    // Parse all users to check their active status
     final allUsers = totalUsersSnapshot.docs
         .map((doc) => UserModel.fromJson(doc.data(), doc.id))
         .toList();
     
     final totalUsers = allUsers.length;
     
-    // Active users: count users who are currently active (based on isActive field and status)
-    // Exclude deleted and suspended users
     final activeUsers = allUsers.where((user) {
-      // User is active if:
-      // 1. isActive is true AND
-      // 2. status is not 'Deleted' AND
-      // 3. status is not 'Suspended'
+      
       return user.isActive && 
              user.status != 'Deleted' && 
              user.status != 'Suspended';
     }).length;
 
-    // New registrations in the period
     final newRegistrationsSnapshot = await _firestore
         .collection('users')
         .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
@@ -196,18 +174,16 @@ class AnalyticsService {
       'totalUsers': totalUsers,
       'activeUsers': activeUsers,
       'newRegistrations': newRegistrations,
-      'profileViews': 0, // You'll need to track this separately
+      'profileViews': 0, 
     };
   }
 
   Future<Map<String, dynamic>> _getJobPostAnalytics(DateTime startDate, DateTime endDate) async {
     final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
     
-    // Get all posts from 'posts' collection
     final allPostsSnapshot = await _firestore.collection('posts').get();
     final allPosts = allPostsSnapshot.docs;
     
-    // Filter posts created in the period
     final postsInPeriod = allPosts.where((doc) {
       final data = doc.data();
       final createdAt = data['createdAt'] as Timestamp?;
@@ -217,10 +193,8 @@ class AnalyticsService {
              date.isBefore(endOfDay.add(const Duration(seconds: 1)));
     }).toList();
 
-    // Total posts in the period
     final totalJobPosts = postsInPeriod.length;
 
-    // Filter by status for period posts (pending, active, completed, rejected)
     final pendingJobPosts = postsInPeriod
         .where((doc) => (doc.data()['status'] ?? 'pending') == 'pending')
         .length;
@@ -240,19 +214,18 @@ class AnalyticsService {
     return {
       'totalJobPosts': totalJobPosts,
       'pendingJobPosts': pendingJobPosts,
-      'approvedJobPosts': approvedJobPosts, // This represents 'active' status
+      'approvedJobPosts': approvedJobPosts, 
       'rejectedJobPosts': rejectedJobPosts,
       'completedJobPosts': completedJobPosts,
-      'newJobPosts': totalJobPosts, // Same as total for period
+      'newJobPosts': totalJobPosts, 
     };
   }
 
   Future<Map<String, dynamic>> _getApplicationAnalytics(DateTime startDate, DateTime endDate) async {
-    // Get applications within the date range only
+    
     try {
       final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
       
-      // Applications in the period
       final applicationsSnapshot = await _firestore
           .collection('applications')
           .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
@@ -261,11 +234,11 @@ class AnalyticsService {
       final totalApplications = applicationsSnapshot.docs.length;
 
       return {
-        'totalApplications': totalApplications, // Only count applications within the date range
+        'totalApplications': totalApplications, 
         'newApplications': totalApplications,
       };
     } catch (e) {
-      // Return defaults if applications collection doesn't exist
+      
       return {
         'totalApplications': 0,
         'newApplications': 0,
@@ -274,28 +247,25 @@ class AnalyticsService {
   }
 
   Future<Map<String, dynamic>> _getReportAnalytics(DateTime startDate, DateTime endDate) async {
-    // Normalize dates to start and end of day in local timezone
-    // toDate() from Firestore returns local time, so we compare in local time
+    
     final startOfDay = DateTime(startDate.year, startDate.month, startDate.day, 0, 0, 0);
     final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59, 999);
     
-    // Try to get from reports collection first
     try {
       final allReportsSnapshot = await _firestore.collection('reports').get();
       final allReports = allReportsSnapshot.docs;
       
-      // Filter reports created in the period (inclusive of both boundaries)
       final reportsInPeriod = allReports.where((doc) {
         final data = doc.data();
         final createdAt = data['createdAt'] as Timestamp?;
         if (createdAt == null) return false;
-        // toDate() returns local time, so we compare in local time
+        
         final date = createdAt.toDate();
-        // Compare only the date part (year, month, day) to avoid timezone issues
+        
         final reportDate = DateTime(date.year, date.month, date.day);
         final startDateOnly = DateTime(startOfDay.year, startOfDay.month, startOfDay.day);
         final endDateOnly = DateTime(endOfDay.year, endOfDay.month, endOfDay.day);
-        // Use inclusive comparison: reportDate >= startDateOnly && reportDate <= endDateOnly
+        
         return reportDate.compareTo(startDateOnly) >= 0 && reportDate.compareTo(endDateOnly) <= 0;
       }).toList();
       
@@ -318,7 +288,7 @@ class AnalyticsService {
         'newReports': totalReports,
       };
     } catch (e) {
-      // Fallback to user reportCount if reports collection doesn't exist
+      
       final usersSnapshot = await _firestore.collection('users').get();
       final totalReports = usersSnapshot.docs.fold<int>(0, (sum, doc) {
         final data = doc.data();
@@ -343,11 +313,10 @@ class AnalyticsService {
   }
 
   Future<Map<String, dynamic>> _getMessageAnalytics(DateTime startDate, DateTime endDate) async {
-    // Fetch messages from conversations collection -> messages subcollection
+    
     try {
       final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
       
-      // Get all conversations
       final conversationsSnapshot = await _firestore.collection('conversations').get();
       
       int totalMessages = 0;
@@ -355,10 +324,9 @@ class AnalyticsService {
       
       print('Found ${conversationsSnapshot.docs.length} conversations');
       
-      // Iterate through each conversation and get messages from subcollection
       for (final conversationDoc in conversationsSnapshot.docs) {
         try {
-          // Get messages subcollection for this conversation
+          
           final messagesSnapshot = await conversationDoc.reference
               .collection('messages')
               .get();
@@ -368,12 +336,10 @@ class AnalyticsService {
           
           print('Conversation ${conversationDoc.id} has $messageCount messages');
           
-          // Count new messages in the period
           for (final messageDoc in messagesSnapshot.docs) {
             final messageData = messageDoc.data() as Map<String, dynamic>?;
             if (messageData == null) continue;
             
-            // Try different possible field names for timestamp
             dynamic timestampValue = messageData['createdAt'] ?? 
                                     messageData['timestamp'] ?? 
                                     messageData['sentAt'] ??
@@ -401,7 +367,7 @@ class AnalyticsService {
             }
           }
         } catch (e) {
-          // Skip conversations that don't have messages subcollection or have errors
+          
           print('Error fetching messages for conversation ${conversationDoc.id}: $e');
         }
       }
@@ -409,13 +375,13 @@ class AnalyticsService {
       print('Total messages: $totalMessages, New messages in period: $newMessages');
 
       return {
-        'totalMessages': newMessages, // Only count messages within the date range
-        'reportedMessages': 0, // Replace with actual query if needed
+        'totalMessages': newMessages, 
+        'reportedMessages': 0, 
         'newMessages': newMessages,
       };
     } catch (e) {
       print('Error getting message analytics: $e');
-      // Return defaults if conversations collection doesn't exist
+      
       return {
         'totalMessages': 0,
         'reportedMessages': 0,
@@ -428,14 +394,11 @@ class AnalyticsService {
     try {
       final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
       
-      // Get processed payments - filter by status only to avoid index requirement
-      // Then filter by date range client-side
       final allPaymentsSnapshot = await _firestore
           .collection('pending_payments')
           .where('status', isEqualTo: 'processed')
           .get();
       
-      // Filter by date range client-side
       final paymentDocs = allPaymentsSnapshot.docs.where((doc) {
         final data = doc.data() as Map<String, dynamic>?;
         if (data == null) return false;
@@ -459,7 +422,6 @@ class AnalyticsService {
         }
       }
 
-      // Active subscriptions (users with processed payments in the date range)
       final activeSubscriptions = paymentDocs
           .map((doc) {
             final data = doc.data() as Map<String, dynamic>?;
@@ -477,7 +439,7 @@ class AnalyticsService {
       };
     } catch (e) {
       print('Error getting payment analytics: $e');
-      // Return defaults if payments collection doesn't exist or has issues
+      
       return {
         'revenue': 0.0,
         'totalCreditsUsed': 0,
@@ -487,17 +449,14 @@ class AnalyticsService {
     }
   }
 
-  /// Get credit logs (payment transactions) for a date range
   Future<List<Map<String, dynamic>>> getCreditLogs(DateTime startDate, DateTime endDate) async {
     try {
       final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
       
-      // Get all payments and filter/sort client-side to avoid index requirement
       final allPaymentsSnapshot = await _firestore
           .collection('pending_payments')
           .get();
       
-      // Filter by date range and sort client-side
       final filteredDocs = allPaymentsSnapshot.docs.where((doc) {
         final data = doc.data() as Map<String, dynamic>?;
         if (data == null) return false;
@@ -508,7 +467,6 @@ class AnalyticsService {
                date.isBefore(endOfDay.add(const Duration(seconds: 1)));
       }).toList();
       
-      // Sort by createdAt descending
       filteredDocs.sort((a, b) {
         final aData = a.data() as Map<String, dynamic>?;
         final bData = b.data() as Map<String, dynamic>?;
@@ -517,7 +475,6 @@ class AnalyticsService {
         return bDate.compareTo(aDate);
       });
       
-      // Limit to 100 most recent and cast to proper type
       final paymentDocs = filteredDocs.take(100).cast<QueryDocumentSnapshot<Map<String, dynamic>>>().toList();
 
       return paymentDocs.map((doc) {
@@ -550,10 +507,9 @@ class AnalyticsService {
   }
 
   Future<Map<String, dynamic>> _getPreviousPeriodAnalytics(DateTime startDate, DateTime endDate) async {
-    // Calculate the duration of the current period
+    
     final periodDuration = endDate.difference(startDate);
     
-    // Previous period should be the same length, ending just before the current period starts
     final previousEndDate = startDate.subtract(const Duration(seconds: 1));
     final previousStartDate = previousEndDate.subtract(periodDuration);
 
@@ -584,7 +540,6 @@ class AnalyticsService {
   }) {
     if (totalUsers == 0) return 0.0;
 
-    // Simple engagement calculation - you can adjust this formula
     final applicationRate = totalApplications / totalUsers;
     final messageRate = totalMessages / totalUsers;
     final activeUserRate = activeUsers / totalUsers;
@@ -596,15 +551,14 @@ class AnalyticsService {
     required Map<String, dynamic> currentAnalytics,
     required Map<String, dynamic> previousAnalytics,
   }) {
-    // Special value to indicate "new" data (previous was 0, current > 0)
-    // Using -999 as a sentinel value that UI can detect
+    
     const double newDataIndicator = -999.0;
     
     double _calculateGrowth(double current, double previous) {
       if (previous == 0) {
-        // If previous was 0 and current > 0, return special indicator for "new"
+        
         if (current > 0) return newDataIndicator;
-        // If both are 0, return 0 (no change)
+        
         return 0.0;
       }
       return ((current - previous) / previous) * 100;
@@ -655,33 +609,28 @@ class AnalyticsService {
         (currentAnalytics['creditPurchases'] ?? 0).toDouble(),
         (previousAnalytics['creditPurchases'] ?? 0).toDouble(),
       ),
-      // Calculate engagement growth from engagement rates
+      
       'engagementGrowth': _calculateGrowth(
         (currentAnalytics['engagementRate'] ?? 0).toDouble(),
         (previousAnalytics['engagementRate'] ?? 0).toDouble(),
       ),
-      // Default values for metrics that need separate tracking
+      
       'sessionGrowth': 5.0,
       'profileViewGrowth': 12.0,
       'reportedMessageGrowth': -2.0,
     };
   }
 
-  // ==================== ADDITIONAL UTILITY METHODS ====================
-
-  /// Get analytics for a custom date range
   Future<AnalyticsModel> getAnalyticsForRange(DateTime startDate, DateTime endDate) async {
     try {
-      // Normalize dates to start and end of day
+      
       final normalizedStart = DateTime(startDate.year, startDate.month, startDate.day);
       final normalizedEnd = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
       
-      // Calculate the period duration for comparison
       final periodDuration = normalizedEnd.difference(normalizedStart).inDays;
       final previousStartDate = normalizedStart.subtract(Duration(days: periodDuration + 1));
       final previousEndDate = normalizedStart.subtract(const Duration(seconds: 1));
 
-      // Execute all queries in parallel for better performance
       final futures = await Future.wait([
         _getEnhancedUserAnalytics(normalizedStart, normalizedEnd),
         _getJobPostAnalytics(normalizedStart, normalizedEnd),
@@ -700,7 +649,6 @@ class AnalyticsService {
       final paymentAnalytics = futures[5] as Map<String, dynamic>;
       final previousAnalytics = futures[6] as Map<String, dynamic>;
 
-      // Calculate engagement rates for both periods
       final currentEngagementRateUncapped = _calculateEngagementRate(
         activeUsers: userAnalytics['activeUsers'] ?? 0,
         totalUsers: userAnalytics['totalUsers'] ?? 0,
@@ -715,11 +663,9 @@ class AnalyticsService {
         totalMessages: previousAnalytics['totalMessages'] ?? 0,
       );
 
-      // Cap engagement rates at 100% before calculating growth
       final currentEngagementRate = currentEngagementRateUncapped > 100.0 ? 100.0 : currentEngagementRateUncapped;
       final previousEngagementRate = previousEngagementRateUncapped > 100.0 ? 100.0 : previousEngagementRateUncapped;
 
-      // Calculate growth rates
       final growthRates = _calculateGrowthRates(
         currentAnalytics: {
           ...userAnalytics,
@@ -759,7 +705,6 @@ class AnalyticsService {
         revenue: paymentAnalytics['revenue'] ?? 0.0,
         creditPurchases: paymentAnalytics['creditPurchases'] ?? 0,
 
-        // Growth rates
         userGrowthRate: growthRates['userGrowthRate'] ?? 0.0,
         activeUserGrowth: growthRates['activeUserGrowth'] ?? 0.0,
         registrationGrowth: growthRates['registrationGrowth'] ?? 0.0,
@@ -781,7 +726,6 @@ class AnalyticsService {
     }
   }
 
-  /// Get real-time analytics stream
   Stream<AnalyticsModel> getAnalyticsStream() {
     return Stream.periodic(const Duration(minutes: 5), (_) => DateTime.now())
         .asyncMap((date) => getComprehensiveAnalytics(date))
@@ -790,7 +734,6 @@ class AnalyticsService {
     });
   }
 
-  /// Enhanced report generation with comprehensive data
   Future<String> generateComprehensiveReport(DateTime startDate, DateTime endDate) async {
     final analytics = await getComprehensiveAnalytics(endDate);
 

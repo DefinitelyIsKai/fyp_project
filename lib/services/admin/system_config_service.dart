@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/models/admin/system_config_model.dart';
 import 'package:fyp_project/models/admin/matching_rule_model.dart';
 import 'package:fyp_project/models/admin/report_category_model.dart';
@@ -6,7 +6,6 @@ import 'package:fyp_project/models/admin/report_category_model.dart';
 class SystemConfigService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // System Config Methods
   Future<List<SystemConfigModel>> getRulesConfigs() async {
     try {
       final snapshot = await _firestore
@@ -27,7 +26,7 @@ class SystemConfigService {
         );
       }).toList();
     } catch (e) {
-      // Return default configs if Firestore fails
+      
       return [
         SystemConfigModel(
           id: '1',
@@ -77,7 +76,7 @@ class SystemConfigService {
         );
       }).toList();
     } catch (e) {
-      // Return default settings if Firestore fails
+      
       return [
         SystemConfigModel(
           id: '1',
@@ -107,7 +106,6 @@ class SystemConfigService {
     });
   }
 
-  // Matching Rules Methods
   Future<List<MatchingRuleModel>> getMatchingRules() async {
     try {
       final snapshot = await _firestore
@@ -115,7 +113,7 @@ class SystemConfigService {
           .get();
 
       if (snapshot.docs.isEmpty) {
-        // Initialize default matching rules
+        
         return _getDefaultMatchingRules();
       }
 
@@ -123,12 +121,11 @@ class SystemConfigService {
         return MatchingRuleModel.fromJson(doc.data(), doc.id);
       }).toList();
       
-      // Sort by name in memory (no index required)
       rules.sort((a, b) => a.name.compareTo(b.name));
       
       return rules;
     } catch (e) {
-      // If error occurs, try to initialize and return defaults
+      
       print('Error loading matching rules: $e');
       return _getDefaultMatchingRules();
     }
@@ -150,8 +147,7 @@ class SystemConfigService {
 
     for (final rule in defaultRules) {
       final docRef = _firestore.collection('matching_rules').doc(rule.id);
-      // Use merge: true to update existing rules, or create if missing
-      // This ensures all 5 rules exist even if some were already created
+      
       batch.set(docRef, rule.toJson(), SetOptions(merge: true));
     }
 
@@ -225,7 +221,6 @@ class SystemConfigService {
     ];
   }
 
-  // Report Category Methods
   Future<List<ReportCategoryModel>> getReportCategories() async {
     try {
       final snapshot = await _firestore
@@ -236,7 +231,6 @@ class SystemConfigService {
         return ReportCategoryModel.fromJson(doc.data(), doc.id);
       }).toList();
       
-      // Sort by name in memory (no index required)
       categories.sort((a, b) => a.name.compareTo(b.name));
       
       return categories;
@@ -277,4 +271,3 @@ class SystemConfigService {
     await _firestore.collection('report_categories').doc(category.id).set(data, SetOptions(merge: true));
   }
 }
-

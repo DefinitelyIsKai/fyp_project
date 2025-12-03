@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fyp_project/pages/admin/post_moderation/categories_page.dart';
 import 'package:fyp_project/pages/admin/post_moderation/tags_page.dart';
 import 'package:fyp_project/services/admin/category_service.dart';
@@ -31,17 +31,16 @@ class _ManageTagsCategoriesPageState extends State<ManageTagsCategoriesPage> {
     setState(() => _isLoading = true);
 
     try {
-      // Load categories count
+      
       final categories = await _categoryService.getAllCategories();
       if (!mounted) return;
       _categoriesCount = categories.length;
 
-      // Load tags count 
       final tagCategories = await _tagService.getAllTagCategoriesWithTags();
       if (!mounted) return;
       _tagsCount = tagCategories.fold(0, (sum, category) => sum + category.tags.length);
     } catch (e) {
-      // Handle error silently or show a snackbar
+      
       if (mounted) {
         print('Error loading data: $e');
       }
@@ -77,7 +76,7 @@ class _ManageTagsCategoriesPageState extends State<ManageTagsCategoriesPage> {
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
             children: [
-              // Header Section
+              
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(24),
@@ -118,7 +117,6 @@ class _ManageTagsCategoriesPageState extends State<ManageTagsCategoriesPage> {
                 ),
               ),
 
-              // Stats Section
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Row(
@@ -146,7 +144,6 @@ class _ManageTagsCategoriesPageState extends State<ManageTagsCategoriesPage> {
                 ),
               ),
 
-              // Options Grid
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
@@ -160,12 +157,12 @@ class _ManageTagsCategoriesPageState extends State<ManageTagsCategoriesPage> {
                       backgroundColor: Colors.purple[50]!,
                       stats: '$_categoriesCount categories',
                       onTap: () async {
-                        // Navigate and wait for return to refresh data
+                        
                         await Navigator.push(
                           context,
                           MaterialPageRoute(builder: (_) => const CategoriesPage()),
                         );
-                        // Refresh data when returning from categories page
+                        
                         _loadData();
                       },
                     ),
@@ -178,12 +175,12 @@ class _ManageTagsCategoriesPageState extends State<ManageTagsCategoriesPage> {
                       backgroundColor: Colors.orange[50]!,
                       stats: '$_tagsCount tags',
                       onTap: () async {
-                        // Navigate and wait for return to refresh data
+                        
                         await Navigator.push(
                           context,
                           MaterialPageRoute(builder: (_) => const TagsPage()),
                         );
-                        // Refresh data when returning from tags page
+                        
                         _loadData();
                       },
                     ),
@@ -203,7 +200,7 @@ class _ManageTagsCategoriesPageState extends State<ManageTagsCategoriesPage> {
       physics: const AlwaysScrollableScrollPhysics(),
       child: Column(
         children: [
-          // Header Section
+          
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -244,7 +241,6 @@ class _ManageTagsCategoriesPageState extends State<ManageTagsCategoriesPage> {
             ),
           ),
 
-          // Loading content
           Container(
             height: 400, 
             child: Center(
@@ -376,7 +372,7 @@ class _ManagementCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Icon
+              
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -388,7 +384,6 @@ class _ManagementCard extends StatelessWidget {
 
               const SizedBox(height: 16),
 
-              // Title
               Text(
                 title,
                 style: const TextStyle(
@@ -402,7 +397,6 @@ class _ManagementCard extends StatelessWidget {
 
               const SizedBox(height: 8),
 
-              // Description
               Text(
                 description,
                 style: TextStyle(
@@ -416,7 +410,6 @@ class _ManagementCard extends StatelessWidget {
 
               const SizedBox(height: 12),
 
-              // Footer
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [

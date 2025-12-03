@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fyp_project/models/admin/report_model.dart';
@@ -143,10 +143,8 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
       return;
     }
 
-    // Get current strike count and wallet balance
     final currentStrikes = await _userService.getStrikeCount(userId);
     
-    // Get wallet balance and held credits to calculate available balance
     double walletBalance = 0.0;
     double heldCredits = 0.0;
     try {
@@ -166,25 +164,20 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
           heldCredits = (heldCreditsValue is num) ? heldCreditsValue.toDouble() : 0.0;
         }
       } else {
-        // If wallet doesn't exist, create it
+        
         walletBalance = await _userService.getWalletBalance(userId);
       }
     } catch (e) {
       walletBalance = await _userService.getWalletBalance(userId);
     }
     
-    // Available balance = balance - heldCredits (real balance)
     final availableBalance = walletBalance - heldCredits;
     
-    // Fetch report categories and match with report reason (for user/jobseeker reports)
-    // User reports: recruiter reporting jobseeker, so we should check both 'jobseeker' and 'recruiter' types
-    // to handle cases where categories might be incorrectly typed
     List<ReportCategoryModel> reportCategories = [];
     ReportCategoryModel? matchedCategory;
     try {
       final allCategories = await _configService.getReportCategories();
-      // For user reports, check both 'jobseeker' and 'recruiter' type categories
-      // (in case categories are incorrectly typed - should be 'jobseeker' for user reports)
+      
       reportCategories = allCategories.where((cat) => 
         cat.type == 'jobseeker' || cat.type == 'recruiter'
       ).toList();
@@ -199,11 +192,11 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
                      widget.report.reason.toLowerCase().contains(cat.name.toLowerCase()),
           );
         } catch (e2) {
-          // No match found - this is a custom reason (other)
+          
           matchedCategory = null;
         }
       }
-      // Only use if category is enabled and has valid ID
+      
       if (matchedCategory != null && (matchedCategory.id.isEmpty || !matchedCategory.isEnabled)) {
         matchedCategory = null;
       }
@@ -211,10 +204,8 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
       matchedCategory = null;
     }
     
-    // If no matched category, this is a custom reason - allow admin to set custom deduction
     final deductAmount = matchedCategory?.creditDeduction.toDouble();
 
-    // Get user name for dialog
     String userName = 'User';
     try {
       final userDoc = await FirebaseFirestore.instance
@@ -225,7 +216,7 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
         userName = userDoc.data()?['fullName'] ?? 'User';
       }
     } catch (e) {
-      // Use default
+      
     }
 
     final result = await HandleUserReportDialog.show(
@@ -244,11 +235,10 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
 
     if (result != null && result['success'] == true) {
       if (result['action'] == 'suspend') {
-        // User was suspended
+        
         final durationDays = result['durationDays'] as int;
         final suspendedUserName = result['userName'] as String;
         
-        // Update report status
         await _reportService.updateReportStatus(
           widget.report.id,
           ReportStatus.resolved,
@@ -267,7 +257,7 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
           Navigator.pop(context, true);
         }
       } else {
-        // Normal warning flow
+        
         final violationReason = result['violationReason'] as String;
         final deductAmountFromResult = result['deductAmount'] as double?;
         await _issueWarningToUser(userId, violationReason, deductAmountFromResult);
@@ -280,7 +270,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
     try {
       String actionTaken = '';
       
-      // Always issue warning, and deduct credits if amount is provided
       final result = await _userService.issueWarning(
         userId: userId,
         violationReason: violationReason,
@@ -311,7 +300,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
         
         actionTaken = actionMsg;
         
-        // Update report status
         await _reportService.updateReportStatus(
           widget.report.id,
           ReportStatus.resolved,
@@ -379,7 +367,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
       return;
     }
 
-    // Check if post is deleted
     if (_isPostDeleted()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -390,7 +377,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
       return;
     }
 
-    // Check if post is already rejected
     if (_isPostRejected()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -401,7 +387,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
       return;
     }
 
-    // Get post owner ID
     String? employerId = widget.report.reportedEmployerId;
     if (employerId == null || employerId.isEmpty) {
       try {
@@ -427,7 +412,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
       return;
     }
 
-    // Get post status
     String postStatus = 'unknown';
     try {
       final postDoc = await FirebaseFirestore.instance
@@ -441,10 +425,8 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
       print('Error fetching post status: $e');
     }
 
-    // Get current strike count for the employer
     final currentStrikes = await _userService.getStrikeCount(employerId);
 
-    // Get wallet balance and held credits to calculate available balance
     double walletBalance = 0.0;
     double heldCredits = 0.0;
     try {
@@ -470,18 +452,13 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
       walletBalance = await _userService.getWalletBalance(employerId);
     }
     
-    // Available balance = balance - heldCredits (real balance)
     final availableBalance = walletBalance - heldCredits;
     
-    // Fetch report categories and match with report reason (for post reports)
-    // Post reports: jobseeker reporting recruiter's post, so we should check both 'recruiter' and 'jobseeker' types
-    // to handle cases where categories might be incorrectly typed
     List<ReportCategoryModel> reportCategories = [];
     ReportCategoryModel? matchedCategory;
     try {
       final allCategories = await _configService.getReportCategories();
-      // For post reports, check both 'recruiter' and 'jobseeker' type categories
-      // (in case categories are incorrectly typed - should be 'recruiter' for post reports)
+      
       reportCategories = allCategories.where((cat) => 
         cat.type == 'recruiter' || cat.type == 'jobseeker'
       ).toList();
@@ -496,11 +473,11 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
                      widget.report.reason.toLowerCase().contains(cat.name.toLowerCase()),
           );
         } catch (e2) {
-          // No match found - this is a custom reason (other)
+          
           matchedCategory = null;
         }
       }
-      // Only use if category is enabled and has valid ID
+      
       if (matchedCategory != null && (matchedCategory.id.isEmpty || !matchedCategory.isEnabled)) {
         matchedCategory = null;
       }
@@ -508,10 +485,8 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
       matchedCategory = null;
     }
     
-    // If no matched category, this is a custom reason - allow admin to set custom deduction
     final deductAmount = matchedCategory?.creditDeduction.toDouble();
 
-    // Get user name for dialog
     String userName = 'User';
     try {
       final userDoc = await FirebaseFirestore.instance
@@ -522,7 +497,7 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
         userName = userDoc.data()?['fullName'] ?? 'User';
       }
     } catch (e) {
-      // Use default
+      
     }
 
     final result = await HandleUserReportDialog.show(
@@ -541,20 +516,17 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
 
     if (result != null && result['success'] == true && mounted) {
       if (result['action'] == 'suspend') {
-        // User was suspended
+        
         final durationDays = result['durationDays'] as int;
         final suspendedUserName = result['userName'] as String;
         
-        // Handle post based on status
         bool postRejected = false;
         if (postStatus == 'active' || postStatus == 'approved') {
-          // Reject the post
+          
           await _postService.rejectPost(postId, 'Post owner suspended due to insufficient balance for credit deduction.');
           postRejected = true;
         }
-        // If post is completed, don't change status
         
-        // Update report status
         await _reportService.updateReportStatus(
           widget.report.id,
           ReportStatus.resolved,
@@ -573,18 +545,16 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
           Navigator.pop(context, true);
         }
       } else {
-        // Normal warning flow
+        
         final violationReason = result['violationReason'] as String;
         final deductAmountFromResult = result['deductAmount'] as double?;
         
-        // Handle post based on status
         bool postRejected = false;
         if (postStatus == 'active' || postStatus == 'approved') {
-          // Reject the post
+          
           await _postService.rejectPost(postId, violationReason);
           postRejected = true;
         }
-        // If post is completed, don't change status, just issue warning
         
         await _issueWarningToPostOwner(employerId, violationReason, deductAmountFromResult, postRejected, postStatus);
       }
@@ -596,7 +566,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
     try {
       String actionTaken = '';
       
-      // Always issue warning, and deduct credits if amount is provided
       final result = await _userService.issueWarning(
         userId: userId,
         violationReason: postRejected 
@@ -635,7 +604,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
         
         actionTaken = actionMsg;
         
-        // Update report status
         await _reportService.updateReportStatus(
           widget.report.id,
           ReportStatus.resolved,
@@ -689,7 +657,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
     }
   }
 
-
   @override
   void initState() {
     super.initState();
@@ -700,17 +667,15 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
     setState(() => _isLoadingInfo = true);
     
     try {
-      // Load reporter info
+      
       if (widget.report.reporterId.isNotEmpty) {
         await _loadUserInfo(widget.report.reporterId);
       }
       
-      // Load reviewed by info
       if (widget.report.reviewedBy != null && widget.report.reviewedBy!.isNotEmpty) {
         await _loadUserInfo(widget.report.reviewedBy!);
       }
       
-      // Load reported user info (for employee reports)
       if (widget.report.reportType == ReportType.user) {
         final userId = widget.report.reportedEmployeeId ?? widget.report.reportedItemId;
         if (userId.isNotEmpty) {
@@ -718,7 +683,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
         }
       }
       
-      // Load post info (for post reports)
       if (widget.report.reportType == ReportType.jobPost) {
         final postId = widget.report.reportedPostId ?? widget.report.reportedItemId;
         if (postId.isNotEmpty) {
@@ -802,7 +766,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
         _postExists[postId] = false;
         _postStatus[postId] = 'deleted';
         
-        // Auto-resolve report if post is deleted and report is still pending
         if (widget.report.status == ReportStatus.pending && mounted) {
           _autoResolveDeletedPost();
         }
@@ -818,7 +781,7 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
   }
 
   Future<void> _autoResolveDeletedPost() async {
-    // Only auto-resolve if report is still pending
+    
     if (widget.report.status != ReportStatus.pending) return;
     
     try {
@@ -830,7 +793,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
         actionTaken: 'Auto-resolved: Post deleted',
       );
       
-      // Show a snackbar to inform the user
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -839,7 +801,7 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
             duration: Duration(seconds: 4),
           ),
         );
-        // Refresh the page
+        
         Future.delayed(const Duration(milliseconds: 500), () {
           if (mounted) {
             Navigator.pop(context, true);
@@ -892,7 +854,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
       return;
     }
 
-    // Check if post is deleted
     if (_isPostDeleted()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -931,7 +892,7 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
           );
         }
       } else {
-        // Update state to reflect deleted post
+        
         _postExists[postId] = false;
         _postStatus[postId] = 'deleted';
         if (mounted) {
@@ -985,8 +946,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
     return null;
   }
 
-  /// Extract credit deduction amount from actionTaken text
-  /// Returns null if no deduction found, or the amount as a string
   String? _getDeductedCreditsFromActionTaken() {
     if (widget.report.actionTaken == null || widget.report.actionTaken!.isEmpty) {
       return null;
@@ -994,7 +953,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
     
     final actionTaken = widget.report.actionTaken!;
     
-    // Try to find pattern like "Credits deducted: 100" or "Credits deducted: 100."
     final regex = RegExp(r'Credits deducted:\s*(\d+(?:\.\d+)?)');
     final match = regex.firstMatch(actionTaken);
     
@@ -1010,8 +968,6 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
     
     return null;
   }
-
-
 
   @override
   void dispose() {
@@ -1086,4 +1042,3 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
     return '$day $month $year, $hour:$minute';
   }
 }
-

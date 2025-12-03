@@ -1,7 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-/// A reusable management card widget used across admin pages
-/// Displays a card with icon, title, description, stats, and optional badge count
 class AdminManagementCard extends StatelessWidget {
   final String title;
   final String description;
@@ -39,7 +37,7 @@ class AdminManagementCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Icon with badge
+                  
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -51,7 +49,6 @@ class AdminManagementCard extends StatelessWidget {
 
                   const SizedBox(height: 12),
 
-                  // Title
                   SizedBox(
                     width: double.infinity,
                     child: Text(
@@ -68,7 +65,6 @@ class AdminManagementCard extends StatelessWidget {
 
                   const SizedBox(height: 6),
 
-                  // Description
                   Text(
                     description,
                     style: TextStyle(
@@ -82,7 +78,6 @@ class AdminManagementCard extends StatelessWidget {
 
                   const SizedBox(height: 12),
 
-                  // Stats
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
@@ -101,7 +96,6 @@ class AdminManagementCard extends StatelessWidget {
                 ],
               ),
 
-              // Badge
               if (badgeCount > 0)
                 Positioned(
                   top: 0,
@@ -129,4 +123,3 @@ class AdminManagementCard extends StatelessWidget {
     );
   }
 }
-

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/tag_model.dart';
 import 'package:fyp_project/services/admin/tag_service.dart';
 import 'dart:math';
@@ -19,7 +19,6 @@ class _TagsPageState extends State<TagsPage> {
   String _filterStatus = 'all';
   bool _isLoading = false;
 
-  // Expansion state management
   final Map<String, bool> _categoryExpansionState = {};
 
   @override
@@ -34,14 +33,10 @@ class _TagsPageState extends State<TagsPage> {
     try {
       final categories = await _tagService.getAllTagCategoriesWithTags();
       
-      // Yield to UI thread before sorting
       await Future.delayed(const Duration(milliseconds: 10));
       
-      // Sort categories alphabetically by title
       categories.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
       
-      // Sort tags within each category alphabetically by name
-      // Yield periodically to prevent blocking
       for (var i = 0; i < categories.length; i++) {
         categories[i].tags.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
         if (i % 10 == 0 && i > 0) {
@@ -52,7 +47,7 @@ class _TagsPageState extends State<TagsPage> {
       if (!mounted) return;
       setState(() {
         _categories = categories;
-        // Initialize all categories as expanded by default
+        
         for (var category in _categories) {
           _categoryExpansionState[category.id] = true;
         }
@@ -73,14 +68,10 @@ class _TagsPageState extends State<TagsPage> {
     try {
       final categories = await _tagService.getAllTagCategoriesWithTags();
       
-      // Yield to UI thread before sorting
       await Future.delayed(const Duration(milliseconds: 10));
       
-      // Sort categories alphabetically by title
       categories.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
       
-      // Sort tags within each category alphabetically by name
-      // Yield periodically to prevent blocking
       for (var i = 0; i < categories.length; i++) {
         categories[i].tags.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
         if (i % 10 == 0 && i > 0) {
@@ -122,7 +113,7 @@ class _TagsPageState extends State<TagsPage> {
                 category.description.toLowerCase().contains(query));
 
         if (filteredTags.isNotEmpty || shouldShowEmptyCategory || categoryMatchesSearch) {
-          // Sort filtered tags alphabetically by name
+          
           filteredTags.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
           return TagCategoryModel(
             id: category.id,
@@ -137,7 +128,7 @@ class _TagsPageState extends State<TagsPage> {
       })
           .whereType<TagCategoryModel>()
           .toList();
-      // Sort filtered categories alphabetically by title
+      
       _filteredCategories.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
     });
   }
@@ -600,10 +591,8 @@ class _TagsPageState extends State<TagsPage> {
                                     if (!context.mounted) return;
                                     Navigator.pop(context);
                                     
-                                    // Dispose notifiers
                                     isSavingNotifier.dispose();
                                     
-                                    // Refresh data asynchronously to prevent blocking
                                     _refreshData().then((_) {
                                       if (context.mounted) {
                                         _showSuccessSnackBar(
@@ -762,13 +751,13 @@ class _TagsPageState extends State<TagsPage> {
       ),
       body: Column(
         children: [
-          // Search & Filters Section
+          
           Container(
             color: Colors.grey[50],
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                // Search Bar
+                
                 TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
@@ -784,7 +773,7 @@ class _TagsPageState extends State<TagsPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Filter Chips
+                
                 Row(
                   children: [
                     Expanded(
@@ -825,7 +814,6 @@ class _TagsPageState extends State<TagsPage> {
             ),
           ),
 
-          // Results Count
           if (_filteredCategories.isNotEmpty && !_isLoading)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -847,7 +835,6 @@ class _TagsPageState extends State<TagsPage> {
               ),
             ),
 
-          // Tags List with Pull to Refresh
           Expanded(
             child: _isLoading
                 ? _buildLoadingState()
@@ -943,7 +930,6 @@ class _TagsPageState extends State<TagsPage> {
   }
 }
 
-//   RefreshController class
 class RefreshController {
   void refreshCompleted() {}
   void refreshFailed() {}
@@ -1015,7 +1001,6 @@ class _CreateOptionCard extends StatelessWidget {
   }
 }
 
-//  FilterChip
 class _FilterChip extends StatelessWidget {
   final String label;
   final bool isSelected;
@@ -1097,7 +1082,6 @@ class _TagCategorySectionState extends State<_TagCategorySection> with SingleTic
       curve: Curves.easeInOut,
     ));
 
-    // Start animation based on initial expanded state
     if (widget.isExpanded) {
       _animationController.value = 1.0;
     }
@@ -1128,7 +1112,7 @@ class _TagCategorySectionState extends State<_TagCategorySection> with SingleTic
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Category Header - Clickable to expand/collapse
+          
           GestureDetector(
             onTap: widget.onToggle,
             child: Container(
@@ -1211,7 +1195,6 @@ class _TagCategorySectionState extends State<_TagCategorySection> with SingleTic
           ),
           const SizedBox(height: 8),
 
-          // Tags List or Empty State - Animated expansion with proper up/down animation
           AnimatedBuilder(
             animation: _heightAnimation,
             builder: (context, child) {
@@ -1302,7 +1285,7 @@ class _TagCard extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            // Tag Icon
+            
             Container(
               width: 36,
               height: 36,
@@ -1317,7 +1300,7 @@ class _TagCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            // Tag Name and Status
+            
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1354,7 +1337,7 @@ class _TagCard extends StatelessWidget {
                 ],
               ),
             ),
-            // Status Toggle Switch
+            
             Switch(
               value: tag.isActive,
               onChanged: (value) => onToggleStatus(),
@@ -1362,7 +1345,7 @@ class _TagCard extends StatelessWidget {
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             const SizedBox(width: 8),
-            // Actions Menu
+            
             PopupMenuButton<String>(
               icon: Icon(Icons.more_vert, size: 18, color: Colors.grey[500]),
               itemBuilder: (context) => [

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fyp_project/pages/admin/system_config/matching_rules_page.dart';
 import 'package:fyp_project/pages/admin/system_config/report_category_config_page.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
@@ -31,7 +31,6 @@ class SystemConfigPage extends StatelessWidget {
     );
   }
 
-  // Header
   Widget _buildHeaderSection() {
     return Container(
       width: double.infinity,
@@ -62,7 +61,6 @@ class SystemConfigPage extends StatelessWidget {
     );
   }
 
-  // Grid options
   Widget _buildOptionsGrid(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -110,7 +108,6 @@ class SystemConfigPage extends StatelessWidget {
   }
 }
 
-// Management Card
 class _ManagementCard extends StatelessWidget {
   final String title;
   final String description;
@@ -147,7 +144,7 @@ class _ManagementCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Icon with badge
+                  
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -159,7 +156,6 @@ class _ManagementCard extends StatelessWidget {
 
                   const SizedBox(height: 12),
 
-                  // Title
                   SizedBox(
                     height: 40,
                     child: Text(
@@ -176,7 +172,6 @@ class _ManagementCard extends StatelessWidget {
 
                   const SizedBox(height: 6),
 
-                  // Description
                   Expanded(
                     child: Text(
                       description,
@@ -192,7 +187,6 @@ class _ManagementCard extends StatelessWidget {
 
                   const SizedBox(height: 8),
 
-                  // Footer
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -214,7 +208,6 @@ class _ManagementCard extends StatelessWidget {
                 ],
               ),
 
-              // Badge in top-right corner
               if (badgeCount > 0)
                 Positioned(
                   top: 8,
@@ -242,4 +235,3 @@ class _ManagementCard extends StatelessWidget {
     );
   }
 }
-

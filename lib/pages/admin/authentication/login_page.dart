@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -25,7 +25,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  // Face recognition toggle - can be enabled/disabled via UI switch
+  
   bool _enableFaceRecognition = true;
   
   final _formKey = GlobalKey<FormState>();
@@ -39,20 +39,19 @@ class _LoginPageState extends State<LoginPage> {
       FirebaseFirestore.instance.collection('logs');
   bool _isLoading = false;
   bool _obscurePassword = true;
-  String? _capturedImageBase64; // Base64 image after photo taken
-  Uint8List? _capturedImageBytes; // Used for preview display
-  bool _isDetectingFace = false; // Whether face detection is in progress
-  bool? _faceDetected; // Whether face is detected (null = not detected, true = detected, false = not detected)
-  Face? _detectedFace; // Detected face object (used for preview display only, not for verification)
+  String? _capturedImageBase64; 
+  Uint8List? _capturedImageBytes; 
+  bool _isDetectingFace = false; 
+  bool? _faceDetected; 
+  Face? _detectedFace; 
   
-  // OTP related state
   bool _showOtpInput = false;
   String? _otpId;
   String? _pendingEmail;
   String? _pendingAdminName;
   bool _isSendingOtp = false;
   bool _isVerifyingOtp = false;
-  int _otpResendCooldown = 0; // Cooldown in seconds
+  int _otpResendCooldown = 0; 
 
   @override
   void initState() {
@@ -60,7 +59,6 @@ class _LoginPageState extends State<LoginPage> {
     _initializeFaceService();
   }
 
-  /// Initialize face recognition service
   Future<void> _initializeFaceService() async {
     try {
       await _faceService.initialize();
@@ -71,7 +69,7 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   void dispose() {
-    // Clean up all state
+    
     _capturedImageBase64 = null;
     _capturedImageBytes = null;
     _faceDetected = null;
@@ -85,7 +83,6 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  /// Take photo (camera only, gallery not supported)
   Future<void> _takePhoto() async {
     try {
       final result = await _profilePicService.pickImageBase64(fromCamera: true);
@@ -93,11 +90,10 @@ class _LoginPageState extends State<LoginPage> {
         setState(() {
           _capturedImageBase64 = result['base64'];
           _capturedImageBytes = base64Decode(_capturedImageBase64!);
-          _faceDetected = null; // Reset detection status
-          _detectedFace = null; // Reset detected face
+          _faceDetected = null; 
+          _detectedFace = null; 
         });
         
-        // Real-time face detection
         await _detectFaceInImage();
       }
     } catch (e) {
@@ -117,7 +113,6 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  /// Detect faces in image
   Future<void> _detectFaceInImage() async {
     if (_capturedImageBytes == null) return;
     
@@ -127,17 +122,15 @@ class _LoginPageState extends State<LoginPage> {
     });
     
     try {
-      // Save image to temporary file, then use file path for detection (more reliable)
+      
       final tempDir = await getTemporaryDirectory();
       final tempFile = File('${tempDir.path}/face_detection_${DateTime.now().millisecondsSinceEpoch}.jpg');
       await tempFile.writeAsBytes(_capturedImageBytes!);
       
-      // Create InputImage using file path (more reliable method)
       final inputImage = InputImage.fromFilePath(tempFile.path);
       
       final faces = await _faceService.detectFaces(inputImage);
       
-      // Clean up temporary file
       try {
         await tempFile.delete();
       } catch (e) {
@@ -148,7 +141,7 @@ class _LoginPageState extends State<LoginPage> {
         setState(() {
           _faceDetected = faces.isNotEmpty;
           _isDetectingFace = false;
-          // Save first detected face (if any)
+          
           _detectedFace = faces.isNotEmpty ? faces.first : null;
         });
         
@@ -183,7 +176,6 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  /// Remove selected image
   void _removeImage() {
     setState(() {
       _capturedImageBase64 = null;
@@ -194,7 +186,6 @@ class _LoginPageState extends State<LoginPage> {
     });
   }
 
-  /// Verify face against profile photo
   Future<void> _verifyFace(String profileImageBase64) async {
     if (_capturedImageBase64 == null || _capturedImageBytes == null) {
       if (mounted) {
@@ -224,7 +215,6 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
-    // Show loading dialog
     if (!mounted) return;
     showDialog(
       context: context,
@@ -277,7 +267,6 @@ class _LoginPageState extends State<LoginPage> {
       print('Face detected: $_faceDetected');
       print('Detected face: ${_detectedFace != null ? "Yes" : "No"}');
 
-      // Convert captured image bytes to image.Image
       print('Decoding captured image...');
       final capturedImage = img.decodeImage(_capturedImageBytes!);
       if (capturedImage == null) {
@@ -285,7 +274,6 @@ class _LoginPageState extends State<LoginPage> {
       }
       print('Captured image decoded: ${capturedImage.width}x${capturedImage.height}');
 
-      // Compare faces
       print('Starting face comparison...');
       print('Calling compareFaces with profile image and captured image...');
       final similarity = await _faceService.compareFaces(
@@ -301,20 +289,18 @@ class _LoginPageState extends State<LoginPage> {
       print('Similarity difference: ${(similarity - 0.96).toStringAsFixed(4)}');
       print('==============================================');
 
-      // Similarity threshold (0.96 for strict matching)
       const threshold = 0.96;
 
       final email = _emailController.text.trim();
       final authService = Provider.of<AuthService>(context, listen: false);
       final currentUser = authService.currentAdmin;
 
-      // Close loading dialog
       if (mounted) {
         Navigator.of(context).pop();
       }
 
       if (similarity >= threshold) {
-        // Verification successful
+        
         print('Verification SUCCESS - Navigating to dashboard');
         _logLoginSuccess(
           email: email,
@@ -335,7 +321,7 @@ class _LoginPageState extends State<LoginPage> {
           Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
         }
       } else {
-        // Verification failed
+        
         print('Verification FAILED - Logging out user');
         _logFaceVerificationFailure(
           email: email,
@@ -376,7 +362,6 @@ class _LoginPageState extends State<LoginPage> {
         error: e.toString(),
       );
 
-      // Close loading dialog if still open
       if (mounted) {
         Navigator.of(context).pop();
       }
@@ -401,8 +386,6 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
     
-    // Note: Photo capture is now handled by FaceVerificationPage, so we don't need to check here
-
     setState(() => _isLoading = true);
     
     try {
@@ -415,19 +398,19 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
 
       if (result.success) {
-        // Check if face recognition is enabled
+        
         if (!_enableFaceRecognition) {
-          // Face recognition is disabled, use OTP verification
+          
           print('Face recognition is disabled, using OTP verification');
           final currentUser = authService.currentAdmin;
           if (currentUser != null) {
-            // Send OTP and show OTP input
+            
             await _sendOtpAndShowInput(
               email: _emailController.text.trim(),
               adminName: currentUser.name,
             );
           } else {
-            // Fallback: navigate directly if no user info
+            
             if (mounted) {
               Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
             }
@@ -435,11 +418,10 @@ class _LoginPageState extends State<LoginPage> {
           return;
         }
         
-        // Login successful, proceed with face verification
         final currentUser = authService.currentAdmin;
         if (currentUser != null) {
           try {
-            // Get admin profile photo
+            
             final userDoc = await FirebaseFirestore.instance
                 .collection('users')
                 .doc(currentUser.id)
@@ -458,13 +440,13 @@ class _LoginPageState extends State<LoginPage> {
             
             if (profileImageBase64 != null && profileImageBase64.isNotEmpty) {
               print('Starting face verification, base64 length: ${profileImageBase64.length}');
-              // Verify face using internal logic
+              
               if (mounted) {
                 setState(() => _isLoading = false);
                 await _verifyFace(profileImageBase64);
               }
             } else {
-              // No profile photo, require upload
+              
               print('Error: Profile photo base64 field is empty or does not exist');
               if (mounted) {
                 authService.logout();
@@ -482,7 +464,6 @@ class _LoginPageState extends State<LoginPage> {
             final email = _emailController.text.trim();
             final currentUser = authService.currentAdmin;
             
-            // Log face verification preparation error to Firestore
             _logFaceVerificationError(
               email: email,
               userId: currentUser?.id,
@@ -490,7 +471,6 @@ class _LoginPageState extends State<LoginPage> {
               error: e.toString(),
             );
             
-            // Log to console
             print('========== Face Verification Preparation Error ==========');
             print('Reason: Error while getting profile photo or preparing verification');
             print('Error Type: ${e.runtimeType}');
@@ -499,7 +479,6 @@ class _LoginPageState extends State<LoginPage> {
             print('Time: ${DateTime.now()}');
             print('========================================================');
             
-            // Clean up all resources
             _clearLoginResources();
             
             if (mounted) {
@@ -520,14 +499,12 @@ class _LoginPageState extends State<LoginPage> {
           }
         }
       } else {
-        // Login failed - password incorrect or other authentication issue
+        
         final errorMessage = result.error ?? 'Login failed. Please try again.';
         final email = _emailController.text.trim();
         
-        // Log detailed login failure to Firestore
         _logLoginFailure(email: email, reason: errorMessage);
         
-        // Log to console
         print('========== Login Failed ==========');
         print('Reason: Password incorrect or account verification failed');
         print('Error: $errorMessage');
@@ -546,7 +523,6 @@ class _LoginPageState extends State<LoginPage> {
         );
         }
         
-        // Clean up login-related resources
         _clearLoginResources();
       }
     } catch (e) {
@@ -566,8 +542,6 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  
-  /// Clean up captured image resources
   void _clearCapturedImage() {
     if (mounted) {
       setState(() {
@@ -580,11 +554,10 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
   
-  /// Clean up all login-related resources
   void _clearLoginResources() {
     print('Cleaning up login resources...');
     _clearCapturedImage();
-    // Reset loading state
+    
     if (mounted) {
       setState(() {
         _isLoading = false;
@@ -593,7 +566,6 @@ class _LoginPageState extends State<LoginPage> {
     print('Login resources cleaned up');
   }
   
-  /// Log login success to Firestore
   Future<void> _logLoginSuccess({
     required String email,
     String? userId,
@@ -611,11 +583,10 @@ class _LoginPageState extends State<LoginPage> {
       });
     } catch (e) {
       print('Error creating login success log entry: $e');
-      // Don't fail the operation if logging fails
+      
     }
   }
   
-  /// Log login failure to Firestore (password incorrect)
   Future<void> _logLoginFailure({
     required String email,
     required String reason,
@@ -627,15 +598,14 @@ class _LoginPageState extends State<LoginPage> {
         'reason': reason,
         'failureType': 'password_incorrect',
         'createdAt': FieldValue.serverTimestamp(),
-        'createdBy': null, // No user logged in yet
+        'createdBy': null, 
       });
     } catch (e) {
       print('Error creating login failure log entry: $e');
-      // Don't fail the operation if logging fails
+      
     }
   }
   
-  /// Log face verification failure to Firestore
   Future<void> _logFaceVerificationFailure({
     required String email,
     String? userId,
@@ -654,11 +624,10 @@ class _LoginPageState extends State<LoginPage> {
       });
     } catch (e) {
       print('Error creating face verification failure log entry: $e');
-      // Don't fail the operation if logging fails
+      
     }
   }
   
-  /// Log face verification error to Firestore
   Future<void> _logFaceVerificationError({
     required String email,
     String? userId,
@@ -679,7 +648,7 @@ class _LoginPageState extends State<LoginPage> {
       });
     } catch (e) {
       print('Error creating face verification error log entry: $e');
-      // Don't fail the operation if logging fails
+      
     }
   }
 
@@ -687,7 +656,6 @@ class _LoginPageState extends State<LoginPage> {
     Navigator.of(context).pushNamed(AppRoutes.adminForgotPassword);
   }
 
-  /// Send OTP and show OTP input interface
   Future<void> _sendOtpAndShowInput({
     required String email,
     required String adminName,
@@ -698,7 +666,7 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      // Check if there's an active OTP (rate limiting)
+      
       final hasActiveOtp = await _otpService.hasActiveOtp(email);
       if (hasActiveOtp) {
         if (mounted) {
@@ -713,7 +681,6 @@ class _LoginPageState extends State<LoginPage> {
         }
       }
 
-      // Send OTP
       final otpId = await _otpService.sendOtp(
         email: email,
         adminName: adminName,
@@ -725,11 +692,10 @@ class _LoginPageState extends State<LoginPage> {
           _otpId = otpId;
           _pendingEmail = email;
           _pendingAdminName = adminName;
-          _otpResendCooldown = 60; // 60 seconds cooldown
+          _otpResendCooldown = 60; 
           _isSendingOtp = false;
         });
 
-        // Start cooldown timer
         _startOtpResendCooldown();
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -759,7 +725,6 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  /// Start OTP resend cooldown timer
   void _startOtpResendCooldown() {
     Future.doWhile(() async {
       await Future.delayed(const Duration(seconds: 1));
@@ -773,7 +738,6 @@ class _LoginPageState extends State<LoginPage> {
     });
   }
 
-  /// Verify OTP and complete login
   Future<void> _verifyOtpAndLogin() async {
     if (_otpId == null || _pendingEmail == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -812,7 +776,7 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
 
       if (result.success) {
-        // OTP verified successfully, log login success
+        
         final authService = Provider.of<AuthService>(context, listen: false);
         final currentUser = authService.currentAdmin;
         
@@ -822,7 +786,6 @@ class _LoginPageState extends State<LoginPage> {
           userName: currentUser?.name,
         );
 
-        // Clear OTP state
         setState(() {
           _showOtpInput = false;
           _otpId = null;
@@ -832,7 +795,6 @@ class _LoginPageState extends State<LoginPage> {
           _isVerifyingOtp = false;
         });
 
-        // Navigate to dashboard
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -873,7 +835,6 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  /// Resend OTP
   Future<void> _resendOtp() async {
     if (_pendingEmail == null || _pendingAdminName == null) return;
     if (_otpResendCooldown > 0) return;
@@ -890,7 +851,7 @@ class _LoginPageState extends State<LoginPage> {
       canPop: false,
       onPopInvoked: (didPop) {
         if (!didPop) {
-          // Exit the app when trying to go back from login page
+          
           SystemNavigator.pop();
         }
       },
@@ -995,7 +956,7 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        // Face Recognition Toggle Switch
+                        
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
@@ -1037,7 +998,7 @@ class _LoginPageState extends State<LoginPage> {
                                 onChanged: (value) {
                                   setState(() {
                                     _enableFaceRecognition = value;
-                                    // Clear captured image when disabling face recognition
+                                    
                                     if (!value) {
                                       _capturedImageBase64 = null;
                                       _capturedImageBytes = null;
@@ -1051,7 +1012,7 @@ class _LoginPageState extends State<LoginPage> {
                             ],
                           ),
                         ),
-                        // Photo capture/selection area (only shown when face recognition is enabled)
+                        
                         if (_enableFaceRecognition) ...[
                           const SizedBox(height: 16),
                         Container(
@@ -1074,7 +1035,7 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                               const SizedBox(height: 12),
                               if (_capturedImageBytes != null) ...[
-                                // Display circular preview
+                                
                                 Center(
                                   child: Stack(
                                   children: [
@@ -1145,7 +1106,7 @@ class _LoginPageState extends State<LoginPage> {
                                   ],
                                 ),
                                 ),
-                                // Face detection status indicator (displayed below circular preview)
+                                
                                 if (_faceDetected != null && !_isDetectingFace) ...[
                                   const SizedBox(height: 12),
                                   Container(
@@ -1208,7 +1169,7 @@ class _LoginPageState extends State<LoginPage> {
                                     ),
                                   ),
                               ] else ...[
-                                // Take photo button (camera only)
+                                
                                 SizedBox(
                                   width: double.infinity,
                                   child: OutlinedButton.icon(
@@ -1234,7 +1195,7 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
                         ],
-                        // OTP Input Section (shown when face recognition is disabled)
+                        
                         if (_showOtpInput) ...[
                           const SizedBox(height: 24),
                           Container(
@@ -1402,7 +1363,7 @@ class _LoginPageState extends State<LoginPage> {
                         const SizedBox(height: 24),
                         Divider(thickness: 1, color: Colors.grey[300]),
                         const SizedBox(height: 16),
-                        // Switch to User Login
+                        
                         Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [

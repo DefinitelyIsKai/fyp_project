@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/report_model.dart';
 import 'package:fyp_project/widgets/admin/common/detail_row.dart';
 
@@ -315,4 +315,3 @@ class ReportInformationCard extends StatelessWidget {
     );
   }
 }
-

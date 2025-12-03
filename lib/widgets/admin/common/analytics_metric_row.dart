@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 class AnalyticsMetricRow extends StatelessWidget {
   final String label;
@@ -76,4 +76,3 @@ class AnalyticsMetricRow extends StatelessWidget {
     );
   }
 }
-

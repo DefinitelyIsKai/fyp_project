@@ -1,10 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/models/admin/tag_model.dart';
 
 class TagService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  /// Get all tag categories
   Future<List<TagCategoryModel>> getAllTagCategories() async {
     try {
       final snapshot = await _firestore.collection('tagCategories').get();
@@ -19,7 +18,6 @@ class TagService {
     }
   }
 
-  /// Get all tags
   Future<List<TagModel>> getAllTags() async {
     try {
       final snapshot = await _firestore.collection('tags').get();
@@ -34,16 +32,13 @@ class TagService {
     }
   }
 
-  /// Get all tag categories with their tags
   Future<List<TagCategoryModel>> getAllTagCategoriesWithTags() async {
     try {
-      // Get all categories
+      
       final categories = await getAllTagCategories();
 
-      // Get all tags
       final allTags = await getAllTags();
 
-      // Assign tags to their respective categories
       for (final category in categories) {
         category.tags = allTags.where((tag) => tag.categoryId == category.id).toList();
       }
@@ -54,12 +49,11 @@ class TagService {
     }
   }
 
-  /// Create a new tag category with auto-generated ID
   Future<String> createTagCategory(TagCategoryModel category) async {
     try {
       final categoryData = category.toJson();
-      categoryData.remove('id'); // Remove ID for auto-generation
-      categoryData.remove('tags'); // Remove tags array as it's stored separately
+      categoryData.remove('id'); 
+      categoryData.remove('tags'); 
 
       final docRef = await _firestore
           .collection('tagCategories')
@@ -71,7 +65,6 @@ class TagService {
     }
   }
 
-  /// Update tag category information
   Future<void> updateTagCategory(String categoryId, String title, String? description) async {
     try {
       final updateData = <String, dynamic>{
@@ -92,7 +85,6 @@ class TagService {
     }
   }
 
-  /// Toggle category active status
   Future<void> toggleCategoryStatus(String categoryId, bool isActive) async {
     try {
       await _firestore
@@ -107,11 +99,10 @@ class TagService {
     }
   }
 
-  /// Create a new tag with auto-generated ID
   Future<String> createTag(TagModel tag) async {
     try {
       final tagData = tag.toJson();
-      tagData.remove('id'); // Remove ID for auto-generation
+      tagData.remove('id'); 
 
       final docRef = await _firestore
           .collection('tags')
@@ -123,7 +114,6 @@ class TagService {
     }
   }
 
-  /// Update a tag
   Future<void> updateTag(String tagId, String name) async {
     try {
       await _firestore
@@ -138,7 +128,6 @@ class TagService {
     }
   }
 
-  /// Toggle tag active status
   Future<void> toggleTagStatus(String tagId, bool isActive) async {
     try {
       await _firestore
@@ -153,7 +142,6 @@ class TagService {
     }
   }
 
-  /// Delete a tag
   Future<void> deleteTag(String tagId) async {
     try {
       await _firestore
@@ -165,7 +153,6 @@ class TagService {
     }
   }
 
-  /// Get tags by category
   Future<List<TagModel>> getTagsByCategory(String categoryId) async {
     try {
       final snapshot = await _firestore
@@ -184,7 +171,6 @@ class TagService {
     }
   }
 
-  /// Search tags across all categories
   Future<List<TagModel>> searchTags(String query) async {
     try {
       final snapshot = await _firestore
@@ -204,7 +190,6 @@ class TagService {
     }
   }
 
-  /// Get active tags only
   Future<List<TagModel>> getActiveTags() async {
     try {
       final snapshot = await _firestore
@@ -223,7 +208,6 @@ class TagService {
     }
   }
 
-  /// Get tag count by category
   Future<Map<String, int>> getTagCountsByCategory() async {
     try {
       final snapshot = await _firestore.collection('tags').get();
@@ -243,10 +227,9 @@ class TagService {
     }
   }
 
-  /// Delete a tag category and all its tags
   Future<void> deleteTagCategory(String categoryId) async {
     try {
-      // First, delete all tags in this category
+      
       final tags = await getTagsByCategory(categoryId);
       final batch = _firestore.batch();
 
@@ -254,7 +237,6 @@ class TagService {
         batch.delete(_firestore.collection('tags').doc(tag.id));
       }
 
-      // Then delete the category
       batch.delete(_firestore.collection('tagCategories').doc(categoryId));
 
       await batch.commit();

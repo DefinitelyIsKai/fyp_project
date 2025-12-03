@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fyp_project/models/admin/report_category_model.dart';
@@ -97,7 +97,7 @@ class HandleUserReportDialog {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      // Warning action info
+                      
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -147,7 +147,7 @@ class HandleUserReportDialog {
                           ],
                         ),
                       ),
-                      // Credit deduction or suspension option
+                      
                       Builder(
                         builder: (context) {
                           final currentCanDeduct = finalDeductAmount != null && finalDeductAmount! > 0 && availableBalance >= finalDeductAmount!;
@@ -269,7 +269,7 @@ class HandleUserReportDialog {
                           return const SizedBox.shrink();
                         },
                       ),
-                      // Show category deduction info if matched and sufficient
+                      
                       Builder(
                         builder: (context) {
                           final currentCanDeduct = finalDeductAmount != null && finalDeductAmount! > 0 && availableBalance >= finalDeductAmount!;
@@ -452,7 +452,7 @@ class HandleUserReportDialog {
                                       if (customDeductError != null) {
                                         customDeductError = null;
                                       }
-                                      // Reset confirmation status when amount changes
+                                      
                                       if (isCustomAmountConfirmed) {
                                         isCustomAmountConfirmed = false;
                                         confirmedCustomAmount = null;
@@ -513,7 +513,6 @@ class HandleUserReportDialog {
                                             return;
                                           }
                                           
-                                          // Confirm the amount
                                           setDialogState(() {
                                             customDeductError = null;
                                             confirmedCustomAmount = customAmount > 0 ? customAmount : null;
@@ -632,7 +631,7 @@ class HandleUserReportDialog {
                           }
                         },
                       ),
-                      // Suspension duration input
+                      
                       Builder(
                         builder: (context) {
                           final currentCanDeduct = finalDeductAmount != null && finalDeductAmount! > 0 && availableBalance >= finalDeductAmount!;
@@ -801,7 +800,7 @@ class HandleUserReportDialog {
                   ),
                 ),
               ),
-              // Actions
+              
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -835,10 +834,10 @@ class HandleUserReportDialog {
                       flex: 2,
                       child: Builder(
                         builder: (context) {
-                          // Check if button should be disabled for custom reason
+                          
                           bool shouldDisableButton = false;
                           if (isCustomReason) {
-                            // For custom reason, disable if not confirmed yet (regardless of whether amount is entered)
+                            
                             if (!isCustomAmountConfirmed) {
                               shouldDisableButton = true;
                             }
@@ -848,11 +847,9 @@ class HandleUserReportDialog {
                             onPressed: (isLoading || shouldDisableButton) ? null : () async {
                           final violationReason = violationController.text.trim();
                           
-                          // Reset errors
                           reasonError = null;
                           durationError = null;
                           
-                          // Validate reason
                           if (violationReason.isEmpty) {
                             setDialogState(() {
                               reasonError = 'Please provide a violation reason';
@@ -860,27 +857,25 @@ class HandleUserReportDialog {
                             return;
                           }
                           
-                          // For custom reason, check if amount has been confirmed
                           if (isCustomReason) {
                             if (!isCustomAmountConfirmed) {
                               final customAmountText = customDeductController.text.trim();
                               if (customAmountText.isEmpty) {
-                                // Allow if empty (no deduction)
+                                
                                 finalDeductAmount = null;
                               } else {
-                                // Amount entered but not confirmed
+                                
                                 setDialogState(() {
                                   customDeductError = 'Please click "Confirm Amount" first';
                                 });
                                 return;
                               }
                             } else {
-                              // Use the confirmed amount
+                              
                               finalDeductAmount = confirmedCustomAmount;
                             }
                           }
                           
-                          // Validate duration if suspend is selected
                           final currentCanDeduct = finalDeductAmount != null && finalDeductAmount! > 0 && availableBalance >= finalDeductAmount!;
                           final currentNeedsAlternative = (finalDeductAmount != null && finalDeductAmount! > 0 && !currentCanDeduct) ||
                               (isCustomReason && availableBalance == 0 && (finalDeductAmount == null || finalDeductAmount == 0));
@@ -909,7 +904,6 @@ class HandleUserReportDialog {
                               final userService = UserService();
                               final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
                               
-                              // Get user info
                               final userDoc = await FirebaseFirestore.instance
                                   .collection('users')
                                   .doc(userId)
@@ -917,14 +911,12 @@ class HandleUserReportDialog {
                               final userData = userDoc.data();
                               final userEmail = userData?['email'] ?? '';
                               
-                              // Suspend user
                               await userService.suspendUser(
                                 userId,
                                 violationReason: violationReason,
                                 durationDays: durationDays,
                               );
                               
-                              // Create transaction record (for logging purposes)
                               try {
                                 final walletRef = FirebaseFirestore.instance
                                     .collection('wallets')
@@ -935,16 +927,15 @@ class HandleUserReportDialog {
                                   'id': '',
                                   'userId': userId,
                                   'type': 'debit',
-                                  'amount': 0, // No credit deduction, just suspension
+                                  'amount': 0, 
                                   'description': 'Account suspended due to insufficient balance for report category deduction. Reason: $violationReason',
                                   'createdAt': FieldValue.serverTimestamp(),
                                   'referenceId': reportId,
                                 });
                               } catch (e) {
-                                // Don't fail if transaction logging fails
+                                
                               }
                               
-                              // Send suspension notification
                               try {
                                 await FirebaseFirestore.instance
                                     .collection('notifications')
@@ -965,10 +956,9 @@ class HandleUserReportDialog {
                                   'userId': userId,
                                 });
                               } catch (e) {
-                                // Don't fail if notification fails
+                                
                               }
                               
-                              // Create log entry
                               try {
                                 await FirebaseFirestore.instance.collection('logs').add({
                                   'actionType': 'report_handled_suspend',
@@ -984,7 +974,7 @@ class HandleUserReportDialog {
                                   'createdBy': currentAdminId,
                                 });
                               } catch (e) {
-                                // Don't fail if logging fails
+                                
                               }
                               
                               Navigator.pop(context, {
@@ -1007,8 +997,7 @@ class HandleUserReportDialog {
                               }
                             }
                           } else {
-                            // Normal flow: warning + deduct if possible
-                            // Update canDeduct check with finalDeductAmount
+                            
                             final canDeductFinal = finalDeductAmount != null && finalDeductAmount! > 0 && availableBalance >= finalDeductAmount!;
                             
                             Navigator.pop(context, {
@@ -1059,4 +1048,3 @@ class HandleUserReportDialog {
   }
   
 }
-

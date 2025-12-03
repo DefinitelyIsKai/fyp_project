@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:fyp_project/models/admin/admin_model.dart';
@@ -17,15 +17,6 @@ class AuthService extends ChangeNotifier {
   AdminModel? get currentAdmin => _currentAdmin;
   bool get isAuthenticated => _isAuthenticated;
 
-  /// --------------------
-  /// Register User (for creating new admin users)
-  /// IMPORTANT: This method creates a new user but does NOT automatically log them in.
-  /// However, Firebase Auth's createUserWithEmailAndPassword automatically signs in
-  /// the newly created user, so we immediately sign them out and restore the original user's session.
-  /// 
-  /// If originalUserPassword is provided, the original user's session will be restored.
-  /// If not provided, the user will need to log in again.
-  /// --------------------
   Future<RegisterResult> register(
     String name,
     String email,
@@ -39,24 +30,18 @@ class AuthService extends ChangeNotifier {
     String? imageBase64,
     String? imageFileType,
   }) async {
-    // Store the current user's info before creating new user
+    
     final originalUser = _auth.currentUser;
     final originalUserEmail = originalUser?.email;
     final originalAdminId = originalUser?.uid;
     final originalAdminName = _currentAdmin?.name ?? 'Unknown Admin';
     
-    
-    // CRITICAL: Validate original user password BEFORE creating new user
-    // This prevents creating a user if password is wrong
     if (originalUserEmail != null && originalUserPassword != null && originalUserPassword.isNotEmpty) {
       try {
-        // Test the password by trying to sign in
-        // We'll sign out first, test the password, then sign back in
+        
         final testEmail = originalUserEmail;
         final testPassword = originalUserPassword;
         
-        // Create a temporary auth instance to test password without affecting current session
-        // Actually, we need to test with the current user - let's use reauthenticate
         try {
           final credential = EmailAuthProvider.credential(
             email: testEmail,
@@ -83,7 +68,7 @@ class AuthService extends ChangeNotifier {
     }
     
     try {
-      // Create the new user (this will automatically sign them in)
+      
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
         email: email.trim().toLowerCase(),
         password: password.trim(),
@@ -91,13 +76,11 @@ class AuthService extends ChangeNotifier {
 
       final newUserUid = userCredential.user!.uid;
 
-      // Fetch permissions from Firestore role (use lowercase for consistency)
       final normalizedRole = role.toLowerCase();
       final permissions = await _getPermissionsByRole(normalizedRole);
       
-      // Validate that permissions were found - this is critical for login to work
       if (permissions.isEmpty) {
-        // Check if it's a system role that should have default permissions
+        
         final systemRoles = ['manager', 'hr', 'staff', 'admin'];
         if (systemRoles.contains(normalizedRole)) {
           debugPrint('WARNING: System role "$normalizedRole" not found in roles collection. This should not happen.');
@@ -106,25 +89,22 @@ class AuthService extends ChangeNotifier {
           debugPrint('ERROR: Custom role "$normalizedRole" not found in roles collection.');
           debugPrint('User will be created but login will fail. Please ensure the role exists before creating users.');
         }
-        // Don't fail creation here - let login validation handle it with better error message
+        
       } else {
         debugPrint('Successfully fetched ${permissions.length} permissions for role "$normalizedRole": $permissions');
       }
 
-      // Create user document in Firestore
-      // Store role in lowercase for consistency
       try {
         final userData = <String, dynamic>{
           'email': email.trim().toLowerCase(),
           'fullName': name,
-          'role': normalizedRole, // Store in lowercase for consistency
+          'role': normalizedRole, 
           'permissions': permissions,
           'createdAt': FieldValue.serverTimestamp(),
           'isActive': true,
           'status': 'Active',
         };
         
-        // Add optional fields if provided
         if (location != null && location.isNotEmpty) {
           userData['location'] = location;
         }
@@ -149,9 +129,6 @@ class AuthService extends ChangeNotifier {
         
         debugPrint('User document created with role: $normalizedRole, permissions: $permissions');
         
-        // Create log entry for admin user creation
-        // Note: We use the original admin info saved before creating the new user
-        // because at this point, the current user is already the newly created user
         try {
           await _logsRef.add({
             'actionType': 'admin_created',
@@ -165,10 +142,10 @@ class AuthService extends ChangeNotifier {
           });
         } catch (logError) {
           debugPrint('Error creating admin creation log entry: $logError');
-          // Don't fail the operation if logging fails
+          
         }
       } catch (firestoreError) {
-        // If Firestore creation fails, delete the Firebase Auth user to prevent orphaned accounts
+        
         debugPrint('Error creating user document in Firestore: $firestoreError');
         try {
           await userCredential.user?.delete();
@@ -177,18 +154,12 @@ class AuthService extends ChangeNotifier {
           debugPrint('Error deleting Firebase Auth user: $deleteError');
         }
         
-        // Re-throw to be caught by outer catch block
         throw firestoreError;
       }
 
-      // CRITICAL: Firebase Auth's createUserWithEmailAndPassword automatically signs in the new user
-      // We need to sign out the new user and restore the original user's session
-      // The key is to ALWAYS sign out the new user, then restore the original user's session
-      
-      // Check if we're currently logged in as the new user (we should be)
       final currentUserAfterCreation = _auth.currentUser;
       if (currentUserAfterCreation != null && currentUserAfterCreation.uid == newUserUid) {
-        // Yes, we're logged in as the new user - MUST sign out
+        
         try {
           await _auth.signOut();
           debugPrint('Signed out newly created user');
@@ -196,8 +167,7 @@ class AuthService extends ChangeNotifier {
           debugPrint('Error signing out new user: $signOutError');
         }
       } else if (currentUserAfterCreation != null) {
-        // We're logged in as someone else - this could be the original user
-        // But we should still sign out to be safe, then restore
+        
         debugPrint('Warning: Current user is not the newly created user. Current: ${currentUserAfterCreation.email}, New: $email');
         try {
           await _auth.signOut();
@@ -207,14 +177,12 @@ class AuthService extends ChangeNotifier {
         }
       }
       
-      // Small delay to ensure sign out completes
       await Future.delayed(const Duration(milliseconds: 400));
       
-      // Verify we're signed out
       final userAfterSignOut = _auth.currentUser;
       if (userAfterSignOut != null) {
         debugPrint('Warning: Still logged in after signOut. Current user: ${userAfterSignOut.email}');
-        // Force sign out again
+        
         try {
           await _auth.signOut();
           await Future.delayed(const Duration(milliseconds: 200));
@@ -223,9 +191,8 @@ class AuthService extends ChangeNotifier {
         }
       }
       
-      // Now try to restore the original user's session
       if (originalUserEmail != null && originalUserPassword != null && originalUserPassword.isNotEmpty) {
-        // Password provided - use it to restore session
+        
         try {
           final loginResult = await login(originalUserEmail, originalUserPassword).timeout(
             const Duration(seconds: 10),
@@ -239,7 +206,6 @@ class AuthService extends ChangeNotifier {
             debugPrint('Original user session restored: $originalUserEmail');
             await Future.delayed(const Duration(milliseconds: 300));
             
-            // Verify we're logged in as the original user
             final restoredUser = _auth.currentUser;
             if (restoredUser != null && restoredUser.email == originalUserEmail) {
               return RegisterResult(
@@ -250,7 +216,7 @@ class AuthService extends ChangeNotifier {
               );
             } else {
               debugPrint('ERROR: Restored user is not the original user! Current: ${restoredUser?.email}');
-              // Force sign out and clear state
+              
               try {
                 await _auth.signOut();
               } catch (e) {
@@ -294,16 +260,14 @@ class AuthService extends ChangeNotifier {
           );
         }
       } else {
-        // No password provided - cannot restore session automatically
-        // We've already signed out, so we're logged out
+        
         debugPrint('New admin user created: $email (UID: $newUserUid)');
         debugPrint('Original user was: $originalUserEmail');
         debugPrint('No password provided - cannot restore session automatically');
         
-        // Verify we're signed out (not logged in as the new user)
         final finalCheck = _auth.currentUser;
         if (finalCheck != null) {
-          // Still logged in - this shouldn't happen, but if it does, sign out
+          
           debugPrint('ERROR: Still logged in after signOut! Current user: ${finalCheck.email}');
           if (finalCheck.uid == newUserUid) {
             debugPrint('ERROR: Still logged in as the new user! Force signing out...');
@@ -316,7 +280,6 @@ class AuthService extends ChangeNotifier {
           }
         }
         
-        // Clear state since we can't restore
         _currentAdmin = null;
         _isAuthenticated = false;
         notifyListeners();
@@ -361,13 +324,9 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-
-  /// --------------------
-  /// Login User
-  /// --------------------
   Future<LoginResult> login(String email, String password) async {
     try {
-      // 1️⃣ Sign in via Firebase Auth
+      
       UserCredential userCredential = await _auth.signInWithEmailAndPassword(
         email: email.trim().toLowerCase(),
         password: password.trim(),
@@ -378,10 +337,9 @@ class AuthService extends ChangeNotifier {
         return LoginResult(success: false, error: 'Authentication failed. Please try again.');
       }
 
-      // 2️⃣ Fetch user details from Firestore
       final doc = await _firestore.collection('users').doc(uid).get();
       if (!doc.exists) {
-        await _auth.signOut(); // Sign out if user doc doesn't exist
+        await _auth.signOut(); 
         return LoginResult(
           success: false,
           error: 'Admin account not found. Please contact system administrator.',
@@ -390,7 +348,6 @@ class AuthService extends ChangeNotifier {
 
       final data = doc.data()!;
 
-      // 3️⃣ Check if user is active
       if (data['isActive'] == false) {
         await _auth.signOut();
         return LoginResult(
@@ -399,36 +356,29 @@ class AuthService extends ChangeNotifier {
         );
       }
 
-      // 4️⃣ Validate role (only admin roles allowed)
       final role = (data['role'] ?? '').toLowerCase();
       final allowedRoles = ['manager', 'hr', 'staff', 'admin'];
       
       debugPrint('Login validation - Role: "$role", Stored permissions: ${data['permissions']}');
       
-      // Check if it's a system admin role
       bool isAdminRole = allowedRoles.contains(role);
       
-      // If not a system role, check stored permissions first (faster and doesn't require roles collection access)
       if (!isAdminRole) {
         final storedPermissions = List<String>.from(data['permissions'] ?? []);
         debugPrint('Not a system role. Checking stored permissions: $storedPermissions');
         
-        // Check if user has any admin permissions stored
         isAdminRole = storedPermissions.contains('all') || 
                      storedPermissions.any((p) => ['user_management', 'post_moderation', 'analytics', 'monitoring', 'role_management'].contains(p));
         
         debugPrint('Admin role check from stored permissions: $isAdminRole');
         
-        // If no admin permissions found in stored data, try to check the role definition
-        // This is a fallback for cases where permissions might not be stored yet
         if (!isAdminRole) {
           debugPrint('No admin permissions in stored data. Checking role definition in Firestore...');
           try {
-            // Try exact match first
+            
             var roleDoc = await _firestore.collection('roles').where('name', isEqualTo: role).limit(1).get();
             debugPrint('Role query (exact match) result: ${roleDoc.docs.length} documents found for role "$role"');
             
-            // If not found, try to get all roles and find a case-insensitive match
             DocumentSnapshot? matchedDoc;
             if (roleDoc.docs.isEmpty) {
               debugPrint('Role not found with exact match. Trying to find case-insensitive match...');
@@ -447,7 +397,6 @@ class AuthService extends ChangeNotifier {
               }
             }
             
-            // Use matchedDoc if found, otherwise use first doc from roleDoc
             final docToUse = matchedDoc ?? (roleDoc.docs.isNotEmpty ? roleDoc.docs.first : null);
             
             if (docToUse != null) {
@@ -455,13 +404,11 @@ class AuthService extends ChangeNotifier {
               final rolePermissions = List<String>.from(roleData['permissions'] ?? []);
               debugPrint('Role permissions from Firestore: $rolePermissions');
               
-              // Check if role has any admin permissions
               isAdminRole = rolePermissions.contains('all') || 
                            rolePermissions.any((p) => ['user_management', 'post_moderation', 'analytics', 'monitoring', 'role_management'].contains(p));
               
               debugPrint('Admin role check from role definition: $isAdminRole');
               
-              // If role has admin permissions but user doesn't have them stored, update the user document
               if (isAdminRole && storedPermissions.isEmpty) {
                 debugPrint('Updating user permissions from role definition...');
                 await _firestore.collection('users').doc(uid).update({
@@ -481,7 +428,7 @@ class AuthService extends ChangeNotifier {
           } catch (e) {
             debugPrint('Error checking custom role: $e');
             debugPrint('Stack trace: ${StackTrace.current}');
-            // If we can't check the role, deny access to be safe
+            
             isAdminRole = false;
           }
         }
@@ -497,10 +444,8 @@ class AuthService extends ChangeNotifier {
         );
       }
 
-      // 5️⃣ Fetch fresh permissions from role (in case role permissions were updated)
       final permissions = await _getPermissionsByRole(role.toLowerCase());
       
-      // Update user permissions in Firestore if they differ from role
       final currentPermissions = List<String>.from(data['permissions'] ?? []);
       if (!_listsEqual(permissions, currentPermissions)) {
         await _firestore.collection('users').doc(uid).update({
@@ -508,7 +453,6 @@ class AuthService extends ChangeNotifier {
         });
       }
 
-      // 6️⃣ Set current admin
       _currentAdmin = AdminModel(
         id: doc.id,
         email: data['email'] ?? '',
@@ -520,7 +464,6 @@ class AuthService extends ChangeNotifier {
         isActive: true,
       );
 
-      // 7️⃣ Update last login time in Firestore
       await _firestore.collection('users').doc(uid).update({
         'lastLoginAt': FieldValue.serverTimestamp(),
       });
@@ -561,17 +504,13 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  /// --------------------
-  /// Logout
-  /// --------------------
   Future<void> logout() async {
     try {
-      // Clear admin state first to prevent any UI updates during logout
+      
       _currentAdmin = null;
       _isAuthenticated = false;
       notifyListeners();
       
-      // Sign out from Firebase Auth with timeout to prevent ANR
       await _auth.signOut().timeout(
         const Duration(seconds: 5),
         onTimeout: () {
@@ -579,7 +518,6 @@ class AuthService extends ChangeNotifier {
         },
       );
       
-      // Ensure state is cleared even if signOut fails
       _currentAdmin = null;
       _isAuthenticated = false;
       notifyListeners();
@@ -587,24 +525,19 @@ class AuthService extends ChangeNotifier {
       debugPrint('Logout completed successfully');
     } catch (e) {
       debugPrint('Error during logout: $e');
-      // Even if there's an error, clear the local state
+      
       _currentAdmin = null;
       _isAuthenticated = false;
       notifyListeners();
-      // Don't rethrow - we've cleared state, that's what matters
+      
     }
   }
 
-  /// --------------------
-  /// Reset Password
-  /// --------------------
   Future<PasswordResetResult> resetPassword(String email) async {
     try {
-      // Normalize email
+      
       final normalizedEmail = email.trim().toLowerCase();
 
-      // Try to check if the email exists in Firestore and has admin role
-      // This may fail due to permissions, so we'll handle it gracefully
       try {
         final querySnapshot = await _firestore
             .collection('users')
@@ -617,7 +550,6 @@ class AuthService extends ChangeNotifier {
           final role = (userData['role'] ?? '').toString().toLowerCase();
           final allowedRoles = ['manager', 'hr', 'staff', 'admin'];
 
-          // Check if it's an admin role (case-insensitive)
           if (!allowedRoles.contains(role)) {
             return PasswordResetResult(
               success: false,
@@ -625,7 +557,6 @@ class AuthService extends ChangeNotifier {
             );
           }
 
-          // Check if account is active
           if (userData['isActive'] == false) {
             return PasswordResetResult(
               success: false,
@@ -634,14 +565,11 @@ class AuthService extends ChangeNotifier {
           }
         }
       } catch (firestoreError) {
-        // If Firestore query fails due to permissions, log it but continue
-        // Firebase Auth will still validate if the email exists
+        
         debugPrint('Could not verify admin status via Firestore (this is expected if security rules restrict access): $firestoreError');
-        // Continue to send reset email anyway - Firebase Auth will handle validation
+        
       }
 
-      // Send password reset email via Firebase Auth
-      // Firebase Auth will only send if the email exists in Auth system
       await _auth.sendPasswordResetEmail(email: normalizedEmail);
 
       return PasswordResetResult(
@@ -678,11 +606,6 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  /// --------------------
-  /// Permissions
-  /// --------------------
-  /// Fetch permissions from Firestore role definition
-  /// Falls back to empty list if role not found
   Future<List<String>> _getPermissionsByRole(String? role) async {
     if (role == null || role.isEmpty) {
       debugPrint('_getPermissionsByRole: Role is null or empty');
@@ -690,7 +613,7 @@ class AuthService extends ChangeNotifier {
     }
 
     try {
-      // Normalize role name to lowercase for consistency
+      
       final normalizedRole = role.toLowerCase();
       debugPrint('_getPermissionsByRole: Fetching permissions for role "$normalizedRole"');
       
@@ -700,7 +623,6 @@ class AuthService extends ChangeNotifier {
         return roleModel.permissions;
       }
       
-      // If role not found in Firestore, return empty list
       debugPrint('WARNING: Role "$normalizedRole" not found in Firestore. Returning empty permissions.');
       debugPrint('This will cause login to fail for users with this role. Please ensure the role exists in the roles collection.');
       return [];
@@ -711,7 +633,6 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  /// Helper method to compare two lists
   bool _listsEqual(List<String> list1, List<String> list2) {
     if (list1.length != list2.length) return false;
     final sorted1 = List<String>.from(list1)..sort();
@@ -729,7 +650,6 @@ class AuthService extends ChangeNotifier {
     return _currentAdmin!.permissions.contains(feature);
   }
 
-  /// Check if user is authenticated and has valid admin role
   Future<void> checkAuthState() async {
     final user = _auth.currentUser;
     if (user != null) {
@@ -740,10 +660,8 @@ class AuthService extends ChangeNotifier {
           if (data['isActive'] == true) {
             final role = data['role'] ?? 'staff';
             
-            // Fetch fresh permissions from role (in case role permissions were updated)
             final permissions = await _getPermissionsByRole(role.toLowerCase());
             
-            // Update user permissions in Firestore if they differ from role
             final currentPermissions = List<String>.from(data['permissions'] ?? []);
             if (!_listsEqual(permissions, currentPermissions)) {
               await _firestore.collection('users').doc(user.uid).update({
@@ -777,7 +695,6 @@ class AuthService extends ChangeNotifier {
   }
 }
 
-/// Login result class for better error handling
 class LoginResult {
   final bool success;
   final String? error;
@@ -785,7 +702,6 @@ class LoginResult {
   LoginResult({required this.success, this.error});
 }
 
-/// Password reset result class
 class PasswordResetResult {
   final bool success;
   final String? error;
@@ -798,13 +714,12 @@ class PasswordResetResult {
   });
 }
 
-/// Register result class
 class RegisterResult {
   final bool success;
-  final bool requiresReauth; // Whether the user needs to log in again
+  final bool requiresReauth; 
   final String? error;
   final String? message;
-  final String? originalUserEmail; // Email of the user who was logged in before creating the new admin
+  final String? originalUserEmail; 
 
   RegisterResult({
     required this.success,

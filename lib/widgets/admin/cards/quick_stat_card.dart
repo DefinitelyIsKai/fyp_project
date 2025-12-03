@@ -1,14 +1,12 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-/// A compact stat card widget used in analytics pages
-/// Displays title, value, subtitle, icon, and optional trend indicator
 class AdminQuickStatCard extends StatelessWidget {
   final String title;
   final String value;
   final String subtitle;
   final Color color;
   final IconData icon;
-  final double? trend; // Optional trend value (positive/negative percentage)
+  final double? trend; 
 
   const AdminQuickStatCard({
     super.key,

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/report_model.dart';
 import 'package:fyp_project/models/admin/report_category_model.dart';
 import 'package:fyp_project/services/admin/report_service.dart';
@@ -22,7 +22,6 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
   String _searchQuery = '';
   bool _isFiltersExpanded = true;
   
-  // Cache for report categories
   List<ReportCategoryModel> _reportCategories = [];
   bool _categoriesLoaded = false;
 
@@ -55,7 +54,7 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
     if (!_categoriesLoaded || _reportCategories.isEmpty) return null;
     
     try {
-      // Exact match first
+      
       return _reportCategories.firstWhere(
         (cat) => cat.name.toLowerCase() == reportReason.toLowerCase() && cat.isEnabled,
         orElse: () => _reportCategories.firstWhere(
@@ -98,7 +97,7 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
         backgroundColor: Colors.white,
         child: Column(
         children: [
-          // Header
+          
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -123,7 +122,6 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
             ),
           ),
 
-          // Filters and Search Section
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -139,7 +137,7 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
             ),
             child: Column(
               children: [
-                // Search Bar
+                
                 TextField(
                   decoration: InputDecoration(
                     hintText: 'Search reports by reason or description...',
@@ -162,7 +160,6 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
                 ),
                 const SizedBox(height: 12),
 
-                // Filter Section (Expandable)
                 InkWell(
                   onTap: () {
                     setState(() {
@@ -193,7 +190,7 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
                           ),
                         ),
                         const Spacer(),
-                        // Show active filter count
+                        
                         if (_hasActiveFilters())
                           Container(
                             margin: const EdgeInsets.only(right: 8),
@@ -221,7 +218,7 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
                     ),
                   ),
                 ),
-                // Expandable Filters Content
+                
                 ClipRect(
                   child: AnimatedSize(
                     duration: const Duration(milliseconds: 300),
@@ -268,7 +265,7 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
                                         ).name,
                                   onTap: () => _showCategoryFilter(),
                                 ),
-                                // Active Filters Indicator
+                                
                                 if (_hasActiveFilters()) ...[
                                   const SizedBox(height: 12),
                                   Row(
@@ -307,7 +304,6 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
             ),
           ),
 
-          // Reports List (Real-time)
           Expanded(
             child: StreamBuilder<List<ReportModel>>(
               stream: _getReportsStream(),
@@ -391,7 +387,7 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
 
                 return Column(
                   children: [
-                    // Results Count
+                    
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       color: Colors.grey[50],
@@ -411,7 +407,6 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
                       ),
                     ),
 
-                    // Reports List
                     Expanded(
                       child: ListView.builder(
                         padding: const EdgeInsets.all(16),
@@ -633,7 +628,7 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
 
   List<ReportModel> _filterReports(List<ReportModel> reports) {
     return reports.where((report) {
-      // Filter by type 
+      
       bool matchesType = true;
       if (_selectedType != 'all') {
         if (_selectedType == 'post') {
@@ -645,14 +640,12 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
         }
       }
 
-      // Filter by category
       bool matchesCategory = true;
       if (_selectedCategory != 'all') {
         final matchedCategory = _getMatchedCategory(report.reason);
         matchesCategory = matchedCategory != null && matchedCategory.id == _selectedCategory;
       }
 
-      // Filter by search query
       final matchesSearch = _searchQuery.isEmpty ||
           report.reason.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           (report.description?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
@@ -722,7 +715,7 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
                             color: Colors.grey[600],
                           ),
                         ),
-                        // Show credit deduction info 
+                        
                         if (matchedCategory != null && matchedCategory.id.isNotEmpty) ...[
                           const SizedBox(height: 4),
                           Container(
@@ -902,7 +895,6 @@ class _FlaggedContentPageState extends State<FlaggedContentPage> {
   }
 }
 
-// Filter Chip Widget
 class _FilterChip extends StatelessWidget {
   final String label;
   final String value;
@@ -973,4 +965,3 @@ class _FilterChip extends StatelessWidget {
     );
   }
 }
-

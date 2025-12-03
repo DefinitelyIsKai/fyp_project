@@ -1,10 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/user_model.dart';
 import 'package:fyp_project/services/admin/user_service.dart';
 
-/// Dialog for issuing warnings to users
 class WarningDialog {
-  /// Shows the warning dialog as a bottom sheet
+  
   static Future<void> show({
     required BuildContext context,
     required UserModel user,
@@ -14,11 +13,9 @@ class WarningDialog {
   }) async {
     final violationController = TextEditingController();
 
-    // Get current strike count
     final currentStrikes = await userService.getStrikeCount(user.id);
     final strikesRemaining = 3 - currentStrikes;
 
-    // Use a variable that persists across rebuilds
     bool isLoading = false;
 
     await showModalBottomSheet(
@@ -39,7 +36,7 @@ class WarningDialog {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header
+              
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -66,7 +63,7 @@ class WarningDialog {
                   ],
                 ),
               ),
-              // Content
+              
               Flexible(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(24),
@@ -166,7 +163,7 @@ class WarningDialog {
                         ),
                       ],
                       const SizedBox(height: 24),
-                      // Action Buttons
+                      
                       Row(
                         children: [
                           Expanded(
@@ -208,12 +205,11 @@ class WarningDialog {
                                         return;
                                       }
 
-                                      // Set loading state and trigger rebuild
                                       isLoading = true;
                                       setDialogState(() {});
 
                                       try {
-                                        // Issue warning
+                                        
                                         final result = await userService.issueWarning(
                                           userId: user.id,
                                           violationReason: violationReason,

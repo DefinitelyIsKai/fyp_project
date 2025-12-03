@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:intl/intl.dart';
 import '../../../../services/admin/reward_service.dart';
@@ -6,7 +6,6 @@ import '../../../../services/user/notification_service.dart';
 import '../../../../utils/admin/app_colors.dart';
 import 'reward_preview_dialog.dart';
 
-/// Dialog for managing monthly reward system
 class RewardSystemDialog extends StatefulWidget {
   final RewardService rewardService;
   final NotificationService notificationService;
@@ -17,7 +16,6 @@ class RewardSystemDialog extends StatefulWidget {
     required this.notificationService,
   });
 
-  /// Shows the reward system dialog as a bottom sheet
   static Future<void> show({
     required BuildContext context,
     required RewardService rewardService,
@@ -43,7 +41,7 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
   final TextEditingController _minTasksController = TextEditingController(text: '3');
   final TextEditingController _rewardAmountController = TextEditingController(text: '100');
   bool _isCalculating = false;
-  int _selectedTab = 0; // 0 = Calculate, 1 = History
+  int _selectedTab = 0; 
   String? _ratingError;
   String? _tasksError;
   String? _amountError;
@@ -73,7 +71,7 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
+            
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -113,7 +111,7 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
                 ],
               ),
             ),
-            // Tabs
+            
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
@@ -142,7 +140,7 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
                 ],
               ),
             ),
-            // Content
+            
             Flexible(
               child: _selectedTab == 0 ? _buildCalculateTab() : _buildHistoryTab(),
             ),
@@ -186,7 +184,7 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Info Card
+          
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -227,7 +225,6 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
           ),
           const SizedBox(height: 24),
 
-          // Settings
           Text(
             'Reward Settings',
             style: TextStyle(
@@ -238,7 +235,6 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
           ),
           const SizedBox(height: 16),
 
-          // Minimum Rating
           TextField(
             controller: _minRatingController,
             decoration: InputDecoration(
@@ -282,7 +278,6 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
           ),
           const SizedBox(height: 16),
 
-          // Minimum Tasks
           TextField(
             controller: _minTasksController,
             decoration: InputDecoration(
@@ -326,7 +321,6 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
           ),
           const SizedBox(height: 16),
 
-          // Reward Amount
           TextField(
             controller: _rewardAmountController,
             decoration: InputDecoration(
@@ -370,7 +364,6 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
           ),
           const SizedBox(height: 24),
 
-          // Calculate Button
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
@@ -635,7 +628,7 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
   }
 
   Future<void> _calculateRewards() async {
-    // Reset errors
+    
     setState(() {
       _ratingError = null;
       _tasksError = null;
@@ -673,15 +666,12 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
       return;
     }
 
-    // At this point, all values are validated and non-null
     final validMinRating = minRating!;
     final validMinTasks = minTasks!;
     final validRewardAmount = rewardAmount!;
 
-    // Show loading while calculating preview
     setState(() => _isCalculating = true);
     
-    // Show a non-dismissible loading dialog to prevent user interaction
     if (!mounted) {
       return;
     }
@@ -719,50 +709,45 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
       ),
     );
     
-    // Force UI to update
     await Future.microtask(() {});
     await Future.delayed(Duration.zero);
     await Future.microtask(() {});
     
     if (!mounted) {
-      Navigator.of(context).pop(); // Close loading dialog
+      Navigator.of(context).pop(); 
       return;
     }
     
-    // Wait for next frame
     await Future.delayed(const Duration(milliseconds: 200));
     
     if (!mounted) {
-      Navigator.of(context).pop(); // Close loading dialog
+      Navigator.of(context).pop(); 
       return;
     }
 
     try {
-      // Call service directly - it already has UI yielding built in
+      
       final previewResult = await widget.rewardService.previewEligibleUsers(
         minRating: validMinRating,
         minCompletedTasks: validMinTasks,
         rewardAmount: validRewardAmount,
       );
       
-      // Close loading dialog
       if (mounted) {
         Navigator.of(context).pop();
       }
 
       if (!mounted) {
-        Navigator.of(context).pop(); // Close loading dialog if still open
+        Navigator.of(context).pop(); 
         return;
       }
 
-      // Wait for loading dialog to fully close before proceeding
       await Future.delayed(const Duration(milliseconds: 100));
       await SchedulerBinding.instance.endOfFrame;
       await Future.delayed(const Duration(milliseconds: 50));
 
       setState(() => _isCalculating = false);
       
-      // Wait for setState to complete
       await Future.delayed(Duration.zero);
       await Future.microtask(() {});
 
@@ -781,14 +766,11 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
       final month = previewResult['month'] as String? ?? 'Unknown';
       final completedPostsCount = previewResult['completedPostsCount'] as int? ?? 0;
 
-      // Show preview dialog with eligible users count
-      // Yield before showing dialog to ensure UI is ready
       await Future.delayed(Duration.zero);
       await Future.microtask(() {});
       await SchedulerBinding.instance.endOfFrame;
       await Future.delayed(const Duration(milliseconds: 100));
       
-      // Use a simpler approach - show dialog with Future.microtask to defer building
       await Future.microtask(() {});
       await Future.delayed(const Duration(milliseconds: 50));
       
@@ -807,10 +789,8 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
         return;
       }
 
-      // Proceed with distribution
       setState(() => _isCalculating = true);
 
-      // Show loading dialog immediately to prevent navigation
       if (!mounted) return;
       showDialog(
         context: context,
@@ -852,7 +832,6 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
         ),
       );
 
-      // Wait a moment for loading dialog to show
       await Future.delayed(const Duration(milliseconds: 100));
       await Future.microtask(() {});
       await SchedulerBinding.instance.endOfFrame;
@@ -863,19 +842,16 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
         rewardAmount: validRewardAmount,
       );
 
-      // Close loading dialog first
       if (mounted) {
         Navigator.of(context).pop();
       }
 
-      // Wait a moment for loading dialog to fully close
       await Future.delayed(const Duration(milliseconds: 100));
 
       if (mounted) {
-        // Close the main reward system dialog - this will return us to wallet_management_page
+        
         Navigator.of(context).pop();
         
-        // Wait a frame to ensure dialog is fully closed
         await Future.delayed(const Duration(milliseconds: 100));
         
         if (mounted) {
@@ -893,12 +869,12 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
         }
       }
     } catch (e) {
-      // Close loading dialog if still open
+      
       if (mounted) {
         try {
-          Navigator.of(context).pop(); // Close loading dialog
+          Navigator.of(context).pop(); 
         } catch (_) {
-          // Loading dialog might already be closed
+          
         }
         setState(() => _isCalculating = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -910,12 +886,12 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
         );
       }
     } finally {
-      // Ensure loading dialog is closed
+      
       if (mounted) {
         try {
-          Navigator.of(context).pop(); // Try to close loading dialog
+          Navigator.of(context).pop(); 
         } catch (_) {
-          // Dialog might already be closed
+          
         }
         setState(() => _isCalculating = false);
       }
@@ -923,4 +899,3 @@ class _RewardSystemDialogState extends State<RewardSystemDialog> {
   }
 
 }
-

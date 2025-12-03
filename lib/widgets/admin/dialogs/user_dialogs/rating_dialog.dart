@@ -1,10 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../../../../services/user/review_service.dart';
 import '../../../../utils/user/dialog_utils.dart';
 import '../../../../utils/user/button_styles.dart';
 
-/// Dialog for rating a jobseeker
-/// Used by recruiters to rate jobseekers after job completion
 class RatingDialog extends StatefulWidget {
   final String postId;
   final String jobseekerId;
@@ -46,7 +44,7 @@ class _RatingDialogState extends State<RatingDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Icon Header
+            
             Container(
               width: 60,
               height: 60,
@@ -62,7 +60,6 @@ class _RatingDialogState extends State<RatingDialog> {
             ),
             const SizedBox(height: 16),
             
-            // Title
             const Text(
               'Rate Jobseeker',
               style: TextStyle(
@@ -73,7 +70,6 @@ class _RatingDialogState extends State<RatingDialog> {
             ),
             const SizedBox(height: 8),
             
-            // Subtitle
             Text(
               'Share your experience with this jobseeker',
               textAlign: TextAlign.center,
@@ -84,7 +80,6 @@ class _RatingDialogState extends State<RatingDialog> {
             ),
             const SizedBox(height: 24),
             
-            // Star Rating
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(5, (i) {
@@ -109,7 +104,6 @@ class _RatingDialogState extends State<RatingDialog> {
             ),
             const SizedBox(height: 8),
             
-            // Rating Text
             Text(
               _selectedRating == 1
                   ? 'Poor'
@@ -128,7 +122,6 @@ class _RatingDialogState extends State<RatingDialog> {
             ),
             const SizedBox(height: 24),
             
-            // Feedback Field
             TextField(
               controller: _commentController,
               decoration: InputDecoration(
@@ -157,7 +150,6 @@ class _RatingDialogState extends State<RatingDialog> {
             ),
             const SizedBox(height: 24),
             
-            // Action Buttons
             Row(
               children: [
                 Expanded(
@@ -225,4 +217,3 @@ class _RatingDialogState extends State<RatingDialog> {
     );
   }
 }
-

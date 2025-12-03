@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 class AnalyticsTrendBadge extends StatelessWidget {
   final double trend;
@@ -47,4 +47,3 @@ class AnalyticsTrendBadge extends StatelessWidget {
     );
   }
 }
-

@@ -1,12 +1,10 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-/// A reusable filter chip widget used across admin pages
-/// Displays a label and value with tap functionality
 class AdminFilterChip extends StatelessWidget {
   final String label;
   final String value;
   final VoidCallback onTap;
-  final String? inactiveValue; // Value that indicates inactive state (default: 'All')
+  final String? inactiveValue; 
 
   const AdminFilterChip({
     super.key,
@@ -80,4 +78,3 @@ class AdminFilterChip extends StatelessWidget {
     );
   }
 }
-

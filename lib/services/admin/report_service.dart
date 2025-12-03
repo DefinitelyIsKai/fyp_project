@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fyp_project/models/admin/report_model.dart';
 
@@ -9,7 +9,6 @@ class ReportService {
   final CollectionReference<Map<String, dynamic>> _logsRef =
       FirebaseFirestore.instance.collection('logs');
 
-  /// Stream all reports in real-time
   Stream<List<ReportModel>> streamAllReports() {
     return _firestore
         .collection('reports')
@@ -22,7 +21,6 @@ class ReportService {
     });
   }
 
-  /// Stream reports filtered by status
   Stream<List<ReportModel>> streamReportsByStatus(String status) {
     return _firestore
         .collection('reports')
@@ -34,7 +32,6 @@ class ReportService {
     });
   }
 
-  /// Get all reports
   Future<List<ReportModel>> getAllReports() async {
     try {
       final snapshot = await _firestore
@@ -47,13 +44,12 @@ class ReportService {
     }
   }
 
-  /// Get reports by type
   Future<List<ReportModel>> getReportsByType(ReportType type) async {
     try {
-      // Map ReportType to Firestore type values
+      
       String firestoreType;
       if (type == ReportType.user) {
-        firestoreType = 'jobseeker'; // Use 'jobseeker' as per Firebase structure
+        firestoreType = 'jobseeker'; 
       } else if (type == ReportType.jobPost) {
         firestoreType = 'post';
       } else {
@@ -71,7 +67,6 @@ class ReportService {
     }
   }
 
-  /// Update report status
   Future<void> updateReportStatus(
     String reportId,
     ReportStatus status, {
@@ -79,7 +74,7 @@ class ReportService {
     String? reviewedBy,
     String? actionTaken,
   }) async {
-    // Get report data before updating
+    
     final reportDoc = await _firestore.collection('reports').doc(reportId).get();
     final reportData = reportDoc.data();
     final reporterId = reportData?['reporterId']?.toString() ?? '';
@@ -95,7 +90,6 @@ class ReportService {
 
     await _firestore.collection('reports').doc(reportId).update(data);
     
-    // Create log entry
     try {
       final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
       final reportType = reportData?['type']?.toString() ?? 'unknown';
@@ -114,10 +108,9 @@ class ReportService {
       });
     } catch (logError) {
       print('Error creating report status log entry: $logError');
-      // Don't fail the operation if logging fails
+      
     }
     
-    // Send notification to reporter
     if (reporterId.isNotEmpty) {
       await _sendReportStatusNotification(
         reporterId: reporterId,
@@ -129,7 +122,6 @@ class ReportService {
     }
   }
   
-  /// Send notification to reporter about report status
   Future<void> _sendReportStatusNotification({
     required String reporterId,
     required String reportId,
@@ -151,7 +143,7 @@ class ReportService {
         body = 'Your report regarding "$reason" has been reviewed and dismissed. No action was taken as the report was found to be invalid or no violation was found.';
         category = 'report_dismissed';
       } else {
-        // Don't send notification for other statuses
+        
         return;
       }
       
@@ -171,11 +163,10 @@ class ReportService {
       });
     } catch (e) {
       print('Error sending report status notification: $e');
-      // Don't fail the operation if notification fails
+      
     }
   }
 
-  /// Resolve report
   Future<void> resolveReport(
     String reportId, {
     required String action,
@@ -191,7 +182,6 @@ class ReportService {
     );
   }
 
-  /// Dismiss report
   Future<void> dismissReport(
     String reportId, {
     String? notes,
@@ -206,23 +196,21 @@ class ReportService {
     );
   }
 
-  /// Map Firestore document to ReportModel
   ReportModel _mapReport(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     
-    // Determine the reported item ID based on report type
     String reportedItemId = '';
     final reportType = data['type']?.toString().toLowerCase() ?? '';
     
     if (reportType == 'employee' || reportType == 'jobseeker') {
-      // For employee/jobseeker reports, the reported item is the jobseeker
+      
       reportedItemId = data['reportedJobseekerId']?.toString() ?? 
                       data['reportedEmployeeId']?.toString() ?? '';
     } else if (reportType == 'post') {
-      // For post reports, the reported item is the post
+      
       reportedItemId = data['reportedPostId']?.toString() ?? '';
     } else {
-      // Fallback to old structure if it exists
+      
       reportedItemId = data['reportedItemId']?.toString() ?? 
                       data['reportedPostId']?.toString() ?? 
                       data['reportedEmployeeId']?.toString() ?? '';
@@ -238,9 +226,7 @@ class ReportService {
       reportedAt: () {
         final timestamp = (data['createdAt'] as Timestamp?) ?? (data['reportedAt'] as Timestamp?);
         if (timestamp != null) {
-          // Firestore Timestamp stores time in UTC
-          // Convert to local time explicitly
-          // Use seconds since epoch to create UTC DateTime, then convert to local
+          
           return DateTime.fromMillisecondsSinceEpoch(
             timestamp.millisecondsSinceEpoch,
             isUtc: true,
@@ -253,8 +239,7 @@ class ReportService {
       reviewedAt: () {
         final timestamp = data['reviewedAt'] as Timestamp?;
         if (timestamp != null) {
-          // Firestore Timestamp stores time in UTC
-          // Convert to local time explicitly
+          
           return DateTime.fromMillisecondsSinceEpoch(
             timestamp.millisecondsSinceEpoch,
             isUtc: true,
@@ -274,7 +259,6 @@ class ReportService {
     if (value == null) return ReportType.other;
     final str = value.toString().toLowerCase();
     
-    // Map Firestore type values to ReportType enum
     if (str == 'post') return ReportType.jobPost;
     if (str == 'employee' || str == 'jobseeker') return ReportType.user;
     if (str.contains('job') || str.contains('post')) return ReportType.jobPost;

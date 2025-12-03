@@ -1,11 +1,11 @@
-import 'package:pdf/pdf.dart';
+﻿import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
 import 'package:fyp_project/models/admin/analytics_model.dart';
 import 'package:fyp_project/utils/admin/analytics_formatter.dart';
 
 class PdfReportService {
-  // Calculate credit topup statistics from logs
+  
   static Map<String, dynamic> _calculateCreditStats(List<Map<String, dynamic>> creditLogs) {
     final processedLogs = creditLogs.where((log) => log['status'] == 'processed').toList();
     final totalTopupAmount = processedLogs.fold<double>(0.0, (sum, log) => sum + (log['amount'] as double));
@@ -30,7 +30,6 @@ class PdfReportService {
     };
   }
 
-  // Build PDF content pages
   static List<pw.Widget> _buildPdfPages({
     required pw.Context context,
     required AnalyticsModel analytics,
@@ -43,7 +42,7 @@ class PdfReportService {
     final formatDate = (DateTime date) => DateFormat('dd/MM/yyyy').format(date);
     
     return [
-      // Header
+      
       pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
@@ -63,7 +62,6 @@ class PdfReportService {
       ),
       pw.SizedBox(height: 15),
 
-      // Date Range
       pw.Container(
         padding: const pw.EdgeInsets.all(10),
         decoration: pw.BoxDecoration(
@@ -88,7 +86,6 @@ class PdfReportService {
       ),
       pw.SizedBox(height: 20),
 
-      // Overview Statistics
       _buildSectionTitle('Overview Statistics'),
       _buildComparisonTable(
         context: context,
@@ -106,7 +103,6 @@ class PdfReportService {
       ),
       pw.SizedBox(height: 20),
 
-      // User Engagement
       _buildSectionTitle('User Engagement'),
       _buildComparisonTable(
         context: context,
@@ -119,7 +115,6 @@ class PdfReportService {
       ),
       pw.SizedBox(height: 20),
 
-      // Content & Moderation Statistics
       _buildSectionTitle('Content & Moderation Statistics'),
       _buildComparisonTable(
         context: context,
@@ -137,7 +132,6 @@ class PdfReportService {
       ),
       pw.SizedBox(height: 20),
 
-      // Credit & Billing
       _buildSectionTitle('Credit & Billing'),
       _buildComparisonTable(
         context: context,
@@ -151,7 +145,6 @@ class PdfReportService {
       ),
       pw.SizedBox(height: 20),
 
-      // Credit Topup Statistics
       if (processedLogs.isNotEmpty) ...[
         _buildSectionTitle('Credit Topup Statistics'),
         _buildComparisonTable(
@@ -170,7 +163,6 @@ class PdfReportService {
         pw.SizedBox(height: 20),
       ],
 
-      // Growth Rates
       _buildSectionTitle('Growth Rates'),
       _buildComparisonTable(
         context: context,
@@ -227,7 +219,6 @@ class PdfReportService {
     );
   }
 
-  // Generate PDF document
   static Future<pw.Document> generateReport({
     required AnalyticsModel analytics,
     required AnalyticsModel allTime,
@@ -258,4 +249,3 @@ class PdfReportService {
     return pdf;
   }
 }
-

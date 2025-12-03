@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'analytics_trend_badge.dart';
 
 class UserAnalyticsMetricRow extends StatelessWidget {
@@ -76,4 +76,3 @@ class UserAnalyticsMetricRow extends StatelessWidget {
     );
   }
 }
-

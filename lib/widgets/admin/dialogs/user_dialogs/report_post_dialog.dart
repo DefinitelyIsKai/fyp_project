@@ -1,10 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../../../../utils/user/button_styles.dart';
 import '../../../../services/user/report_service.dart';
 import '../../../../models/admin/report_category_model.dart';
 
-/// Dialog for reporting a post
-/// Returns a Map with 'reason' and 'description' keys, or null if cancelled
 class ReportPostDialog extends StatefulWidget {
   const ReportPostDialog({super.key});
 
@@ -29,7 +27,7 @@ class _ReportPostDialogState extends State<ReportPostDialog> {
 
   Future<void> _loadCategories() async {
     try {
-      // Get categories based on user role (jobseeker reports posts)
+      
       final categories = await _reportService.getReportCategoriesByUserRole();
       if (mounted) {
         setState(() {
@@ -80,7 +78,7 @@ class _ReportPostDialogState extends State<ReportPostDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-            // Header
+            
             Row(
               children: [
                 Container(
@@ -124,7 +122,7 @@ class _ReportPostDialogState extends State<ReportPostDialog> {
               ],
             ),
             const SizedBox(height: 24),
-            // Reason Selection
+            
             Text(
               'Reason for reporting:',
               style: TextStyle(
@@ -143,7 +141,7 @@ class _ReportPostDialogState extends State<ReportPostDialog> {
               )
             else
               ...[
-                // Show categories if available
+                
                 if (_categories.isNotEmpty)
                   ..._categories.map((category) {
                   return Container(
@@ -198,7 +196,7 @@ class _ReportPostDialogState extends State<ReportPostDialog> {
                     ),
                   );
                   }),
-                // Other option (always available)
+                
                 Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   decoration: BoxDecoration(
@@ -236,7 +234,7 @@ class _ReportPostDialogState extends State<ReportPostDialog> {
                     ),
                   ),
                 ),
-                // Custom reason input (shown when Other is selected)
+                
                 if (_selectedReason == 'Other')
                   Container(
                     margin: const EdgeInsets.only(top: 8, bottom: 8),
@@ -282,7 +280,7 @@ class _ReportPostDialogState extends State<ReportPostDialog> {
                   ),
               ],
             const SizedBox(height: 20),
-            // Description Field
+            
             Text(
               'Description (optional):',
               style: TextStyle(
@@ -319,7 +317,7 @@ class _ReportPostDialogState extends State<ReportPostDialog> {
               ),
             ),
             const SizedBox(height: 24),
-            // Action Buttons
+            
             Row(
               children: [
                 Expanded(
@@ -378,4 +376,3 @@ class _ReportPostDialogState extends State<ReportPostDialog> {
     );
   }
 }
-

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/analytics_model.dart';
 import 'package:fyp_project/services/admin/analytics_service.dart';
 import 'package:fyp_project/services/admin/pdf_report_service.dart';
@@ -50,25 +50,20 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     _loadAnalytics();
   }
 
-  // Load analytics data for selected period and all-time
-  // Also builds trend data for charts (max 30 days to keep it fast)
   Future<void> _loadAnalytics() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      // Get all-time stats from 2020 to now
+      
       final allTimeStart = DateTime(2020, 1, 1);
       final allTimeAnalytics = await _analyticsService.getAnalyticsForRange(allTimeStart, DateTime.now());
       
-      // Get stats for selected date range
       final periodAnalytics = await _analyticsService.getAnalyticsForRange(_startDate, _endDate);
       
-      // Build trend data day by day (limit to 30 days max for performance)
       List<AnalyticsModel> trendData = [];
       final daysDiff = _endDate.difference(_startDate).inDays;
       final daysToLoad = daysDiff > 30 ? 30 : daysDiff;
       
-      // Fetch analytics for each day in the range
       for (int i = daysToLoad; i >= 0; i--) {
         final day = _endDate.subtract(Duration(days: i));
         final dayStart = DateTime(day.year, day.month, day.day);
@@ -77,7 +72,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         trendData.add(dayAnalytics.copyWith(date: dayStart));
       }
       
-      // Get credit transaction logs for the period
       final creditLogs = await _analyticsService.getCreditLogs(_startDate, _endDate);
       
       if (mounted) {
@@ -143,7 +137,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return '${_formatDate(_startDate)} - ${_formatDate(_endDate)}';
   }
 
-  // Generate PDF report using PDF service
   Future<void> _generatePDFReport() async {
     if (_analytics == null || _allTimeAnalytics == null) return;
 
@@ -166,7 +159,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     }
   }
 
-  // Share PDF using PDF service
   Future<void> _sharePDF() async {
     if (_analytics == null || _allTimeAnalytics == null) return;
 
@@ -179,7 +171,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         creditLogs: _creditLogs,
       );
 
-      // Save PDF to temporary file and share
       final bytes = await pdf.save();
       final directory = await getTemporaryDirectory();
       final fileName = 'Platform_Analytics_Report_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
@@ -187,7 +178,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       final file = File(filePath);
       await file.writeAsBytes(bytes);
 
-      // Share the file
       try {
         await Share.shareXFiles(
           [XFile(filePath)],
@@ -195,14 +185,13 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           subject: 'Platform Analytics Report - ${_formatDate(_startDate)} to ${_formatDate(_endDate)}',
         );
 
-        // Clean up temporary file after a delay
         Future.delayed(const Duration(seconds: 5), () async {
           try {
             if (await file.exists()) {
               await file.delete();
             }
           } catch (e) {
-            // Ignore cleanup errors
+            
           }
         });
       } catch (shareError) {
@@ -292,7 +281,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             ),
           ),
 
-          // Date Range Selector
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -355,7 +343,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             ),
           ),
 
-          // Analytics Content
           Expanded(
             child: _isLoading
                 ? Center(
@@ -451,7 +438,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Widget _buildAnalyticsCards() {
     return Column(
       children: [
-        // User Engagement
+        
         AnalyticsSectionCard(
           title: 'User Engagement',
           icon: Icons.trending_up,
@@ -476,11 +463,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         ),
         const SizedBox(height: 16),
 
-        // Content & Moderation
         _buildContentModerationSection(),
         const SizedBox(height: 16),
 
-        // Credit & Billing Logs
         AnalyticsSectionCard(
           title: 'Credit & Billing',
           icon: Icons.credit_card,
@@ -510,7 +495,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         ),
         const SizedBox(height: 16),
 
-        // Credit Topup Statistics
         _buildCreditTopupStats(),
       ],
     );
@@ -551,7 +535,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             ),
             const SizedBox(height: 20),
             
-            // Job Posts
             _buildComparisonRow(
               'Job Posts',
               _analytics!.totalJobPosts,
@@ -565,7 +548,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             ),
             const SizedBox(height: 20),
             
-            // Reports
             _buildComparisonRow(
               'Reports',
               _analytics!.totalReports,
@@ -736,7 +718,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       );
     }
 
-    // Calculate statistics
     final processedLogs = _creditLogs.where((log) => log['status'] == 'processed').toList();
     final totalTopupAmount = processedLogs.fold<double>(0.0, (sum, log) => sum + (log['amount'] as double));
     final totalTopupCredits = processedLogs.fold<int>(0, (sum, log) => sum + (log['credits'] as int));

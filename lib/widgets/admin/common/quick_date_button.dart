@@ -1,7 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-/// A reusable quick date button widget used in date range pickers
-/// Displays a clickable button for quick date selection
 class AdminQuickDateButton extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
@@ -35,4 +33,3 @@ class AdminQuickDateButton extends StatelessWidget {
     );
   }
 }
-

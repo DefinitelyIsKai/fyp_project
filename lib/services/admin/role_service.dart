@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/models/admin/role_model.dart';
 
 class RoleService {
@@ -6,18 +6,16 @@ class RoleService {
   final CollectionReference _rolesCollection = FirebaseFirestore.instance.collection('roles');
   final CollectionReference _usersCollection = FirebaseFirestore.instance.collection('users');
 
-  // Available permissions/modules
   static const List<String> availablePermissions = [
-    'all', // Full access
-    'post_moderation', // Post Moderation module
-    'user_management', // User Management module
-    'monitoring', // Monitoring & Search module
-    'system_config', // System Configuration module
-    'message_oversight', // Message Oversight module
-    'analytics', // Analytics & Reporting module
+    'all', 
+    'post_moderation', 
+    'user_management', 
+    'monitoring', 
+    'system_config', 
+    'message_oversight', 
+    'analytics', 
   ];
 
-  // Permission labels for display
   static const Map<String, String> permissionLabels = {
     'all': 'Full Access (All Modules)',
     'post_moderation': 'Post Moderation',
@@ -28,20 +26,17 @@ class RoleService {
     'analytics': 'Analytics & Reporting',
   };
 
-  /// Get all roles
   Future<List<RoleModel>> getAllRoles() async {
     final snapshot = await _rolesCollection.get();
     return snapshot.docs.map((doc) => RoleModel.fromFirestore(doc)).toList();
   }
 
-  /// Stream all roles in real-time
   Stream<List<RoleModel>> streamAllRoles() {
     return _rolesCollection.snapshots().map((snapshot) {
       return snapshot.docs.map((doc) => RoleModel.fromFirestore(doc)).toList();
     });
   }
 
-  /// Get a single role by ID
   Future<RoleModel?> getRoleById(String roleId) async {
     final doc = await _rolesCollection.doc(roleId).get();
     if (doc.exists) {
@@ -50,7 +45,6 @@ class RoleService {
     return null;
   }
 
-  /// Get a role by name
   Future<RoleModel?> getRoleByName(String roleName) async {
     final snapshot = await _rolesCollection.where('name', isEqualTo: roleName).limit(1).get();
     if (snapshot.docs.isNotEmpty) {
@@ -59,24 +53,22 @@ class RoleService {
     return null;
   }
 
-  /// Create a new role
   Future<String> createRole({
     required String name,
     required String description,
     required List<String> permissions,
     bool isSystemRole = false,
   }) async {
-    // Normalize role name to lowercase for consistency
+    
     final normalizedName = name.trim().toLowerCase();
     
-    // Check if role name already exists
     final existingRole = await getRoleByName(normalizedName);
     if (existingRole != null) {
       throw Exception('Role with name "$name" already exists');
     }
 
     final roleData = {
-      'name': normalizedName, // Store in lowercase
+      'name': normalizedName, 
       'description': description,
       'permissions': permissions,
       'createdAt': FieldValue.serverTimestamp(),
@@ -88,7 +80,6 @@ class RoleService {
     return docRef.id;
   }
 
-  /// Update an existing role
   Future<void> updateRole({
     required String roleId,
     String? name,
@@ -108,7 +99,6 @@ class RoleService {
       'updatedAt': FieldValue.serverTimestamp(),
     };
 
-    // If name is being changed, check if new name already exists
     if (name != null) {
       final normalizedName = name.trim().toLowerCase();
       if (normalizedName != role.name) {
@@ -117,25 +107,22 @@ class RoleService {
           throw Exception('Role with name "$name" already exists');
         }
       }
-      updateData['name'] = normalizedName; // Store in lowercase
+      updateData['name'] = normalizedName; 
     }
     if (description != null) updateData['description'] = description;
     if (permissions != null) updateData['permissions'] = permissions;
 
     await _rolesCollection.doc(roleId).update(updateData);
 
-    // If role name changed, update all users with this role
     if (name != null && name != role.name) {
       await _updateUsersRoleName(role.name, name);
     }
 
-    // If permissions changed, update all users with this role
     if (permissions != null) {
       await _updateUsersPermissions(role.name, permissions);
     }
   }
 
-  /// Delete a role
   Future<void> deleteRole(String roleId) async {
     final role = await getRoleById(roleId);
     if (role == null) {
@@ -146,7 +133,6 @@ class RoleService {
       throw Exception('Cannot delete system roles');
     }
 
-    // Check if any users have this role (case-insensitive)
     final normalizedRoleName = role.name.toLowerCase();
     final allUsers = await _usersCollection.get();
     final usersWithRole = allUsers.docs.where((doc) {
@@ -162,7 +148,6 @@ class RoleService {
     await _rolesCollection.doc(roleId).delete();
   }
 
-  /// Initialize default system roles if they don't exist
   Future<void> initializeSystemRoles() async {
     final systemRoles = [
       {
@@ -185,41 +170,37 @@ class RoleService {
       },
     ];
 
-    // First, clean up any duplicate roles (case-insensitive check)
     await _cleanupDuplicateRoles();
     
-    // Normalize all existing user roles to lowercase
     await _normalizeUserRoles();
 
     for (final roleData in systemRoles) {
-      // Normalize role name to lowercase for consistency
+      
       final roleName = (roleData['name'] as String).toLowerCase();
       
-      // Check for existing role (case-insensitive)
       final existingRole = await _getRoleByNameCaseInsensitive(roleName);
       
       if (existingRole == null) {
-        // Role doesn't exist, create it
+        
         await _rolesCollection.add({
           ...roleData,
-          'name': roleName, // Store in lowercase
+          'name': roleName, 
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
       } else {
-        // Role exists, update it to ensure it's marked as system role and has correct permissions
+        
         await _rolesCollection.doc(existingRole.id).update({
           'permissions': roleData['permissions'],
           'isSystemRole': true,
           'description': roleData['description'],
-          'name': roleName, // Ensure name is lowercase
+          'name': roleName, 
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }
     }
   }
 
-  /// Normalize all user roles to lowercase for consistency
   Future<void> _normalizeUserRoles() async {
     final snapshot = await _usersCollection.get();
     final batch = _firestore.batch();
@@ -231,7 +212,6 @@ class RoleService {
       final currentRole = data['role'] as String? ?? '';
       final normalizedRole = currentRole.toLowerCase();
       
-      // Only update if role needs normalization
       if (currentRole != normalizedRole && currentRole.isNotEmpty) {
         batch.update(doc.reference, {
           'role': normalizedRole,
@@ -245,7 +225,6 @@ class RoleService {
     }
   }
 
-  /// Get role by name (case-insensitive check)
   Future<RoleModel?> _getRoleByNameCaseInsensitive(String roleName) async {
     final normalizedName = roleName.toLowerCase();
     final snapshot = await _rolesCollection.get();
@@ -260,12 +239,10 @@ class RoleService {
     return null;
   }
 
-  /// Clean up duplicate roles (keep the first one, delete others)
   Future<void> _cleanupDuplicateRoles() async {
     final snapshot = await _rolesCollection.get();
-    final roleMap = <String, List<String>>{}; // normalized name -> list of doc IDs
+    final roleMap = <String, List<String>>{}; 
     
-    // Group roles by normalized name
     for (final doc in snapshot.docs) {
       final data = doc.data() as Map<String, dynamic>;
       final roleName = (data['name'] as String? ?? '').toLowerCase();
@@ -275,13 +252,12 @@ class RoleService {
       roleMap[roleName]!.add(doc.id);
     }
     
-    // Delete duplicates (keep the first one)
     final batch = _firestore.batch();
     bool hasDeletes = false;
     
     for (final entry in roleMap.entries) {
       if (entry.value.length > 1) {
-        // Multiple roles with same name, keep first, delete rest
+        
         for (int i = 1; i < entry.value.length; i++) {
           batch.delete(_rolesCollection.doc(entry.value[i]));
           hasDeletes = true;
@@ -294,10 +270,9 @@ class RoleService {
     }
   }
 
-  /// Get user count for a role (case-insensitive)
   Future<int> getUserCountForRole(String roleName) async {
     final normalizedRoleName = roleName.toLowerCase();
-    // Get all users and filter case-insensitively since Firestore queries are case-sensitive
+    
     final snapshot = await _usersCollection.get();
     int count = 0;
     for (final doc in snapshot.docs) {
@@ -310,7 +285,6 @@ class RoleService {
     return count;
   }
 
-  /// Update user count for all roles
   Future<void> updateRoleUserCounts() async {
     final roles = await getAllRoles();
     for (final role in roles) {
@@ -321,7 +295,6 @@ class RoleService {
     }
   }
 
-  /// Update users' role name when role name changes (case-insensitive)
   Future<void> _updateUsersRoleName(String oldRoleName, String newRoleName) async {
     final batch = _firestore.batch();
     final normalizedOldRole = oldRoleName.toLowerCase();
@@ -342,7 +315,6 @@ class RoleService {
     await batch.commit();
   }
 
-  /// Update users' permissions when role permissions change (case-insensitive)
   Future<void> _updateUsersPermissions(String roleName, List<String> permissions) async {
     final batch = _firestore.batch();
     final normalizedRoleName = roleName.toLowerCase();
@@ -362,7 +334,6 @@ class RoleService {
     await batch.commit();
   }
 
-  /// Assign role to a user
   Future<void> assignRoleToUser(String userId, String roleName) async {
     final role = await getRoleByName(roleName);
     if (role == null) {
@@ -375,8 +346,6 @@ class RoleService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    // Update role user count
     await updateRoleUserCounts();
   }
 }
-

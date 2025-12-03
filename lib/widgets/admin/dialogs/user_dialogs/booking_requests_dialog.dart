@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../services/user/availability_service.dart';
@@ -41,9 +41,6 @@ class BookingRequestsDialog extends StatelessWidget {
 
     try {
       await availabilityService.approveBookingRequest(requestId);
-
-      // Note: scheduleInterview removed - job_matches collection no longer used
-      // Booking system now uses Application directly
 
       if (!context.mounted) return;
       DialogUtils.showSuccessMessage(
@@ -107,7 +104,7 @@ class BookingRequestsDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
+            
             Padding(
               padding: const EdgeInsets.all(20),
               child: Row(
@@ -305,7 +302,6 @@ class BookingRequestsDialog extends StatelessWidget {
                           final slotTime = data['slotTime'] as String? ?? '';
                           final postTitle = data['postTitle'] as String?;
 
-                          // Get initials for avatar
                           final initials = jobseekerName
                               .split(' ')
                               .where((word) => word.isNotEmpty)
@@ -334,10 +330,10 @@ class BookingRequestsDialog extends StatelessWidget {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    // Jobseeker Info Row
+                                    
                                     Row(
                                       children: [
-                                        // Avatar
+                                        
                                         Container(
                                           width: 56,
                                           height: 56,
@@ -371,7 +367,7 @@ class BookingRequestsDialog extends StatelessWidget {
                                           ),
                                         ),
                                         const SizedBox(width: 16),
-                                        // Name and Details
+                                        
                                         Expanded(
                                           child: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -409,7 +405,7 @@ class BookingRequestsDialog extends StatelessWidget {
                                                 ),
                                               ),
                                               const SizedBox(height: 8),
-                                              // Job Post Title - More Prominent
+                                              
                                               Container(
                                                 padding: const EdgeInsets.symmetric(
                                                   horizontal: 12,
@@ -447,7 +443,7 @@ class BookingRequestsDialog extends StatelessWidget {
                                                 ),
                                               ),
                                               const SizedBox(height: 12),
-                                              // Date and Time Info
+                                              
                                               if (slotDate != null) ...[
                                                 Container(
                                                   padding: const EdgeInsets.symmetric(
@@ -515,7 +511,7 @@ class BookingRequestsDialog extends StatelessWidget {
                                       ],
                                     ),
                                     const SizedBox(height: 20),
-                                    // Action Buttons
+                                    
                                     Row(
                                       children: [
                                         Expanded(
@@ -642,14 +638,13 @@ class BookingRequestsDialog extends StatelessWidget {
 
   Future<Map<String, dynamic>> _loadBookingRequestData(BookingRequest request) async {
     try {
-      // Load jobseeker data
+      
       final firestore = FirebaseFirestore.instance;
       final userDoc = await firestore.collection('users').doc(request.jobseekerId).get();
       final jobseekerName = userDoc.exists
           ? (userDoc.data()?['fullName'] as String? ?? 'Unknown')
           : 'Unknown';
 
-      // Load slot data
       final slotDoc = await firestore.collection('availability_slots').doc(request.slotId).get();
       DateTime? slotDate;
       String slotTime = '';
@@ -662,10 +657,9 @@ class BookingRequestsDialog extends StatelessWidget {
         slotTime = '$startTime - $endTime';
       }
 
-      // Load post title from matchId (could be Application ID or JobMatch ID)
       String? postTitle;
       try {
-        // Try to get as Application first
+        
         final applicationDoc = await firestore.collection('applications').doc(request.matchId).get();
         if (applicationDoc.exists) {
           final appData = applicationDoc.data();
@@ -675,16 +669,16 @@ class BookingRequestsDialog extends StatelessWidget {
             postTitle = post?.title;
           }
         } else {
-          // Try to get as JobMatch
+          
           final jobMatchDoc = await firestore.collection('job_matches').doc(request.matchId).get();
           if (jobMatchDoc.exists) {
             final matchData = jobMatchDoc.data();
-            // JobMatch has jobTitle directly, but we can also get from post
+            
             final jobTitle = matchData?['jobTitle'] as String?;
             if (jobTitle != null && jobTitle.isNotEmpty) {
               postTitle = jobTitle;
             } else {
-              // Fallback: get from post
+              
               final jobId = matchData?['jobId'] as String?;
               if (jobId != null) {
                 final post = await postService.getById(jobId);
@@ -714,4 +708,3 @@ class BookingRequestsDialog extends StatelessWidget {
     }
   }
 }
-

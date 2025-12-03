@@ -1,11 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/models/admin/rating_model.dart';
 
 class RatingService {
   final CollectionReference _reviewsCollection =
       FirebaseFirestore.instance.collection('reviews');
 
-  /// Get all flagged ratings
   Future<List<RatingModel>> getFlaggedRatings() async {
     try {
       final snapshot = await _reviewsCollection
@@ -21,7 +20,6 @@ class RatingService {
     }
   }
 
-  /// Get all ratings
   Future<List<RatingModel>> getAllRatings() async {
     try {
       final snapshot = await _reviewsCollection
@@ -36,7 +34,6 @@ class RatingService {
     }
   }
 
-  /// Get ratings by status
   Future<List<RatingModel>> getRatingsByStatus(RatingStatus status) async {
     try {
       final snapshot = await _reviewsCollection
@@ -52,7 +49,6 @@ class RatingService {
     }
   }
 
-  /// Flag a rating for review
   Future<void> flagRating(String ratingId, String reason) async {
     await _reviewsCollection.doc(ratingId).update({
       'status': 'flagged',
@@ -61,10 +57,9 @@ class RatingService {
     });
   }
 
-  /// Review a flagged rating
   Future<void> reviewRating({
     required String ratingId,
-    required String action, // 'approved', 'removed', 'warning'
+    required String action, 
     required String reviewedBy,
     String? reviewNotes,
   }) async {
@@ -79,7 +74,6 @@ class RatingService {
     });
   }
 
-  /// Remove a rating
   Future<void> removeRating(String ratingId, {String? reason}) async {
     await _reviewsCollection.doc(ratingId).update({
       'status': 'removed',
@@ -88,7 +82,6 @@ class RatingService {
     });
   }
 
-  /// Delete a rating (soft delete - change status to 'deleted')
   Future<void> deleteRating(String ratingId, {String? reason}) async {
     await _reviewsCollection.doc(ratingId).update({
       'status': 'deleted',
@@ -97,17 +90,15 @@ class RatingService {
     });
   }
 
-  /// Get ratings for a specific jobseeker
   Future<List<RatingModel>> getRatingsForUser(String userId) async {
     try {
-      // Query using jobseekerId (new field name), fallback to employeeId for backward compatibility
+      
       final snapshot = await _reviewsCollection
           .where('jobseekerId', isEqualTo: userId)
           .where('status', isEqualTo: 'active')
           .orderBy('createdAt', descending: true)
           .get();
 
-      // If no results found with jobseekerId, try employeeId for backward compatibility
       if (snapshot.docs.isEmpty) {
         final oldSnapshot = await _reviewsCollection
             .where('employeeId', isEqualTo: userId)
@@ -127,7 +118,6 @@ class RatingService {
     }
   }
 
-  /// Get average rating for a user
   Future<double> getAverageRating(String userId) async {
     try {
       final ratings = await getRatingsForUser(userId);
@@ -140,7 +130,6 @@ class RatingService {
     }
   }
 
-  /// Stream all ratings
   Stream<List<RatingModel>> streamAllRatings() {
     return _reviewsCollection
         .orderBy('createdAt', descending: true)
@@ -150,7 +139,6 @@ class RatingService {
             .toList());
   }
 
-  /// Stream ratings by status
   Stream<List<RatingModel>> streamRatingsByStatus(RatingStatus status) {
     return _reviewsCollection
         .where('status', isEqualTo: status.toString().split('.').last)
@@ -161,4 +149,3 @@ class RatingService {
             .toList());
   }
 }
-

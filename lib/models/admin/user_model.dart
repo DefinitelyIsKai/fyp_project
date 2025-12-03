@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 
 class UserModel {
   final String id;
@@ -71,7 +71,6 @@ class UserModel {
   factory UserModel.fromJson(Map<String, dynamic> json, String docId) {
     String status = json['status'] ?? 'Active';
     
-    // Check if user is deleted
     bool isDeleted = status == 'Deleted';
     
     bool isActive = isDeleted ? false : (json['isActive'] ?? (status != 'Non-active'));

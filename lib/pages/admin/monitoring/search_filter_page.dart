@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/models/admin/job_post_model.dart';
 import 'package:fyp_project/models/admin/user_model.dart';
@@ -47,7 +47,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
 
   Future<void> _loadFilterOptions() async {
     try {
-      // Load categories from categories collection (only active ones)
+      
       final categoryModels = await _categoryService.getAllCategories();
       final categories = categoryModels
           .where((cat) => cat.isActive == true)
@@ -56,7 +56,6 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
           .toList();
       categories.sort();
 
-      // Load roles from users
       final roles = await _userService.getAllRoles();
 
       setState(() {
@@ -77,7 +76,6 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
         final users = await _userService.getAllUsers();
         var filteredUsers = users;
 
-        // Apply filters
         if (_searchController.text.isNotEmpty) {
           final query = _searchController.text.toLowerCase();
           filteredUsers = filteredUsers.where((user) {
@@ -109,10 +107,9 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
         
         var filteredPosts = postsSnapshot.docs
             .map((doc) => JobPostModel.fromFirestore(doc))
-            .where((post) => post.isDraft != true) // Exclude drafts
+            .where((post) => post.isDraft != true) 
             .toList();
 
-        // Apply filters
         if (_searchController.text.isNotEmpty) {
           final query = _searchController.text.toLowerCase();
           filteredPosts = filteredPosts.where((post) {
@@ -146,7 +143,6 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
               .toList();
         }
 
-        // Sort posts alphabetically by title
         filteredPosts.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
 
         if (_searchType == 'posts') {
@@ -204,7 +200,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
       ),
       body: Column(
         children: [
-          // Header Section with Description
+          
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -236,7 +232,6 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
             ),
           ),
 
-          // Search and Filters Section
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -252,7 +247,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
             ),
             child: Column(
               children: [
-                // Search Bar and Button Row
+                
                 Row(
                   children: [
                     Expanded(
@@ -315,7 +310,6 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                 ),
                 const SizedBox(height: 12),
 
-                // Search Type
                 Row(
                   children: [
                     Expanded(
@@ -338,7 +332,6 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                 ),
                 const SizedBox(height: 12),
 
-                // Filter Section (Expandable)
                 if (_searchType == 'posts' || _searchType == 'all' || _searchType == 'users') ...[
                   InkWell(
                     onTap: () {
@@ -370,7 +363,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                             ),
                           ),
                           const Spacer(),
-                          // Show active filter count
+                          
                           if (_hasActiveFilters())
                             Container(
                               margin: const EdgeInsets.only(right: 8),
@@ -398,7 +391,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                       ),
                     ),
                   ),
-                  // Expandable Filters Content
+                  
                   ClipRect(
                     child: AnimatedSize(
                       duration: const Duration(milliseconds: 300),
@@ -408,10 +401,10 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                               padding: const EdgeInsets.only(top: 12),
                               child: Column(
                                 children: [
-                                  // First Row
+                                  
                                   Row(
                                     children: [
-                                      // Category Filter (for posts)
+                                      
                                       if (_searchType == 'posts' || _searchType == 'all')
                                         Expanded(
                                           child: _FilterChip(
@@ -421,7 +414,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                                           ),
                                         ),
                                       if (_searchType == 'posts' || _searchType == 'all') const SizedBox(width: 8),
-                                      // Status Filter (for posts)
+                                      
                                       if (_searchType == 'posts' || _searchType == 'all')
                                         Expanded(
                                           child: _FilterChip(
@@ -430,7 +423,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                                             onTap: () => _showStatusFilter(),
                                           ),
                                         ),
-                                      // Role Filter (for users only)
+                                      
                                       if (_searchType == 'users' && _searchType != 'all')
                                         Expanded(
                                           child: _FilterChip(
@@ -441,12 +434,12 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                                         ),
                                     ],
                                   ),
-                                  // Second Row
+                                  
                                   if ((_searchType == 'posts' || _searchType == 'all') || (_searchType == 'users' || _searchType == 'all')) ...[
                                     const SizedBox(height: 8),
                                     Row(
                                       children: [
-                                        // State Filter (for posts)
+                                        
                                         if (_searchType == 'posts' || _searchType == 'all')
                                           Expanded(
                                             child: _FilterChip(
@@ -456,7 +449,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                                             ),
                                           ),
                                         if (_searchType == 'posts' || _searchType == 'all') const SizedBox(width: 8),
-                                        // Role Filter (for users or all)
+                                        
                                         if (_searchType == 'users' || _searchType == 'all')
                                           Expanded(
                                             child: _FilterChip(
@@ -468,7 +461,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                                       ],
                                     ),
                                   ],
-                                  // Active Filters Indicator
+                                  
                                   if (_hasActiveFilters()) ...[
                                     const SizedBox(height: 12),
                                     Row(
@@ -506,7 +499,6 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                 ],
                 const SizedBox(height: 12),
 
-                // Results Count
                 if (_results.isNotEmpty)
                   Container(
                     margin: const EdgeInsets.only(top: 12),
@@ -535,7 +527,6 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
             ),
           ),
 
-          // Results List with Pull to Refresh
           Expanded(
             child: _isLoading
                 ? const Center(
@@ -556,7 +547,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                   )
                 : RefreshIndicator(
                     onRefresh: () async {
-                      // Re-perform search when pulled to refresh
+                      
                       await _performSearch();
                     },
                     child: _results.isEmpty
@@ -653,13 +644,11 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
     }).join(' ');
   }
 
-  /// Extract Malaysian state from location string
   String _extractState(String location) {
     if (location.isEmpty) return '';
     
     final locationLower = location.toLowerCase();
     
-    // List of Malaysian states and federal territories
     final states = [
       'johor',
       'kedah',
@@ -683,7 +672,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
     
     for (final state in states) {
       if (locationLower.contains(state)) {
-        // Normalize state names
+        
         if (state == 'kuala lumpur') return 'Kuala Lumpur';
         if (state == 'pulau pinang' || state == 'penang') return 'Penang';
         if (state == 'melaka' || state == 'malacca') return 'Melaka';
@@ -954,7 +943,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              // Avatar
+              
               CircleAvatar(
                 radius: 28,
                 backgroundColor: Colors.blue[100],
@@ -972,7 +961,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                 ),
               ),
               const SizedBox(width: 16),
-              // User Info
+              
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1166,7 +1155,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Icon
+                  
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
@@ -1176,7 +1165,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                     child: Icon(Icons.work_outline, color: Colors.blue[700], size: 24),
                   ),
                   const SizedBox(width: 12),
-                  // Title and Status
+                  
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1215,7 +1204,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        // Description preview
+                        
                         if (post.description.isNotEmpty)
                           Text(
                             post.description,
@@ -1232,7 +1221,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                 ],
               ),
               const SizedBox(height: 12),
-              // Tags and Info
+              
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -1337,7 +1326,7 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
                 ],
               ),
               const SizedBox(height: 12),
-              // Footer with date and view button
+              
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -1378,7 +1367,6 @@ class _SearchFilterPageState extends State<SearchFilterPage> {
   }
 }
 
-// Filter Chip Widget
 class _FilterChip extends StatelessWidget {
   final String label;
   final String value;
@@ -1449,4 +1437,3 @@ class _FilterChip extends StatelessWidget {
     );
   }
 }
-

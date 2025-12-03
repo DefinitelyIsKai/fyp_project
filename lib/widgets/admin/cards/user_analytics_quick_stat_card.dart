@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../common/analytics_trend_badge.dart';
 
 class UserAnalyticsQuickStatCard extends StatelessWidget {
@@ -77,4 +77,3 @@ class UserAnalyticsQuickStatCard extends StatelessWidget {
     );
   }
 }
-

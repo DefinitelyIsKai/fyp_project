@@ -1,6 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-/// A reusable editable detail section widget for longer text inputs
 class EditableDetailSection extends StatelessWidget {
   final String label;
   final TextEditingController controller;
@@ -59,4 +58,3 @@ class EditableDetailSection extends StatelessWidget {
     );
   }
 }
-

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 class AnalyticsComparisonItem extends StatelessWidget {
   final String label;
@@ -61,4 +61,3 @@ class AnalyticsComparisonItem extends StatelessWidget {
     );
   }
 }
-
