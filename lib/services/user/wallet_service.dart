@@ -754,7 +754,6 @@ class WalletService {
         metadata: {'postId': postId, 'type': 'post_creation_fee_hold'},
       );
     } catch (e) {
-      // Log but don't fail - notification is not critical
       print('Error sending wallet hold notification: $e');
     }
   }
@@ -830,7 +829,7 @@ class WalletService {
             ? 'Post creation fee (Released) - $postTitle'
             : 'Post creation fee (Released)';
         
-        print('➕ Creating new transaction record for released post creation credits');
+        print('Creating new transaction record for released post creation credits');
         tx.set(newTxnRef, {
           'id': newTxnRef.id,
           'userId': userId,

@@ -109,6 +109,17 @@ class NotificationDetailDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Filter out ID-related fields that shouldn't be displayed
+    final displayableMetadata = notification.metadata.entries
+        .where((entry) {
+          final key = entry.key.toLowerCase();
+          // Filter out ID-related fields
+          return !key.contains('id') && 
+                 !key.contains('referenceid') &&
+                 key != 'id';
+        })
+        .toList();
+    
     return Dialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
@@ -213,6 +224,7 @@ class NotificationDetailDialog extends StatelessWidget {
             const SizedBox(height: 24),
             Divider(height: 1, thickness: 1, color: Colors.grey[200]),
             const SizedBox(height: 20),
+            //notification body
             
             Container(
               width: double.infinity,
@@ -232,6 +244,8 @@ class NotificationDetailDialog extends StatelessWidget {
                 ),
               ),
             ),
+            // Metadata section (if available)
+            if (displayableMetadata.isNotEmpty) ...[
             
             if (notification.metadata.isNotEmpty) ...[
               const SizedBox(height: 20),
@@ -253,8 +267,9 @@ class NotificationDetailDialog extends StatelessWidget {
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: notification.metadata.entries.map((entry) {
-                    final isLast = notification.metadata.entries.last == entry;
+                  children: displayableMetadata.asMap().entries.map((indexedEntry) {
+                    final entry = indexedEntry.value;
+                    final isLast = indexedEntry.key == displayableMetadata.length - 1;
                     return Container(
                       padding: EdgeInsets.only(bottom: isLast ? 0 : 12),
                       margin: EdgeInsets.only(bottom: isLast ? 0 : 12),

@@ -102,8 +102,6 @@ flutter:
   uses-material-design: true
 
   # To add assets to your application, add an assets section, like this:
-  assets:
-    - assets/models/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
@@ -143,8 +141,7 @@ flutter_launcher_icons:
     background_color: "#000000"
     theme_color: "#0175C2"
   image_path: "assests/icon/JobSeek.png"
-  min_sdk_android: 21 # android min sdk min:16, default 21
-  adaptive_icon_background: "#000000"  # 使用黑色背景匹配你的图标
+  min_sdk_android: 21 
+  adaptive_icon_background: "#000000"  
   adaptive_icon_foreground: "assests/icon/JobSeek.png"
-  # 注意：如果图标上的文字被截断，建议创建一个只包含放大镜图标的版本
-  # 或者调整原始图标，让内容更居中，四周留出 20% 的安全边距
+ 

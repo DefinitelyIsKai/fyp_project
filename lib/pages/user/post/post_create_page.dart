@@ -1149,7 +1149,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                             firstDate: DateTime.now().add(const Duration(days: 1)), // Must be at least tomorrow
                             lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
                             required: true,
-                            helperText: 'Must be at least 1 day from today',
+                            helperText: 'At least 1 day from today',
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -1170,6 +1170,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                                 ), // Must be at least tomorrow if no start date
                             lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
                             required: true,
+                            helperText: ' ', // Add spacing to align with Event Start Date
                           ),
                         ),
                       ],
