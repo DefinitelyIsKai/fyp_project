@@ -9,11 +9,11 @@ class Wallet {
   });
 
   final String userId;
-  final int balance; // stored as integer credits
-  final int heldCredits; // credits on hold for pending applications
+  final int balance; 
+  final int heldCredits; 
   final DateTime updatedAt;
 
-  // Available balance = balance - heldCredits
+  //balance = balance - heldCredits
   int get availableBalance => balance - heldCredits;
 
   Map<String, dynamic> toMap() {
@@ -28,7 +28,6 @@ class Wallet {
   factory Wallet.fromMap(Map<String, dynamic>? map, {required String uid}) {
     final data = map ?? <String, dynamic>{};
     
-    // Handle Firestore Timestamp conversion
     DateTime updatedAt = DateTime.now();
     final updatedAtValue = data['updatedAt'];
     if (updatedAtValue != null) {
@@ -42,7 +41,6 @@ class Wallet {
       }
     }
     
-    // Helper function to safely parse int from Firestore (handles int, double, num)
     int? _parseInt(dynamic value) {
       if (value == null) return null;
       if (value is int) return value;

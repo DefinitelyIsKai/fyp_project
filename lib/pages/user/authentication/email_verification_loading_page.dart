@@ -122,7 +122,7 @@ class _EmailVerificationLoadingPageState extends State<EmailVerificationLoadingP
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'We sent a verification link to your email.\nPlease check your inbox and click the link to verify your account.',
+                  'A sent a verification link to your email.\nPlease check your inbox and click the link to verify your account.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,

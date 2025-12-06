@@ -1,4 +1,4 @@
-// Model for job posts
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum JobType { weekdays, weekends, morning, afternoon, night, fullDay, onCall }
@@ -7,7 +7,7 @@ enum PostStatus { pending, active, completed, deleted, rejected }
 
 class Post {
   final String id;
-  final String ownerId; // uid of creator
+  final String ownerId; 
   String title;
   String description;
   double? budgetMin;
