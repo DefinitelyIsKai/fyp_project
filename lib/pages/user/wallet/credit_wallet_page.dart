@@ -1009,9 +1009,33 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
           SliverToBoxAdapter(
             child: LayoutBuilder(
               builder: (context, constraints) {
+                //available height dynamic screen size
+                final mediaQuery = MediaQuery.of(context);
+                final screenHeight = mediaQuery.size.height;
+                final screenWidth = mediaQuery.size.width;
+                final isLandscape = screenWidth > screenHeight;
+                final padding = mediaQuery.padding;
+                
+                final cardHeight = _isCardShrunk ? 200 : 400;
+                final appBarHeight = 56; 
+                final otherElementsHeight = 100; //margim
+                final safeAreaHeight = padding.top + padding.bottom;
+                
+                //available height 
+                final calculatedHeight = screenHeight - cardHeight - appBarHeight - otherElementsHeight - safeAreaHeight;
+                
+                //minimum height percentage minimum   
+                final minHeight = isLandscape 
+                    ? (screenHeight * 0.3).clamp(200.0, double.infinity)
+                    : (screenHeight * 0.25).clamp(300.0, double.infinity);
+                
+                final finalHeight = calculatedHeight > minHeight 
+                    ? calculatedHeight 
+                    : minHeight;
+                
                 return Container(
                   margin: const EdgeInsets.symmetric(horizontal: 16),
-                  height: MediaQuery.of(context).size.height - (_isCardShrunk ? 250 : 450), 
+                  height: finalHeight,
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
