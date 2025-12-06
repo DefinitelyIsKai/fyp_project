@@ -1,4 +1,4 @@
-class SystemConfigModel {
+﻿class SystemConfigModel {
   final String id;
   final String key;
   final dynamic value;
@@ -41,4 +41,3 @@ class SystemConfigModel {
     };
   }
 }
-

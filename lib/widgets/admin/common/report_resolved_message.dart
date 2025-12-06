@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 class ReportResolvedMessage extends StatelessWidget {
   const ReportResolvedMessage({super.key});
@@ -50,4 +50,3 @@ class ReportResolvedMessage extends StatelessWidget {
     );
   }
 }
-

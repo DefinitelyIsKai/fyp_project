@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/pages/admin/post_moderation/approve_reject_posts_page.dart';
 import 'package:fyp_project/pages/admin/post_moderation/manage_tags_categories_page.dart';
@@ -8,20 +8,19 @@ import 'package:fyp_project/utils/admin/app_colors.dart';
 class PostModerationPage extends StatelessWidget {
   const PostModerationPage({super.key});
 
-  // Real-time stream: counts all posts with status = "pending" (excluding drafts)
   Stream<int> _pendingPostsCountStream() {
     return FirebaseFirestore.instance
         .collection('posts')
         .where('status', isEqualTo: 'pending')
         .snapshots()
         .map((snap) {
-          // Filter out draft posts (only count isDraft: false or null)
+          
           int count = 0;
           for (final doc in snap.docs) {
             final data = doc.data() as Map<String, dynamic>?;
             if (data == null) continue;
             final isDraft = data['isDraft'] as bool?;
-            // Count only if isDraft is not true (i.e., false or null)
+            
             if (isDraft != true) {
               count++;
             }
@@ -30,7 +29,6 @@ class PostModerationPage extends StatelessWidget {
         });
   }
 
-  // Real-time stream: counts all categories
   Stream<int> _categoryCountStream() {
     return FirebaseFirestore.instance
         .collection('categories')
@@ -38,9 +36,6 @@ class PostModerationPage extends StatelessWidget {
         .map((snap) => snap.size);
   }
 
-  // Real-time stream: counts all posts with status = "rejected"
-  // This represents the total number of job posts that have been rejected by moderators
-  // Useful for quality control and monitoring moderation effectiveness
   Stream<int> _rejectedPostsCountStream() {
     return FirebaseFirestore.instance
         .collection('posts')
@@ -75,9 +70,6 @@ class PostModerationPage extends StatelessWidget {
     );
   }
 
-  // -------------------------------------------------------
-  // Header
-  // -------------------------------------------------------
   Widget _buildHeaderSection() {
     return Container(
       width: double.infinity,
@@ -108,18 +100,15 @@ class PostModerationPage extends StatelessWidget {
     );
   }
 
-  // -------------------------------------------------------
-  // REAL-TIME STATS
-  // -------------------------------------------------------
   Widget _buildStatsSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       child: Row(
         children: [
-          // Pending Posts
+          
           Expanded(
             child: SizedBox(
-              height: 120, // Fixed height for consistency
+              height: 120, 
               child: StreamBuilder<int>(
                 stream: _pendingPostsCountStream(),
                 builder: (context, snapshot) {
@@ -137,7 +126,6 @@ class PostModerationPage extends StatelessWidget {
 
           const SizedBox(width: 12),
 
-          // Total Categories
           Expanded(
             child: SizedBox(
               height: 120,
@@ -158,7 +146,6 @@ class PostModerationPage extends StatelessWidget {
 
           const SizedBox(width: 12),
 
-          // Rejected Posts
           Expanded(
             child: SizedBox(
               height: 120,
@@ -181,7 +168,6 @@ class PostModerationPage extends StatelessWidget {
     );
   }
 
-  // Grid options
   Widget _buildOptionsGrid(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -193,7 +179,7 @@ class PostModerationPage extends StatelessWidget {
           childAspectRatio: 0.9,
         ),
         children: [
-          // Review Job Posts Card
+          
           StreamBuilder<int>(
             stream: _pendingPostsCountStream(),
             builder: (context, snapshot) {
@@ -254,7 +240,6 @@ class PostModerationPage extends StatelessWidget {
   }
 }
 
-//  Management Card
 class _ManagementCard extends StatelessWidget {
   final String title;
   final String description;
@@ -291,7 +276,7 @@ class _ManagementCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Icon with badge
+                  
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -303,7 +288,6 @@ class _ManagementCard extends StatelessWidget {
 
                   const SizedBox(height: 12),
 
-                  // Title
                   SizedBox(
                     height: 40,
                     child: Text(
@@ -320,7 +304,6 @@ class _ManagementCard extends StatelessWidget {
 
                   const SizedBox(height: 6),
 
-                  // Description
                   Expanded(
                     child: Text(
                       description,
@@ -336,7 +319,6 @@ class _ManagementCard extends StatelessWidget {
 
                   const SizedBox(height: 8),
 
-                  // Footer
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -358,7 +340,6 @@ class _ManagementCard extends StatelessWidget {
                 ],
               ),
 
-              // Badge in top-right corner
               if (badgeCount > 0)
                 Positioned(
                   top: 8,
@@ -387,7 +368,6 @@ class _ManagementCard extends StatelessWidget {
   }
 }
 
-// Stat Card
 class _StatCard extends StatelessWidget {
   final String title;
   final String value;

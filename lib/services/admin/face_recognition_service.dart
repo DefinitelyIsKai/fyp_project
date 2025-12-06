@@ -1,12 +1,10 @@
-import 'dart:typed_data';
+﻿import 'dart:typed_data';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as img;
 import 'package:camera/camera.dart';
 
-/// Face recognition service
-/// Uses Google ML Kit for face detection and image hashing method for face comparison
 class FaceRecognitionService {
   static FaceRecognitionService? _instance;
   bool _isModelLoaded = false;
@@ -27,7 +25,6 @@ class FaceRecognitionService {
     return _instance!;
   }
 
-  /// Initialize service (using Google ML Kit + image hashing method)
   Future<bool> initialize() async {
     if (_isModelLoaded) {
       print('Service already initialized, skipping');
@@ -36,9 +33,6 @@ class FaceRecognitionService {
 
     try {
       print('Initializing face recognition service (using Google ML Kit + image hashing)...');
-      
-      // ML Kit Face Detector is already initialized in constructor
-      // Image hashing method doesn't require additional model loading
       
       _isModelLoaded = true;
       print('Service initialized successfully (using Google ML Kit + image hashing)');
@@ -51,21 +45,17 @@ class FaceRecognitionService {
     }
   }
 
-  /// Check if service is initialized
   bool get isModelLoaded => _isModelLoaded;
 
-  /// Decode image from base64 string
   Future<img.Image?> decodeBase64Image(String base64String) async {
     try {
       print('Starting to decode base64 image, input length: ${base64String.length}');
       
-      // Check if empty
       if (base64String.isEmpty) {
         print('Error: base64 string is empty');
         return null;
       }
       
-      // Clean base64 string
       String cleanBase64 = base64String.trim();
       if (cleanBase64.contains(',')) {
         cleanBase64 = cleanBase64.split(',')[1];
@@ -74,14 +64,12 @@ class FaceRecognitionService {
       
       print('Cleaned base64 length: ${cleanBase64.length}');
       
-      // Decode
       final bytes = Uint8List.fromList(
         base64Decode(cleanBase64),
       );
       
       print('Decoded byte length: ${bytes.length}');
       
-      // Decode image
       final image = img.decodeImage(bytes);
       if (image == null) {
         print('Error: img.decodeImage returned null');
@@ -97,11 +85,10 @@ class FaceRecognitionService {
     }
   }
 
-  /// Convert CameraImage to img.Image
   Future<img.Image?> cameraImageToImage(CameraImage cameraImage) async {
     try {
       if (cameraImage.format.group == ImageFormatGroup.yuv420) {
-        // YUV420 format processing
+        
         final yBuffer = cameraImage.planes[0].bytes;
         final uBuffer = cameraImage.planes[1].bytes;
         final vBuffer = cameraImage.planes[2].bytes;
@@ -111,7 +98,6 @@ class FaceRecognitionService {
           height: cameraImage.height,
         );
 
-        // Simplified YUV to RGB conversion
         for (int y = 0; y < cameraImage.height; y++) {
           for (int x = 0; x < cameraImage.width; x++) {
             final yIndex = y * cameraImage.width + x;
@@ -121,7 +107,6 @@ class FaceRecognitionService {
             final uValue = uBuffer[uvIndex] - 128;
             final vValue = vBuffer[uvIndex] - 128;
 
-            // YUV to RGB conversion
             int r = (yValue + (1.402 * vValue)).round().clamp(0, 255);
             int g = (yValue - (0.344 * uValue) - (0.714 * vValue)).round().clamp(0, 255);
             int b = (yValue + (1.772 * uValue)).round().clamp(0, 255);
@@ -132,9 +117,9 @@ class FaceRecognitionService {
 
         return yuvImage;
       } else if (cameraImage.format.group == ImageFormatGroup.bgra8888) {
-        // BGRA format processing
+        
         final bytes = cameraImage.planes[0].bytes;
-        // Convert to RGB
+        
         final rgbImage = img.Image(width: cameraImage.width, height: cameraImage.height);
         for (int i = 0; i < bytes.length; i += 4) {
           final b = bytes[i];
@@ -156,7 +141,6 @@ class FaceRecognitionService {
     }
   }
 
-  /// Detect faces in image
   Future<List<Face>> detectFaces(InputImage inputImage) async {
     try {
       final faces = await _faceDetector.processImage(inputImage);
@@ -167,12 +151,10 @@ class FaceRecognitionService {
     }
   }
 
-  /// Crop face region
   img.Image? cropFace(img.Image image, Face face) {
     try {
       final boundingBox = face.boundingBox;
       
-      // Expand bounding box (add some padding)
       final padding = 0.2;
       final left = (boundingBox.left * (1 - padding)).round().clamp(0, image.width);
       final top = (boundingBox.top * (1 - padding)).round().clamp(0, image.height);
@@ -184,7 +166,6 @@ class FaceRecognitionService {
       
       if (width <= 0 || height <= 0) return null;
       
-      // Crop face
       return img.copyCrop(image, x: left, y: top, width: width, height: height);
     } catch (e) {
       print('Failed to crop face: $e');
@@ -192,12 +173,6 @@ class FaceRecognitionService {
     }
   }
 
-
-  /// Compare two faces (using Google ML Kit + image hashing method)
-  /// Returns similarity score (0.0 - 1.0), > 0.95 recommended for accurate face matching
-  /// Uses strict validation: requires Hamming distance <= 20 (~92%+ bit match) for acceptance
-  /// Higher threshold and strict distance check reduce false positives (other faces being accepted)
-  /// capturedFace can be null, if null then use full image
   Future<double> compareFaces(
     String profileImageBase64,
     img.Image capturedImage,
@@ -216,11 +191,8 @@ class FaceRecognitionService {
     try {
       print('Starting face comparison, all processing will be executed in background thread...');
       
-      // All processing (encoding, decoding, cropping, resizing, hash calculation) is done in background thread
-      // Directly pass image object information, encode in background thread
       print('Preparing data to pass to background thread...');
       
-      // Prepare face bounding box information (if available)
       Map<String, dynamic>? faceBoundingBox;
       Map<String, dynamic>? capturedImageData;
       
@@ -238,7 +210,6 @@ class FaceRecognitionService {
           print('No face detected, using full image for comparison');
         }
         
-        // Convert captured image to serializable pixel data (fast operation)
         capturedImageData = _imageToPixelData(capturedImage);
         
         print('Executing all image processing in background thread (decode, crop, hash calculation)...');
@@ -250,7 +221,7 @@ class FaceRecognitionService {
             'faceBoundingBox': faceBoundingBox,
           },
         ).timeout(
-          const Duration(seconds: 30), // 30 second timeout to prevent closure accumulation
+          const Duration(seconds: 30), 
           onTimeout: () {
             print('Face comparison timeout after 30 seconds - stopping to prevent closure accumulation');
             return {'success': false, 'similarity': 0.0, 'timeout': true};
@@ -275,7 +246,7 @@ class FaceRecognitionService {
         print('=========================================');
         return similarity;
       } finally {
-        // Explicitly clean up all temporary data to avoid closure accumulation
+        
         faceBoundingBox = null;
         capturedImageData = null;
       }
@@ -286,13 +257,10 @@ class FaceRecognitionService {
     }
   }
 
-  /// Process and compare two faces in background thread (static method, can be used in isolate)
-  /// All image processing is done in background thread, won't block main thread
-  /// Ensure all resources are cleaned up when function ends to avoid closure accumulation
   static Map<String, dynamic> _processAndCompareFaces(Map<String, dynamic> inputData) {
     img.Image? profileImage;
-    img.Image? decodedProfileImage; // Keep reference for cleanup
-    img.Image? rebuiltCapturedImage; // Keep reference for cleanup
+    img.Image? decodedProfileImage; 
+    img.Image? rebuiltCapturedImage; 
     img.Image? capturedImage;
     img.Image? capturedFaceImage;
     
@@ -302,7 +270,6 @@ class FaceRecognitionService {
       
       print('Starting image processing in isolate...');
       
-      // 1. Decode profile photo (in background thread)
       print('Decoding profile photo base64...');
       decodedProfileImage = _decodeBase64ImageStatic(profileBase64);
       if (decodedProfileImage == null) {
@@ -311,7 +278,6 @@ class FaceRecognitionService {
       }
       print('Profile photo decoded successfully: ${decodedProfileImage.width}x${decodedProfileImage.height}');
       
-      // Immediately resize large profile images to reduce processing time
       if (decodedProfileImage.width > 512 || decodedProfileImage.height > 512) {
         print('Resizing large profile image for faster processing...');
         final maxDimension = decodedProfileImage.width > decodedProfileImage.height 
@@ -329,10 +295,9 @@ class FaceRecognitionService {
         print('Profile image resized to: ${profileImage.width}x${profileImage.height}');
       } else {
         profileImage = decodedProfileImage;
-        decodedProfileImage = null; // No need to clean up if we're using it directly
+        decodedProfileImage = null; 
       }
       
-      // 2. Rebuild captured image (in background thread)
       print('Rebuilding captured image...');
       final capturedImageData = inputData['capturedImageData'] as Map<String, dynamic>;
       rebuiltCapturedImage = _rebuildImageFromPixelData(capturedImageData);
@@ -342,7 +307,6 @@ class FaceRecognitionService {
       }
       print('Captured image rebuilt successfully: ${rebuiltCapturedImage.width}x${rebuiltCapturedImage.height}');
       
-      // Immediately resize large captured images to reduce processing time
       if (rebuiltCapturedImage.width > 512 || rebuiltCapturedImage.height > 512) {
         print('Resizing large captured image for faster processing...');
         final maxDimension = rebuiltCapturedImage.width > rebuiltCapturedImage.height 
@@ -360,13 +324,12 @@ class FaceRecognitionService {
         print('Captured image resized to: ${capturedImage.width}x${capturedImage.height}');
       } else {
         capturedImage = rebuiltCapturedImage;
-        rebuiltCapturedImage = null; // No need to clean up if we're using it directly
+        rebuiltCapturedImage = null; 
       }
       
-      // 3. Crop captured image (if needed)
       if (faceBoundingBox != null) {
         try {
-          // Expand bounding box (add some padding)
+          
           final padding = 0.2;
           final left = ((faceBoundingBox['left'] as num).toDouble() * (1 - padding)).round().clamp(0, capturedImage.width);
           final top = ((faceBoundingBox['top'] as num).toDouble() * (1 - padding)).round().clamp(0, capturedImage.height);
@@ -380,7 +343,6 @@ class FaceRecognitionService {
             final croppedFace = img.copyCrop(capturedImage, x: left, y: top, width: width, height: height);
             print('Face region cropped successfully: ${croppedFace.width}x${croppedFace.height}');
             
-            // Resize cropped face if it's too large (for faster hash calculation)
             if (croppedFace.width > 256 || croppedFace.height > 256) {
               print('Resizing large cropped face image for faster processing...');
               final maxDimension = croppedFace.width > croppedFace.height 
@@ -412,7 +374,6 @@ class FaceRecognitionService {
         print('Using full image for comparison');
       }
       
-      // 4. Calculate hash for both images
       print('Calculating profile photo hash (${profileImage.width}x${profileImage.height})...');
       final profileHash = _calculateImageHashStatic(profileImage);
       print('Profile photo hash calculated: $profileHash');
@@ -426,25 +387,19 @@ class FaceRecognitionService {
         return {'success': false, 'similarity': 0.0};
       }
       
-      // 5. Calculate Hamming distance and similarity
       print('Calculating Hamming distance between hashes...');
       final hammingDist = _hammingDistanceStatic(profileHash, capturedHash);
       print('Hamming distance: $hammingDist / 256');
       print('Bit match percentage: ${((256 - hammingDist) / 256 * 100).toStringAsFixed(2)}%');
       
-      // Calculate similarity: 1.0 - (distance / max_distance)
-      // Using 256 as max distance since we now use 16x16 (256 bits) instead of 8x8 (64 bits)
       double similarity = (1.0 - (hammingDist / 256.0)).clamp(0.0, 1.0);
       print('Raw similarity calculation: 1.0 - ($hammingDist / 256.0) = $similarity');
         
-      // Additional strict validation: Maximum allowed Hamming distance for acceptance
-      // For 256-bit hash, we require Hamming distance <= 12 (extremely strict - ~95% bit match required)
-      // This significantly reduces false positives (other faces being accepted)
       const maxAllowedHammingDistance = 12;
       if (hammingDist > maxAllowedHammingDistance) {
         print('Face match REJECTED: Hamming distance $hammingDist exceeds maximum allowed $maxAllowedHammingDistance');
         print('This means less than ~95% of facial features match - likely a different person');
-        // Force similarity to 0 if distance is too high (strictest validation)
+        
         similarity = 0.0;
         } else {
         print('Face match PASSED strict validation: Hamming distance $hammingDist <= $maxAllowedHammingDistance (~95%+ match)');
@@ -458,8 +413,7 @@ class FaceRecognitionService {
       print('Stack trace: $stackTrace');
       return {'success': false, 'similarity': 0.0};
     } finally {
-      // CRITICAL: Explicitly clean up ALL image objects to prevent closure accumulation
-      // This ensures closures are cleared even if timeout occurs after 30 seconds
+      
       try {
         if (decodedProfileImage != null && decodedProfileImage != profileImage) {
           decodedProfileImage = null;
@@ -478,19 +432,16 @@ class FaceRecognitionService {
     }
   }
   
-  /// Decode base64 image in isolate (static method)
   static img.Image? _decodeBase64ImageStatic(String base64String) {
     try {
-      // Clean base64 string
+      
       String cleanBase64 = base64String.trim();
       if (cleanBase64.contains(',')) {
         cleanBase64 = cleanBase64.split(',')[1];
       }
       
-      // Decode
       final bytes = Uint8List.fromList(base64Decode(cleanBase64));
       
-      // Decode image
       return img.decodeImage(bytes);
     } catch (e) {
       print('Base64 image decoding failed: $e');
@@ -498,15 +449,12 @@ class FaceRecognitionService {
         }
   }
   
-  /// Calculate perceptual hash of image (static method, can be used in isolate)
-  /// Ensure all temporary image objects are cleaned up when function ends
   static int _calculateImageHashStatic(img.Image image) {
     img.Image? workingImage;
     img.Image? resized;
     
     try {
-      // If image is too large, first resize to reasonable size (optimized for hash calculation)
-      // Since we already resize large images before hash calculation, this should rarely be needed
+      
       if (image.width > 256 || image.height > 256) {
         final maxDimension = image.width > image.height ? image.width : image.height;
         final scale = 256.0 / maxDimension;
@@ -522,8 +470,6 @@ class FaceRecognitionService {
         workingImage = image;
       }
       
-      // Resize image to 16x16 (increased from 8x8 for better accuracy)
-      // Larger size captures more facial detail, reducing false positives
       resized = img.copyResize(
         workingImage, 
         width: 16, 
@@ -531,7 +477,6 @@ class FaceRecognitionService {
         interpolation: img.Interpolation.linear,
       );
       
-      // Convert to grayscale and calculate hash
       int sum = 0;
       final grayPixels = <int>[];
       
@@ -544,9 +489,8 @@ class FaceRecognitionService {
         }
       }
       
-      final average = sum ~/ 256; // 16x16 = 256 pixels
+      final average = sum ~/ 256; 
       
-      // Generate hash value
       int hash = 0;
       for (int i = 0; i < grayPixels.length; i++) {
         if (grayPixels[i] > average) {
@@ -559,8 +503,7 @@ class FaceRecognitionService {
       print('Failed to calculate image hash: $e');
       return 0;
     } finally {
-      // Clean up temporary image objects (if new ones were created)
-      // Note: Don't delete original image as it may be passed from outside
+      
       if (workingImage != null && workingImage != image) {
         workingImage = null;
       }
@@ -568,7 +511,6 @@ class FaceRecognitionService {
     }
   }
   
-  /// Calculate Hamming distance between two hash values (static method)
   static int _hammingDistanceStatic(int hash1, int hash2) {
     int distance = 0;
     int xor = hash1 ^ hash2;
@@ -579,10 +521,8 @@ class FaceRecognitionService {
     return distance;
   }
 
-  /// Convert image to pixel data (fast operation, done on main thread)
-  /// Optimized: resizes large images before extracting pixels to reduce data size
   Map<String, dynamic> _imageToPixelData(img.Image image) {
-    // Resize large images before extracting pixels to reduce data size passed to isolate
+    
     img.Image workingImage = image;
     if (image.width > 512 || image.height > 512) {
       final maxDimension = image.width > image.height ? image.width : image.height;
@@ -618,7 +558,6 @@ class FaceRecognitionService {
     };
   }
   
-  /// Rebuild image from pixel data (static method, can be used in isolate)
   static img.Image? _rebuildImageFromPixelData(Map<String, dynamic> imageData) {
     try {
       final width = imageData['width'] as int;
@@ -642,13 +581,9 @@ class FaceRecognitionService {
     }
   }
   
-
-  /// Dispose resources
   void dispose() {
     _faceDetector.close();
-    // No additional cleanup needed for ML Kit Face Detector
+    
     _isModelLoaded = false;
   }
 }
-
-

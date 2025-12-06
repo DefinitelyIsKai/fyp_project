@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../models/user/application.dart';
 import '../../../../services/user/application_service.dart';
@@ -9,7 +9,6 @@ import '../../../../widgets/user/loading_indicator.dart';
 import '../../../../widgets/user/empty_state.dart';
 import 'report_jobseeker_dialog.dart';
 
-/// Dialog for selecting a jobseeker to report from a list
 class ReportJobseekerListDialog extends StatefulWidget {
   final String postId;
   final ReportService reportService;
@@ -59,7 +58,6 @@ class _ReportJobseekerListDialogState extends State<ReportJobseekerListDialog> {
   Future<void> _showReportDialog(String jobseekerId, String jobseekerName) async {
     final hasReported = _hasReportedMap[jobseekerId] ?? false;
     
-    // Show confirmation dialog first
     final confirmed = await DialogUtils.showConfirmationDialog(
       context: context,
       title: hasReported ? 'Report Again' : 'Report Jobseeker',
@@ -74,7 +72,6 @@ class _ReportJobseekerListDialogState extends State<ReportJobseekerListDialog> {
 
     if (confirmed != true || !mounted) return;
 
-    // Show the report form dialog
     final result = await showDialog<Map<String, String>>(
       context: context,
       builder: (context) => ReportJobseekerDialog(jobseekerName: jobseekerName),
@@ -150,7 +147,7 @@ class _ReportJobseekerListDialogState extends State<ReportJobseekerListDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header with icon and title
+            
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -266,7 +263,7 @@ class _ReportJobseekerListDialogState extends State<ReportJobseekerListDialog> {
                           padding: const EdgeInsets.all(16),
                           child: Row(
                             children: [
-                              // Avatar
+                              
                               CircleAvatar(
                                 radius: 28,
                                 backgroundColor: const Color(0xFF00C8A0).withOpacity(0.1),
@@ -282,7 +279,7 @@ class _ReportJobseekerListDialogState extends State<ReportJobseekerListDialog> {
                                 ),
                               ),
                               const SizedBox(width: 16),
-                              // Name and details
+                              
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -342,13 +339,13 @@ class _ReportJobseekerListDialogState extends State<ReportJobseekerListDialog> {
                                 ),
                               ),
                               const SizedBox(width: 12),
-                              // Action buttons
+                              
                               Flexible(
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
-                                    // Reported badge
+                                    
                                     if (hasReported)
                                       Container(
                                         margin: const EdgeInsets.only(bottom: 8),
@@ -383,7 +380,7 @@ class _ReportJobseekerListDialogState extends State<ReportJobseekerListDialog> {
                                           ],
                                         ),
                                       ),
-                                    // Report button
+                                    
                                     ElevatedButton.icon(
                                       onPressed: () => _showReportDialog(
                                         app.jobseekerId,
@@ -432,4 +429,3 @@ class _ReportJobseekerListDialogState extends State<ReportJobseekerListDialog> {
     );
   }
 }
-

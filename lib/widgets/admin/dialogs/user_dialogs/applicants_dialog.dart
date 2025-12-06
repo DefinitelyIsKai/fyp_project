@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../models/user/post.dart';
 import '../../../../models/user/application.dart';
@@ -15,7 +15,6 @@ import '../../../../pages/user/profile/public_profile_page.dart';
 import '../../../../pages/user/message/messaging_page.dart';
 import '../../../../widgets/admin/dialogs/user_dialogs/report_jobseeker_dialog.dart';
 
-/// Dialog for viewing and managing applicants for a post
 class ApplicantsDialog extends StatefulWidget {
   final Post post;
   final ApplicationService applicationService;
@@ -56,7 +55,7 @@ class _ApplicantsDialogState extends State<ApplicantsDialog> {
     } catch (_) {
       _jobseekerNames[userId] = 'Unknown';
     }
-    // Defer setState to avoid calling during build
+    
     if (mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -186,13 +185,12 @@ class _ApplicantsDialogState extends State<ApplicantsDialog> {
     String jobseekerId,
     String jobseekerName,
   ) async {
-    // Check if already reported
+    
     final hasReported = await _reportService.hasReportedJobseeker(
       jobseekerId,
       widget.post.id,
     );
 
-    // Show confirmation if already reported
     if (hasReported) {
       final confirmed = await DialogUtils.showConfirmationDialog(
         context: context,
@@ -298,7 +296,7 @@ class _ApplicantsDialogState extends State<ApplicantsDialog> {
                       padding: const EdgeInsets.only(right: 8),
                       child: TextButton.icon(
                         onPressed: () async {
-                          // Show confirmation dialog
+                          
                           final confirmed = await DialogUtils.showConfirmationDialog(
                             context: context,
                             title: 'Mark as Completed',
@@ -548,12 +546,10 @@ class _ApplicantsDialogState extends State<ApplicantsDialog> {
                                         );
                                       }
 
-                                      // Add divider before report option
                                       if (items.isNotEmpty) {
                                         items.add(const PopupMenuDivider());
                                       }
 
-                                      // Always show report option
                                       final hasReported = reportSnapshot.data ?? false;
                                       items.add(
                                         PopupMenuItem<String>(
@@ -604,4 +600,3 @@ class _ApplicantsDialogState extends State<ApplicantsDialog> {
     );
   }
 }
-

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/user_model.dart';
 import 'package:fyp_project/services/admin/user_service.dart';
 import 'package:fyp_project/pages/admin/user_management/user_detail_page.dart';
@@ -58,7 +58,6 @@ class _UserActionsPageState extends State<UserActionsPage> {
       final suspended = await _userService.getSuspendedUsers();
       if (!mounted) return;
       
-      // Apply current search filter to the new data
       final query = _searchController.text.toLowerCase();
       final filtered = suspended.where((user) {
         if (query.isEmpty) return true;
@@ -110,13 +109,11 @@ class _UserActionsPageState extends State<UserActionsPage> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // Header Section
+                
                 _buildHeaderSection(),
                 
-                // Search Bar
                 _buildSearchSection(),
                 
-                // Users List
                 Expanded(
                   child: RefreshIndicator(
                     onRefresh: _loadUsers,
@@ -265,14 +262,13 @@ class _UserActionsPageState extends State<UserActionsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header Row
+                
                 Row(
                   children: [
-                    // Avatar with status
+                    
                     _buildUserAvatar(user),
                     const SizedBox(width: 16),
 
-                    // User Info
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -291,7 +287,7 @@ class _UserActionsPageState extends State<UserActionsPage> {
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              // Status Badge
+                              
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                 decoration: BoxDecoration(
@@ -341,7 +337,6 @@ class _UserActionsPageState extends State<UserActionsPage> {
 
                 const SizedBox(height: 12),
 
-                // Role
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
@@ -368,7 +363,6 @@ class _UserActionsPageState extends State<UserActionsPage> {
 
                 const SizedBox(height: 16),
 
-                // Action Button
                 _buildUnsuspendButton(user),
               ],
             ),
@@ -460,7 +454,6 @@ class _UserActionsPageState extends State<UserActionsPage> {
     );
   }
 
-
   Widget _buildEmptyState({required IconData icon, required String title, required String subtitle}) {
     return CustomScrollView(
       slivers: [
@@ -513,7 +506,7 @@ class _UserActionsPageState extends State<UserActionsPage> {
   }
 
   Future<void> _unsuspendUser(UserModel user) async {
-    // Show loading dialog
+    
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -560,7 +553,6 @@ class _UserActionsPageState extends State<UserActionsPage> {
     try {
       final result = await _userService.unsuspendUserWithReset(user.id);
       
-      // Close loading dialog
       if (mounted) {
         Navigator.of(context).pop();
       }
@@ -573,7 +565,7 @@ class _UserActionsPageState extends State<UserActionsPage> {
       }
       _loadUsers();
     } catch (e) {
-      // Close loading dialog
+      
       if (mounted) {
         Navigator.of(context).pop();
       }

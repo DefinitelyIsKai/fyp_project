@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../../../../services/user/availability_service.dart';
@@ -38,18 +38,16 @@ class BookedSlotDialog extends StatelessWidget {
         };
       }
 
-      // Load jobseeker data
       final userDoc = await firestore.collection('users').doc(jobseekerId).get();
       final jobseekerName = userDoc.exists
           ? (userDoc.data()?['fullName'] as String? ?? 'Unknown')
           : 'Unknown';
       final email = userDoc.data()?['email'] as String? ?? 'No email';
 
-      // Load post title from matchId (could be Application ID or JobMatch ID)
       String? postTitle;
       if (matchId != null) {
         try {
-          // Try to get as Application first
+          
           final applicationDoc = await firestore.collection('applications').doc(matchId).get();
           if (applicationDoc.exists) {
             final appData = applicationDoc.data();
@@ -59,16 +57,16 @@ class BookedSlotDialog extends StatelessWidget {
               postTitle = post?.title;
             }
           } else {
-            // Try to get as JobMatch
+            
             final jobMatchDoc = await firestore.collection('job_matches').doc(matchId).get();
             if (jobMatchDoc.exists) {
               final matchData = jobMatchDoc.data();
-              // JobMatch has jobTitle directly, but we can also get from post
+              
               final jobTitle = matchData?['jobTitle'] as String?;
               if (jobTitle != null && jobTitle.isNotEmpty) {
                 postTitle = jobTitle;
               } else {
-                // Fallback: get from post
+                
                 final jobId = matchData?['jobId'] as String?;
                 if (jobId != null) {
                   final post = await postService.getById(jobId);
@@ -116,7 +114,7 @@ class BookedSlotDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
+            
             Padding(
               padding: const EdgeInsets.all(20),
               child: Row(
@@ -176,7 +174,7 @@ class BookedSlotDialog extends StatelessWidget {
               ),
             ),
             Divider(height: 1, thickness: 1, color: Colors.grey[200]),
-            // Content
+            
             Flexible(
               child: FutureBuilder<Map<String, dynamic>>(
                 future: _loadBookedSlotData(),
@@ -197,7 +195,6 @@ class BookedSlotDialog extends StatelessWidget {
                   final email = data['email'] as String? ?? 'No email';
                   final postTitle = data['postTitle'] as String?;
 
-                  // Get initials for avatar
                   final initials = jobseekerName
                       .split(' ')
                       .where((word) => word.isNotEmpty)
@@ -210,7 +207,7 @@ class BookedSlotDialog extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Jobseeker Info Card
+                        
                         Container(
                           padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
@@ -227,7 +224,7 @@ class BookedSlotDialog extends StatelessWidget {
                           ),
                           child: Column(
                             children: [
-                              // Avatar and Name
+                              
                               Row(
                                 children: [
                                   Container(
@@ -326,7 +323,7 @@ class BookedSlotDialog extends StatelessWidget {
                                 ],
                               ),
                               const SizedBox(height: 20),
-                              // Job Post Title
+                              
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 12,
@@ -367,7 +364,7 @@ class BookedSlotDialog extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 20),
-                        // Booking Information
+                        
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
@@ -446,7 +443,7 @@ class BookedSlotDialog extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 20),
-                        // Action Button
+                        
                         SizedBox(
                           width: double.infinity,
                           child: OutlinedButton.icon(
@@ -497,4 +494,3 @@ class BookedSlotDialog extends StatelessWidget {
     );
   }
 }
-

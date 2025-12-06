@@ -1,6 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-/// A reusable detail row widget for user detail pages with icon support
 class UserDetailRow extends StatelessWidget {
   final String label;
   final String value;
@@ -66,4 +65,3 @@ class UserDetailRow extends StatelessWidget {
     );
   }
 }
-

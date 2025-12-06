@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 class ContentAnalyticsDateRangeSelector extends StatelessWidget {
   final String dateRangeText;
@@ -75,4 +75,3 @@ class ContentAnalyticsDateRangeSelector extends StatelessWidget {
     );
   }
 }
-

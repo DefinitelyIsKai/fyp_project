@@ -1,8 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-/// Dialog for previewing reward distribution before confirming
 class RewardPreviewDialog {
-  /// Shows the reward preview dialog as a bottom sheet
+  
   static Future<bool> show({
     required BuildContext context,
     required String month,
@@ -69,7 +68,7 @@ class _RewardPreviewDialogContent extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
+            
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -104,7 +103,7 @@ class _RewardPreviewDialogContent extends StatelessWidget {
                 ],
               ),
             ),
-            // Content
+            
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
@@ -112,7 +111,7 @@ class _RewardPreviewDialogContent extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Summary Card
+                    
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -178,7 +177,6 @@ class _RewardPreviewDialogContent extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     
-                    // Criteria
                     Text(
                       'Criteria:',
                       style: TextStyle(
@@ -203,7 +201,7 @@ class _RewardPreviewDialogContent extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      // Simplify list - build directly without ListView.builder to prevent blocking
+                      
                       ...eligibleUsers.take(10).map((user) {
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 4),
@@ -236,7 +234,7 @@ class _RewardPreviewDialogContent extends StatelessWidget {
                                       ),
                                     ),
                                     Text(
-                                      'Rating: ${(user['averageRating'] as num?)?.toStringAsFixed(1) ?? '0.0'}, Posts: ${user['completedTasks'] ?? 0}',
+                                      'Rating: ${(user['averageRating'] as num?)?.toStringAsFixed(1) ?? '0.0'}, Posts (This Month): ${user['completedTasks'] ?? 0}',
                                       style: TextStyle(
                                         fontSize: 11,
                                         color: Colors.grey[600],
@@ -308,7 +306,7 @@ class _RewardPreviewDialogContent extends StatelessWidget {
                 ),
               ),
             ),
-            // Actions
+            
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -428,4 +426,3 @@ class _RewardPreviewDialogContent extends StatelessWidget {
     );
   }
 }
-

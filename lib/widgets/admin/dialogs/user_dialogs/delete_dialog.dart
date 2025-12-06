@@ -1,10 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/user_model.dart';
 import 'package:fyp_project/services/admin/user_service.dart';
 
-/// Dialog for deleting user accounts
 class DeleteDialog {
-  /// Shows the delete dialog as a bottom sheet
+  
   static Future<void> show({
     required BuildContext context,
     required UserModel user,
@@ -34,7 +33,7 @@ class DeleteDialog {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header
+              
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -61,7 +60,7 @@ class DeleteDialog {
                   ],
                 ),
               ),
-              // Content
+              
               Flexible(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(24),
@@ -152,7 +151,7 @@ class DeleteDialog {
                         ),
                       ],
                       const SizedBox(height: 24),
-                      // Action Buttons
+                      
                       Row(
                         children: [
                           Expanded(

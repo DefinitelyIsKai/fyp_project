@@ -1,4 +1,4 @@
-class AnalyticsModel {
+﻿class AnalyticsModel {
   final DateTime date;
   final int totalUsers;
   final int activeUsers;
@@ -17,13 +17,12 @@ class AnalyticsModel {
   final int resolvedReports;
   final int dismissedReports;
   final int profileViews;
-  final double engagementRate; // percentage
+  final double engagementRate; 
   final int totalCreditsUsed;
   final int activeSubscriptions;
   final double revenue;
   final int creditPurchases;
 
-// All this is percentage
   final double userGrowthRate; 
   final double activeUserGrowth; 
   final double registrationGrowth; 
@@ -132,7 +131,6 @@ class AnalyticsModel {
       revenue: (json['revenue'] ?? 0).toDouble(),
       creditPurchases: json['creditPurchases'] ?? 0,
 
-      // Growth rates
       userGrowthRate: (json['userGrowthRate'] ?? 0).toDouble(),
       activeUserGrowth: (json['activeUserGrowth'] ?? 0).toDouble(),
       registrationGrowth: (json['registrationGrowth'] ?? 0).toDouble(),
@@ -177,7 +175,6 @@ class AnalyticsModel {
       'revenue': revenue,
       'creditPurchases': creditPurchases,
 
-      // Growth rates
       'userGrowthRate': userGrowthRate,
       'activeUserGrowth': activeUserGrowth,
       'registrationGrowth': registrationGrowth,
@@ -196,7 +193,6 @@ class AnalyticsModel {
     };
   }
 
-  // Helper method to create a copy
   AnalyticsModel copyWith({
     DateTime? date,
     int? totalUsers,

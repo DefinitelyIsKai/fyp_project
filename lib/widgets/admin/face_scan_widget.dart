@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
@@ -7,12 +7,10 @@ import 'package:google_mlkit_commons/google_mlkit_commons.dart';
 import 'package:image/image.dart' as img;
 import '../../services/admin/face_recognition_service.dart';
 
-/// 人脸扫描组件
-/// 显示相机预览并支持拍照
 class FaceScanWidget extends StatefulWidget {
   final Function(img.Image image, Face? face)? onImageCaptured;
   final String? instructionText;
-  final bool showFaceDetection; // 是否显示人脸检测框
+  final bool showFaceDetection; 
 
   const FaceScanWidget({
     super.key,
@@ -53,7 +51,6 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
         return;
       }
 
-      // 使用前置相机
       final frontCamera = _cameras!.firstWhere(
         (camera) => camera.lensDirection == CameraLensDirection.front,
         orElse: () => _cameras!.first,
@@ -61,7 +58,7 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
 
       _cameraController = CameraController(
         frontCamera,
-        ResolutionPreset.high, // 使用高分辨率以便拍照
+        ResolutionPreset.high, 
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.yuv420,
       );
@@ -72,7 +69,7 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
         setState(() {
           _isInitialized = true;
         });
-        // 如果启用人脸检测，启动图像流
+        
         if (widget.showFaceDetection) {
           _startImageStream();
         }
@@ -92,9 +89,8 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
     if (_cameraController == null || !_cameraController!.value.isInitialized) return;
     if (!mounted) return;
     
-    // Check if stream is already running
     if (_cameraController!.value.isStreamingImages) {
-      return; // Already streaming, don't start again
+      return; 
     }
     
     try {
@@ -108,7 +104,6 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
     }
   }
 
-  /// 处理图像用于实时人脸检测（仅用于显示检测框）
   Future<void> _processImageForDetection(CameraImage cameraImage) async {
     if (_isProcessing || _isCapturing) return;
     if (!mounted) return;
@@ -118,7 +113,7 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
     });
 
     try {
-      // 转换为 InputImage
+      
       final inputImage = _cameraImageToInputImage(cameraImage);
       if (inputImage == null) {
         if (mounted) {
@@ -127,7 +122,6 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
         return;
       }
 
-      // 检测人脸（仅用于显示检测框）
       final faces = await _faceService.detectFaces(inputImage);
 
       if (!mounted) return;
@@ -146,7 +140,6 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
     }
   }
 
-  /// 拍照并返回图像
   Future<void> captureImage() async {
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
       print('Camera not initialized');
@@ -163,21 +156,19 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
     });
 
     try {
-      // Stop image stream properly (if running)
+      
       if (widget.showFaceDetection && _cameraController!.value.isStreamingImages) {
         try {
           await _cameraController!.stopImageStream();
-          // Wait a bit to ensure stream is fully stopped and buffers are released
+          
           await Future.delayed(const Duration(milliseconds: 150));
         } catch (e) {
           print('Error stopping image stream: $e');
         }
       }
 
-      // Take picture
       final XFile photo = await _cameraController!.takePicture();
       
-      // 读取照片文件
       final bytes = await photo.readAsBytes();
       final image = img.decodeImage(bytes);
       
@@ -185,7 +176,7 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
         print('无法解码照片');
         if (mounted) {
           setState(() => _isCapturing = false);
-          // 重新启动图像流
+          
           if (widget.showFaceDetection) {
             _startImageStream();
           }
@@ -193,11 +184,10 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
         return;
       }
 
-      // 如果启用人脸检测，尝试检测人脸
       Face? detectedFace;
       if (widget.showFaceDetection) {
         try {
-          // 将 img.Image 转换为 InputImage 进行人脸检测
+          
           final inputImage = _imageToInputImage(image);
           if (inputImage != null) {
             final faces = await _faceService.detectFaces(inputImage);
@@ -207,18 +197,16 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
           }
         } catch (e) {
           print('人脸检测失败: $e');
-          // 即使检测失败，也继续处理图像
+          
         }
       }
 
-      // 回调
       if (mounted && widget.onImageCaptured != null) {
         widget.onImageCaptured!(image, detectedFace);
       }
 
-      // Restart image stream (if face detection is enabled)
       if (widget.showFaceDetection && mounted) {
-        // Wait a bit before restarting stream to ensure camera is ready
+        
         await Future.delayed(const Duration(milliseconds: 200));
         if (mounted && _cameraController?.value.isInitialized == true) {
           _startImageStream();
@@ -232,7 +220,7 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
       print('Capture failed: $e');
       if (mounted) {
         setState(() => _isCapturing = false);
-        // Restart image stream with delay
+        
         if (widget.showFaceDetection) {
           await Future.delayed(const Duration(milliseconds: 200));
           if (mounted && _cameraController?.value.isInitialized == true) {
@@ -243,19 +231,17 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
     }
   }
 
-  /// 将 img.Image 转换为 InputImage（用于拍照后的人脸检测）
   InputImage? _imageToInputImage(img.Image image) {
     try {
-      // 将图像转换为字节数组（RGBA 格式）
+      
       final bytes = image.getBytes();
       
-      // 计算每行的字节数（RGBA = 4 bytes per pixel）
       final bytesPerRow = image.width * 4;
       
       final metadata = InputImageMetadata(
         size: Size(image.width.toDouble(), image.height.toDouble()),
         rotation: InputImageRotation.rotation0deg,
-        format: InputImageFormat.bgra8888, // 使用 BGRA 格式
+        format: InputImageFormat.bgra8888, 
         bytesPerRow: bytesPerRow,
       );
 
@@ -265,7 +251,7 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
       );
     } catch (e) {
       print('InputImage 转换失败: $e');
-      // 如果转换失败，跳过人脸检测，直接使用整张图片
+      
       return null;
     }
   }
@@ -274,20 +260,17 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
     try {
       final imageRotation = InputImageRotation.rotation0deg;
       
-      // 检查图像格式
       if (cameraImage.format.group == ImageFormatGroup.yuv420) {
-        // YUV420 格式 - 转换为 NV21 格式（ML Kit 更支持）
+        
         final yPlane = cameraImage.planes[0];
         final uPlane = cameraImage.planes.length > 1 ? cameraImage.planes[1] : null;
         final vPlane = cameraImage.planes.length > 2 ? cameraImage.planes[2] : null;
 
-        // 创建 NV21 格式的字节数组
-        // NV21: Y 平面 + 交错的 VU 平面
         final yBytes = yPlane.bytes;
         final uvBytes = WriteBuffer();
         
         if (uPlane != null && vPlane != null) {
-          // 交错 U 和 V 字节 (VU 顺序)
+          
           final uBytes = uPlane.bytes;
           final vBytes = vPlane.bytes;
           final uvLength = uBytes.length;
@@ -297,13 +280,11 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
           }
         }
         
-        // 合并 Y 和 UV 数据
         final nv21Bytes = WriteBuffer();
         nv21Bytes.putUint8List(yBytes);
         nv21Bytes.putUint8List(uvBytes.done().buffer.asUint8List());
         final bytes = nv21Bytes.done().buffer.asUint8List();
 
-        // 使用 NV21 格式
         final metadata = InputImageMetadata(
           size: Size(cameraImage.width.toDouble(), cameraImage.height.toDouble()),
           rotation: imageRotation,
@@ -316,7 +297,7 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
           metadata: metadata,
         );
       } else if (cameraImage.format.group == ImageFormatGroup.bgra8888) {
-        // BGRA8888 格式
+        
         final format = InputImageFormat.bgra8888;
         final plane = cameraImage.planes[0];
         
@@ -345,17 +326,15 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
   void dispose() {
     _isDisposing = true;
     
-    // Stop image stream if running (must be done synchronously in dispose)
     if (_cameraController?.value.isStreamingImages == true) {
       try {
         _cameraController?.stopImageStream();
-        // Small delay to allow buffers to be released
+        
       } catch (e) {
         print('Error stopping image stream in dispose: $e');
       }
     }
     
-    // Dispose camera controller
     _cameraController?.dispose();
     _cameraController = null;
     
@@ -372,16 +351,16 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
 
     return Stack(
       children: [
-        // 相机预览
+        
         SizedBox(
           width: double.infinity,
           height: double.infinity,
           child: CameraPreview(_cameraController!),
         ),
-        // 人脸检测框
+        
         if (widget.showFaceDetection && _detectedFace != null)
           _buildFaceBox(_detectedFace!),
-        // 提示信息
+        
         Positioned(
           top: 40,
           left: 0,
@@ -447,14 +426,11 @@ class _FaceScanWidgetState extends State<FaceScanWidget> {
     final size = MediaQuery.of(context).size;
     final cameraSize = _cameraController!.value.previewSize!;
     
-    // 计算缩放比例
     final scaleX = size.width / cameraSize.height;
     final scaleY = size.height / cameraSize.width;
     
-    // 获取人脸边界框
     final boundingBox = face.boundingBox;
     
-    // 转换坐标（相机预览是横向的，需要旋转）
     final left = boundingBox.top * scaleX;
     final top = (cameraSize.width - boundingBox.right) * scaleY;
     final width = boundingBox.height * scaleX;

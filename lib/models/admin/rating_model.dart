@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum RatingStatus {
   active,
@@ -10,8 +10,8 @@ enum RatingStatus {
 
 class RatingModel {
   final String id;
-  final String recruiterId; // Changed from employerId
-  final String jobseekerId; // Changed from employeeId
+  final String recruiterId; 
+  final String jobseekerId; 
   final String postId;
   final double rating;
   final String? comment;
@@ -41,7 +41,7 @@ class RatingModel {
 
   factory RatingModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
-    // Support both old (employerId/employeeId) and new (recruiterId/jobseekerId) field names
+    
     return RatingModel(
       id: doc.id,
       recruiterId: data['recruiterId'] ?? data['employerId'] ?? '',
@@ -86,4 +86,3 @@ class RatingModel {
     };
   }
 }
-

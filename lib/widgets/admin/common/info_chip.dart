@@ -1,6 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-/// A reusable info chip widget with icon and text
 class InfoChip extends StatelessWidget {
   final String text;
   final Color color;
@@ -40,4 +39,3 @@ class InfoChip extends StatelessWidget {
     );
   }
 }
-

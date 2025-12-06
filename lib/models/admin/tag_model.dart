@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 
 class TagModel {
   final String id;
@@ -152,7 +152,6 @@ class TagCategoryModel {
     );
   }
 
-  // Helper methods
   int get activeTagsCount => tags.where((tag) => tag.isActive).length;
 
   int get totalTagsCount => tags.length;

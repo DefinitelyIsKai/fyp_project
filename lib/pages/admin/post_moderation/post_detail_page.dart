@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/job_post_model.dart';
 import 'package:fyp_project/services/admin/post_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -29,10 +29,9 @@ class _PostDetailPageState extends State<PostDetailPage> {
   Future<void> _approvePost() async {
     setState(() => _isProcessing = true);
     try {
-      // Approve the post first
+      
       await _postService.approvePost(widget.post.id);
       
-      // Deduct credits from post owner (deduct both balance and heldCredits)
       final ownerId = widget.post.ownerId;
       if (ownerId != null && ownerId.isNotEmpty) {
         try {
@@ -44,7 +43,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
           );
           
           if (success) {
-            // Send notification to post owner about credit deduction
+            
             try {
               await _notificationService.notifyWalletDebit(
                 userId: ownerId,
@@ -57,14 +56,14 @@ class _PostDetailPageState extends State<PostDetailPage> {
                 },
               );
             } catch (e) {
-              // Log but don't fail - notification is not critical
+              
               debugPrint('Error sending credit deduction notification: $e');
             }
           } else {
             debugPrint('Warning: Failed to deduct credits for post ${widget.post.id}');
           }
         } catch (e) {
-          // Log error but don't fail approval - credits can be processed later
+          
           debugPrint('Error deducting credits for post ${widget.post.id}: $e');
         }
       }
@@ -107,10 +106,8 @@ class _PostDetailPageState extends State<PostDetailPage> {
     try {
       final reason = _rejectionReasonController.text.trim();
       
-      // Reject the post first
       await _postService.rejectPost(widget.post.id, reason);
       
-      // Release held credits for post owner (deduct from heldCredits )
       final ownerId = widget.post.ownerId;
       if (ownerId != null && ownerId.isNotEmpty) {
         try {
@@ -122,7 +119,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
           );
           
           if (success) {
-            // Send notification to post owner about credit release
+            
             try {
               await _notificationService.notifyWalletCredit(
                 userId: ownerId,
@@ -136,14 +133,14 @@ class _PostDetailPageState extends State<PostDetailPage> {
                 },
               );
             } catch (e) {
-              // Log but don't fail - notification is not critical
+              
               debugPrint('Error sending credit release notification: $e');
             }
           } else {
             debugPrint('Warning: Failed to release credits for post ${widget.post.id}');
           }
         } catch (e) {
-          // Log error but don't fail rejection - credits can be processed later
+          
           debugPrint('Error releasing credits for post ${widget.post.id}: $e');
         }
       }
@@ -505,7 +502,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header Section
+            
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(24),
@@ -561,7 +558,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
 
             const SizedBox(height: 20),
 
-            // Owner/Author Section
             Card(
               elevation: 1,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -606,7 +602,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
 
             const SizedBox(height: 20),
 
-            // Location Section
             Card(
               elevation: 1,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -653,7 +648,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
 
             const SizedBox(height: 20),
 
-            // Description Section
             Card(
               elevation: 1,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -698,7 +692,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
 
             const SizedBox(height: 20),
 
-            // Skills Section
             if (widget.post.requiredSkills.isNotEmpty)
               Card(
                 elevation: 1,
@@ -743,7 +736,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
 
             const SizedBox(height: 20),
 
-            // Tags Section
             if (widget.post.tags.isNotEmpty)
               Card(
                 elevation: 1,
@@ -786,7 +778,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
                 ),
               ),
 
-            // Event Information
             if (widget.post.event != null || widget.post.eventStartDate != null || widget.post.eventEndDate != null)
               Column(
                 children: [
@@ -837,7 +828,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
                 ],
               ),
 
-            // Additional Information
             const SizedBox(height: 20),
             Card(
               elevation: 1,
@@ -922,7 +912,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
               ),
             ),
 
-            // Attachments
             if (widget.post.attachments != null && widget.post.attachments!.isNotEmpty) ...[
               const SizedBox(height: 20),
               Card(
@@ -974,7 +963,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
 
             const SizedBox(height: 20),
 
-            // Rejection Section
             if (widget.post.status == 'pending' || widget.post.status == 'rejected')
               Card(
                 elevation: 1,
@@ -1060,7 +1048,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
 
             const SizedBox(height: 24),
 
-            // Action Buttons
             if (widget.post.status == 'pending')
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8),

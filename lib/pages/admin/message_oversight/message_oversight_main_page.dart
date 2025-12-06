@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/pages/admin/message_oversight/flagged_content_page.dart';
 import 'package:fyp_project/pages/admin/message_oversight/manage_ratings_page.dart';
@@ -40,7 +40,7 @@ class MessageOversightMainPage extends StatelessWidget {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header Section
+          
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -69,17 +69,14 @@ class MessageOversightMainPage extends StatelessWidget {
             ),
           ),
 
-          // Real-time Stats Section
           _buildStatsSection(),
 
-          // Main Options Grid
           Expanded(child: _buildOptionsGrid(context)),
         ],
       ),
     );
   }
 
-  // REAL-TIME STATS
   Widget _buildStatsSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
@@ -121,7 +118,6 @@ class MessageOversightMainPage extends StatelessWidget {
     );
   }
 
-  // Grid options
   Widget _buildOptionsGrid(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -133,7 +129,7 @@ class MessageOversightMainPage extends StatelessWidget {
           childAspectRatio: 0.9,
         ),
         children: [
-          // Manage Rating Card
+          
           _ManagementCard(
             title: 'Manage Rating',
             description: 'View and manage user ratings and reviews',
@@ -150,7 +146,6 @@ class MessageOversightMainPage extends StatelessWidget {
             badgeCount: 0,
           ),
 
-          // Flagged Content Card with real-time badge
           StreamBuilder<int>(
             stream: _pendingReportsCountStream(),
             builder: (context, snapshot) {
@@ -178,7 +173,6 @@ class MessageOversightMainPage extends StatelessWidget {
   }
 }
 
-// Management Card
 class _ManagementCard extends StatelessWidget {
   final String title;
   final String description;
@@ -215,7 +209,7 @@ class _ManagementCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Icon with badge
+                  
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -227,7 +221,6 @@ class _ManagementCard extends StatelessWidget {
 
                   const SizedBox(height: 12),
 
-                  // Title
                   SizedBox(
                     height: 40,
                     child: Text(
@@ -244,7 +237,6 @@ class _ManagementCard extends StatelessWidget {
 
                   const SizedBox(height: 6),
 
-                  // Description
                   Expanded(
                     child: Text(
                       description,
@@ -260,7 +252,6 @@ class _ManagementCard extends StatelessWidget {
 
                   const SizedBox(height: 8),
 
-                  // Footer
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -282,7 +273,6 @@ class _ManagementCard extends StatelessWidget {
                 ],
               ),
 
-              // Badge in top-right corner
               if (badgeCount > 0)
                 Positioned(
                   top: 8,
@@ -311,7 +301,6 @@ class _ManagementCard extends StatelessWidget {
   }
 }
 
-// Stat Card
 class _StatCard extends StatelessWidget {
   final String title;
   final String value;
@@ -381,4 +370,3 @@ class _StatCard extends StatelessWidget {
     );
   }
 }
-

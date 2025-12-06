@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/pages/admin/user_management/view_users_page.dart';
@@ -7,7 +7,6 @@ import 'package:fyp_project/pages/admin/user_management/user_analytics_page.dart
 import 'package:fyp_project/pages/admin/user_management/wallet_management_page.dart';
 import 'package:fyp_project/services/admin/auth_service.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
-
 
 class UserManagementPage extends StatelessWidget {
   const UserManagementPage({super.key});
@@ -38,7 +37,6 @@ class UserManagementPage extends StatelessWidget {
     );
   }
 
-  // Header
   Widget _buildHeaderSection() {
     return Container(
       width: double.infinity,
@@ -69,13 +67,12 @@ class UserManagementPage extends StatelessWidget {
     );
   }
 
-  // REAL-TIME STATS
   Widget _buildStatsSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       child: Row(
         children: [
-          // Total Users
+          
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -95,7 +92,6 @@ class UserManagementPage extends StatelessWidget {
 
           const SizedBox(width: 12),
 
-          // Active Today
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -119,7 +115,6 @@ class UserManagementPage extends StatelessWidget {
 
           const SizedBox(width: 12),
 
-          // Suspended
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -142,7 +137,6 @@ class UserManagementPage extends StatelessWidget {
     );
   }
 
-  // Grid options
   Widget _buildOptionsGrid(BuildContext context) {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentAdmin = authService.currentAdmin;
@@ -187,7 +181,6 @@ class UserManagementPage extends StatelessWidget {
       ),
     ];
 
-    // Add Wallet Management card only if user is not staff
     if (userRole != 'staff') {
       cards.add(
         _ManagementCard(
@@ -219,7 +212,6 @@ class UserManagementPage extends StatelessWidget {
   }
 }
 
-// Management Card
 class _ManagementCard extends StatelessWidget {
   final String title;
   final String description;
@@ -252,7 +244,7 @@ class _ManagementCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Icon
+              
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -264,7 +256,6 @@ class _ManagementCard extends StatelessWidget {
 
               const SizedBox(height: 12),
 
-              // Title
               SizedBox(
                 height: 40, 
                 child: Text(
@@ -281,7 +272,6 @@ class _ManagementCard extends StatelessWidget {
 
               const SizedBox(height: 6), 
 
-              // Description
               Expanded(
                 child: Text(
                   description,
@@ -297,7 +287,6 @@ class _ManagementCard extends StatelessWidget {
 
               const SizedBox(height: 8),
 
-              // Footer
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -324,7 +313,6 @@ class _ManagementCard extends StatelessWidget {
   }
 }
 
-// Stat Card (Top Dashboard Stats)
 class _StatCard extends StatelessWidget {
   final String title;
   final String value;

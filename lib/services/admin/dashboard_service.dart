@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 class DashboardService {
@@ -11,13 +11,12 @@ class DashboardService {
           .where('status', isEqualTo: 'pending')
           .get();
       
-      // Filter out draft posts (only count isDraft: false or null)
       int count = 0;
       for (final doc in snapshot.docs) {
         final data = doc.data() as Map<String, dynamic>?;
         if (data == null) continue;
         final isDraft = data['isDraft'] as bool?;
-        // Count only if isDraft is not true (i.e., false or null)
+        
         if (isDraft != true) {
           count++;
         }
@@ -31,26 +30,25 @@ class DashboardService {
 
   Future<int> getActiveUsersCount() async {
     try {
-      // Query for users with status 'Active'
+      
       final snapshot = await _firestore
           .collection('users')
           .where('status', isEqualTo: 'Active')
           .get();
       
-      // Filter to ensure isActive is also true (in case some have status Active but isActive false)
       int count = 0;
       for (final doc in snapshot.docs) {
         final data = doc.data() as Map<String, dynamic>?;
         if (data == null) continue;
         final isActive = data['isActive'] as bool?;
-        // Count only if status is Active AND isActive is true
+        
         if (isActive == true) {
           count++;
         }
       }
       return count;
     } catch (e) {
-      // If query fails, try fallback: Get all users and filter in memory
+      
       try {
         final allUsers = await _firestore.collection('users').get();
         int count = 0;
@@ -59,14 +57,14 @@ class DashboardService {
           if (data == null) continue;
           final status = data['status'] as String?;
           final isActive = data['isActive'] as bool?;
-          // Count users that are both Active status and isActive true
+          
           if (status == 'Active' && isActive == true) {
             count++;
           }
         }
         return count;
       } catch (e2) {
-        // Handle permission errors gracefully
+        
         debugPrint('Error getting active users count: $e2');
         return 0;
       }
@@ -81,16 +79,14 @@ class DashboardService {
     return snapshot.docs.length;
   }
 
-  /// Get count of unresolved reports (pending + underReview)
   Future<int> getUnresolvedReportsCount() async {
     try {
-      // Get pending reports
+      
       final pendingSnapshot = await _firestore
           .collection('reports')
           .where('status', isEqualTo: 'pending')
           .get();
       
-      // Get under review reports
       final underReviewSnapshot = await _firestore
           .collection('reports')
           .where('status', isEqualTo: 'underReview')
@@ -98,7 +94,7 @@ class DashboardService {
       
       return pendingSnapshot.docs.length + underReviewSnapshot.docs.length;
     } catch (e) {
-      // If query fails, try getting all reports and filtering
+      
       try {
         final allReports = await _firestore.collection('reports').get();
         int count = 0;
@@ -117,7 +113,6 @@ class DashboardService {
     }
   }
 
-  /// Stream unresolved reports count in real-time
   Stream<int> streamUnresolvedReportsCount() {
     return _firestore.collection('reports').snapshots().map((snapshot) {
       int count = 0;
@@ -131,33 +126,31 @@ class DashboardService {
       }
       return count;
     }).handleError((error) {
-      // Handle permission errors gracefully
-      // Return 0 if permission is denied
+      
       return 0;
     });
   }
 
-  /// Stream pending posts count in real-time (excluding drafts)
   Stream<int> streamPendingPostsCount() {
     return _firestore
         .collection('posts')
         .where('status', isEqualTo: 'pending')
         .snapshots()
         .map((snapshot) {
-      // Filter out draft posts (only count isDraft: false or null)
+      
       int count = 0;
       for (final doc in snapshot.docs) {
         final data = doc.data() as Map<String, dynamic>?;
         if (data == null) continue;
         final isDraft = data['isDraft'] as bool?;
-        // Count only if isDraft is not true (i.e., false or null)
+        
         if (isDraft != true) {
           count++;
         }
       }
       return count;
     }).handleError((error) {
-      // Handle permission errors gracefully
+      
       debugPrint('Error streaming pending posts count: $error');
       return 0;
     });

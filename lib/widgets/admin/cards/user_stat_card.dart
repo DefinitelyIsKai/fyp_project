@@ -1,7 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-/// A reusable stat card widget specifically for user detail pages
-/// This version has a simpler vertical layout compared to the general StatCard
 class UserStatCard extends StatelessWidget {
   final String title;
   final String value;
@@ -53,4 +51,3 @@ class UserStatCard extends StatelessWidget {
     );
   }
 }
-

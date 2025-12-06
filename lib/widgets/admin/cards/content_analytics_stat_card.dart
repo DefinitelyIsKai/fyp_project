@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 class ContentAnalyticsStatCard extends StatelessWidget {
   final String title;
@@ -68,4 +68,3 @@ class ContentAnalyticsStatCard extends StatelessWidget {
     );
   }
 }
-

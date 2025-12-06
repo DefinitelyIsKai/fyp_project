@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -38,7 +38,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   List<UserModel> _users = [];
   List<UserModel> _filteredUsers = [];
   List<String> _availableRoles = [];
-  List<RoleModel> _adminRoles = []; // Roles available for admin users
+  List<RoleModel> _adminRoles = []; 
   bool _isLoading = true;
   String _selectedRole = 'all';
   final TextEditingController _searchController = TextEditingController();
@@ -59,13 +59,11 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      // Check and auto unsuspend expired suspensions
+      
       await _userService.checkAndAutoUnsuspendExpiredUsers();
       
-      // Load users first (most important)
       final users = await _userService.getAllUsers();
       
-      // Load roles separately with error handling
       List<String> roles = [];
       List<RoleModel> adminRoles = [];
       
@@ -73,7 +71,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
         roles = await _userService.getAllRoles();
       } catch (e) {
         debugPrint('Error loading user roles: $e');
-        // Continue even if this fails
+        
       }
       
       try {
@@ -89,7 +87,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
         }).toList();
       } catch (e) {
         debugPrint('Error loading admin roles: $e');
-        // Continue even if this fails - users list is more important
+        
       }
 
       if (mounted) {
@@ -98,7 +96,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
           _availableRoles = roles;
           _adminRoles = adminRoles;
         });
-        // Apply current filters to update filtered list
+        
         _filterUsers();
       }
     } catch (e) {
@@ -153,7 +151,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   }
 
   String _getRoleDisplayName(String role) {
-    // Convert snake_case to Title Case
+    
     return role.replaceAll('_', ' ').split(' ').map((word) {
       if (word.isEmpty) return word;
       return word[0].toUpperCase() + word.substring(1).toLowerCase();
@@ -182,32 +180,27 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentAdmin = authService.currentAdmin;
     
-    // Cannot perform actions on yourself (view only)
     if (currentAdmin != null && currentAdmin.id == user.id) {
       return false;
     }
     
     final userRole = user.role.toLowerCase();
     
-    // If current user is HR and target user is Manager, cannot perform actions (only view)
     if (_isHR()) {
       if (userRole == 'manager') {
         return false;
       }
     }
     
-    // If current user is Staff, can only perform actions on Jobseeker and Recruiter
-    // Other roles (Manager, HR, Staff, etc.) are view only
     if (_isStaff()) {
-      // Only allow actions on Jobseeker and Recruiter
+      
       if (userRole == 'jobseeker' || userRole == 'recruiter') {
         return true;
       }
-      // All other roles are view only
+      
       return false;
     }
     
-    // Manager can perform actions on all users (except themselves)
     return true;
   }
 
@@ -219,7 +212,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          // View Profile Button (always available)
+          
           ElevatedButton.icon(
             onPressed: () async {
               final result = await Navigator.push(
@@ -228,7 +221,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                   builder: (_) => UserDetailPage(user: user),
                 ),
               );
-              // Refresh if an action was performed
+              
               if (result == true) {
                 _loadData();
               }
@@ -273,7 +266,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                 ),
               ),
             ] else ...[
-              // Warning Button
+              
               ElevatedButton.icon(
                 onPressed: () {
                   if (user.isSuspended) {
@@ -302,7 +295,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
               ),
               const SizedBox(width: 6),
 
-              // Direct Suspend Button (only show if not suspended)
               if (!user.isSuspended) ...[
                 ElevatedButton.icon(
                   onPressed: () {
@@ -326,7 +318,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                 const SizedBox(width: 6),
               ],
 
-              // Delete Button
               ElevatedButton.icon(
                 onPressed: () {
                   _showDeleteDialog(user);
@@ -363,9 +354,8 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     );
   }
 
-
   Future<void> _unsuspendUser(UserModel user) async {
-    // Show loading dialog
+    
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -390,7 +380,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
       final result = await _userService.unsuspendUserWithReset(user.id);
 
       if (!mounted) return;
-      Navigator.pop(context); // Close loading dialog
+      Navigator.pop(context); 
 
       if (result['success'] == true) {
         final userName = result['userName'];
@@ -402,7 +392,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
       _loadData();
     } catch (e) {
       if (!mounted) return;
-      Navigator.pop(context); // Close loading dialog
+      Navigator.pop(context); 
       _showSnackBar('Failed to unsuspend user: $e', isError: true);
     }
   }
@@ -417,8 +407,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     );
   }
 
-
-
   Future<void> _showDeleteDialog(UserModel user) async {
     await DeleteDialog.show(
       context: context,
@@ -430,7 +418,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   }
 
   Future<void> _reactivateUser(UserModel user) async {
-    // Show loading dialog
+    
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -455,7 +443,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
       final result = await _userService.reactivateUser(user.id);
 
       if (!mounted) return;
-      Navigator.pop(context); // Close loading dialog
+      Navigator.pop(context); 
 
       if (result['success'] == true) {
         final userName = result['userName'];
@@ -467,7 +455,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
       _loadData();
     } catch (e) {
       if (!mounted) return;
-      Navigator.pop(context); // Close loading dialog
+      Navigator.pop(context); 
       _showSnackBar('Failed to reactivate user: $e', isError: true);
     }
   }
@@ -495,7 +483,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
         backgroundColor: Colors.white,
         child: Column(
           children: [
-            // Search and Filter Section
+            
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -506,7 +494,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
               ),
               child: Column(
                 children: [
-                  // Search Bar
+                  
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -532,7 +520,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Filter Row with dynamic roles
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -576,7 +563,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
               ),
             ),
 
-            // Results Count
             if (!_isLoading && _filteredUsers.isNotEmpty)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -611,7 +597,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                 ),
               ),
 
-            // Users List
             Expanded(
               child: _isLoading
                   ? const Center(
@@ -689,7 +674,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Name and Status Row
+                                
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
@@ -755,7 +740,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                                 ),
                                 const SizedBox(height: 4),
 
-                                // Email
                                 Text(
                                   user.email,
                                   style: TextStyle(
@@ -766,7 +750,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                                 ),
                                 const SizedBox(height: 8),
 
-                                // Role and Joined Date
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
@@ -799,7 +782,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                                 ),
                                 const SizedBox(height: 12),
 
-                                // Action Buttons
                                 _buildActionButtons(user),
                               ],
                             ),
@@ -827,7 +809,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     );
   }
 
-  // Cache for decoded images to avoid re-decoding on every rebuild
   final Map<String, Uint8List> _imageCache = {};
 
   void _showImagePreview(String base64String) {
@@ -903,7 +884,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
       return await profilePicService.pickImageBase64(fromCamera: source == 'camera');
     } catch (e) {
       if (context.mounted) {
-        // Show user-friendly error notification
+        
         final errorMessage = e.toString().replaceFirst('Exception: ', '');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -941,7 +922,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   }
 
   void _showAddAdminDialog() {
-    // Save the page context before showing dialog
+    
     final pageContext = context;
     
     final nameController = TextEditingController();
@@ -960,13 +941,12 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     final selectedImageFileTypeNotifier = ValueNotifier<String?>(null);
     final isPickingImageNotifier = ValueNotifier<bool>(false);
     final isImageUploadedNotifier = ValueNotifier<bool>(false);
-    final faceDetectedNotifier = ValueNotifier<bool?>(null); // null = not checked, true = detected, false = not detected
+    final faceDetectedNotifier = ValueNotifier<bool?>(null); 
     final isDetectingFaceNotifier = ValueNotifier<bool>(false);
     
     final pageController = PageController(initialPage: 0);
     final currentPageNotifier = ValueNotifier<int>(0);
     
-    // Use ValueNotifier for error states to optimize performance
     final nameErrorNotifier = ValueNotifier<String?>(null);
     final emailErrorNotifier = ValueNotifier<String?>(null);
     final passwordErrorNotifier = ValueNotifier<String?>(null);
@@ -974,12 +954,10 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     final ageErrorNotifier = ValueNotifier<String?>(null);
     final phoneNumberErrorNotifier = ValueNotifier<String?>(null);
     
-    // Use ValueNotifier for password visibility to avoid setDialogState
     final obscurePasswordNotifier = ValueNotifier<bool>(true);
     final obscureConfirmPasswordNotifier = ValueNotifier<bool>(true);
     final obscureCurrentPasswordNotifier = ValueNotifier<bool>(true);
     
-    // Cache keyboard height to avoid frequent MediaQuery calls
     final keyboardHeightNotifier = ValueNotifier<double>(0.0);
 
     showModalBottomSheet(
@@ -992,7 +970,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
           final mediaQuery = MediaQuery.of(context);
-          // Update keyboard height when it changes (cache to avoid frequent rebuilds)
+          
           final currentKeyboardHeight = mediaQuery.viewInsets.bottom;
           if ((keyboardHeightNotifier.value - currentKeyboardHeight).abs() > 1.0) {
             keyboardHeightNotifier.value = currentKeyboardHeight;
@@ -1006,7 +984,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
             ),
             child: Column(
               children: [
-              // Header
+              
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -1036,16 +1014,16 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                   ],
                 ),
               ),
-              // Page View
+              
               Expanded(
                 child: PageView(
                   controller: pageController,
-                  physics: const NeverScrollableScrollPhysics(), // Disable swipe
+                  physics: const NeverScrollableScrollPhysics(), 
                   onPageChanged: (index) {
                     currentPageNotifier.value = index;
                   },
                   children: [
-                    // Step 1: Image Upload
+                    
                     _buildImageUploadStep(
                       context,
                       selectedImageBase64Notifier,
@@ -1061,7 +1039,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                         );
                       },
                     ),
-                    // Step 2: Information Form
+                    
                     _buildInformationStep(
                       context,
                       pageContext,
@@ -1114,7 +1092,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     );
   }
 
-  // Step 1: Image Upload Page
   Widget _buildImageUploadStep(
     BuildContext context,
     ValueNotifier<String?> selectedImageBase64Notifier,
@@ -1149,7 +1126,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 40),
-          // Image Upload Area
+          
           ValueListenableBuilder<String?>(
             valueListenable: selectedImageBase64Notifier,
             builder: (context, selectedImageBase64, _) => ValueListenableBuilder<bool>(
@@ -1165,10 +1142,8 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                       selectedImageFileTypeNotifier.value = imageData['fileType'];
                       isPickingImageNotifier.value = false;
                       
-                      // Reset face detection status
                       faceDetectedNotifier.value = null;
                       
-                      // Detect face in image
                       await _detectFaceInImage(
                         context,
                         cleanBase64,
@@ -1176,7 +1151,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                         isDetectingFaceNotifier,
                       );
                       
-                      // Only mark as uploaded if face is detected
                       isImageUploadedNotifier.value = faceDetectedNotifier.value == true;
                     } else {
                       isPickingImageNotifier.value = false;
@@ -1234,7 +1208,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
             ),
           ),
           const SizedBox(height: 24),
-          // Face Detection Status
+          
           ValueListenableBuilder<bool?>(
             valueListenable: faceDetectedNotifier,
             builder: (context, faceDetected, _) => ValueListenableBuilder<bool>(
@@ -1330,7 +1304,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
             ),
           ),
           const SizedBox(height: 16),
-          // Preview and Remove buttons
+          
           ValueListenableBuilder<String?>(
             valueListenable: selectedImageBase64Notifier,
             builder: (context, selectedImageBase64, _) {
@@ -1386,7 +1360,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
             },
           ),
           const SizedBox(height: 60),
-          // Next Button
+          
           ValueListenableBuilder<bool>(
             valueListenable: isImageUploadedNotifier,
             builder: (context, isUploaded, _) => SizedBox(
@@ -1417,7 +1391,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     );
   }
 
-  // Detect face in image
   Future<void> _detectFaceInImage(
     BuildContext context,
     String imageBase64,
@@ -1428,23 +1401,19 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     faceDetectedNotifier.value = null;
     
     try {
-      // Initialize face service if not already initialized
+      
       await _faceService.initialize();
       
-      // Decode base64 image
       final imageBytes = base64Decode(imageBase64);
       
-      // Save image to temporary file, then use file path for detection (more reliable)
       final tempDir = await getTemporaryDirectory();
       final tempFile = File('${tempDir.path}/face_detection_${DateTime.now().millisecondsSinceEpoch}.jpg');
       await tempFile.writeAsBytes(imageBytes);
       
-      // Create InputImage using file path (more reliable method)
       final inputImage = InputImage.fromFilePath(tempFile.path);
       
       final faces = await _faceService.detectFaces(inputImage);
       
-      // Clean up temporary file
       try {
         await tempFile.delete();
       } catch (e) {
@@ -1492,7 +1461,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     }
   }
 
-  // Helper method to build preview image
   Widget _buildPreviewImage(String base64String) {
     try {
       final cleanBase64 = base64String.trim().replaceAll(RegExp(r'\s+'), '');
@@ -1524,7 +1492,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     }
   }
 
-  // Step 2: Information Form Page
   Widget _buildInformationStep(
     BuildContext context,
     BuildContext pageContext,
@@ -1561,7 +1528,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   ) {
     return Column(
       children: [
-        // Scrollable content
+        
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1569,7 +1536,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Container: All Information
+                
                 Container(
                   padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -1596,7 +1563,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                 ),
                 const SizedBox(height: 12),
                 
-                // Full Name Field
                 RepaintBoundary(
                   child: ValueListenableBuilder<String?>(
                     valueListenable: nameErrorNotifier,
@@ -1648,7 +1614,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                 ),
                 const SizedBox(height: 12),
                 
-                // Email Field
                 RepaintBoundary(
                   child: ValueListenableBuilder<String?>(
                     valueListenable: emailErrorNotifier,
@@ -1701,51 +1666,50 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                 ),
                 const SizedBox(height: 12),
                 
-                // Password Field
                 RepaintBoundary(
                   child: ValueListenableBuilder<String?>(
                     valueListenable: passwordErrorNotifier,
                     builder: (context, passwordError, _) {
                       final hasError = passwordError != null;
-                      return TextField(
-                        controller: passwordController,
-                        onChanged: (value) {
-                          if (passwordError != null) {
-                            passwordErrorNotifier.value = null;
-                          }
-                          if (confirmPasswordErrorNotifier.value != null && value == confirmPasswordController.text) {
-                            confirmPasswordErrorNotifier.value = null;
-                          }
-                        },
-                        decoration: InputDecoration(
-                          labelText: 'Password *',
-                          hintText: 'Minimum 6 characters',
-                          errorText: passwordError,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
-                          ),
-                          errorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Colors.red, width: 2),
-                          ),
-                          focusedErrorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Colors.red, width: 2),
-                          ),
-                          prefixIcon: Icon(Icons.lock_outline, color: hasError ? Colors.red : Colors.grey),
-                          suffixIcon: ValueListenableBuilder<bool>(
-                            valueListenable: obscurePasswordNotifier,
-                            builder: (context, obscurePassword, _) {
-                              return IconButton(
+                      return ValueListenableBuilder<bool>(
+                        valueListenable: obscurePasswordNotifier,
+                        builder: (context, obscurePassword, _) {
+                          return TextField(
+                            controller: passwordController,
+                            onChanged: (value) {
+                              if (passwordError != null) {
+                                passwordErrorNotifier.value = null;
+                              }
+                              if (confirmPasswordErrorNotifier.value != null && value == confirmPasswordController.text) {
+                                confirmPasswordErrorNotifier.value = null;
+                              }
+                            },
+                            decoration: InputDecoration(
+                              labelText: 'Password *',
+                              hintText: 'Minimum 6 characters',
+                              errorText: passwordError,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
+                              ),
+                              errorBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: Colors.red, width: 2),
+                              ),
+                              focusedErrorBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: Colors.red, width: 2),
+                              ),
+                              prefixIcon: Icon(Icons.lock_outline, color: hasError ? Colors.red : Colors.grey),
+                              suffixIcon: IconButton(
                                 icon: Icon(
                                   obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                                   color: hasError ? Colors.red : Colors.grey[600],
@@ -1754,65 +1718,64 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                                   obscurePasswordNotifier.value = !obscurePassword;
                                   onObscurePasswordChanged(obscurePasswordNotifier.value);
                                 },
-                              );
-                            },
-                          ),
-                          filled: true,
-                          fillColor: hasError ? Colors.red[50] : Colors.grey[50],
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                        ),
-                        obscureText: obscurePasswordNotifier.value,
+                              ),
+                              filled: true,
+                              fillColor: hasError ? Colors.red[50] : Colors.grey[50],
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                            ),
+                            obscureText: obscurePassword,
+                          );
+                        },
                       );
                     },
                   ),
                 ),
                 const SizedBox(height: 12),
                 
-                // Confirm Password Field
                 RepaintBoundary(
                   child: ValueListenableBuilder<String?>(
                     valueListenable: confirmPasswordErrorNotifier,
                     builder: (context, confirmPasswordError, _) {
                       final hasError = confirmPasswordError != null;
-                      return TextField(
-                        controller: confirmPasswordController,
-                        onChanged: (value) {
-                          if (confirmPasswordError != null && value == passwordController.text) {
-                            confirmPasswordErrorNotifier.value = null;
-                          }
-                        },
-                        decoration: InputDecoration(
-                          labelText: 'Confirm Password *',
-                          hintText: 'Re-enter password',
-                          errorText: confirmPasswordError,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
-                          ),
-                          errorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Colors.red, width: 2),
-                          ),
-                          focusedErrorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Colors.red, width: 2),
-                          ),
-                          prefixIcon: Icon(Icons.lock_outline, color: hasError ? Colors.red : Colors.grey),
-                          suffixIcon: ValueListenableBuilder<bool>(
-                            valueListenable: obscureConfirmPasswordNotifier,
-                            builder: (context, obscureConfirmPassword, _) {
-                              return IconButton(
+                      return ValueListenableBuilder<bool>(
+                        valueListenable: obscureConfirmPasswordNotifier,
+                        builder: (context, obscureConfirmPassword, _) {
+                          return TextField(
+                            controller: confirmPasswordController,
+                            onChanged: (value) {
+                              if (confirmPasswordError != null && value == passwordController.text) {
+                                confirmPasswordErrorNotifier.value = null;
+                              }
+                            },
+                            decoration: InputDecoration(
+                              labelText: 'Confirm Password *',
+                              hintText: 'Re-enter password',
+                              errorText: confirmPasswordError,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
+                              ),
+                              errorBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: Colors.red, width: 2),
+                              ),
+                              focusedErrorBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: Colors.red, width: 2),
+                              ),
+                              prefixIcon: Icon(Icons.lock_outline, color: hasError ? Colors.red : Colors.grey),
+                              suffixIcon: IconButton(
                                 icon: Icon(
                                   obscureConfirmPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                                   color: hasError ? Colors.red : Colors.grey[600],
@@ -1821,24 +1784,23 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                                   obscureConfirmPasswordNotifier.value = !obscureConfirmPassword;
                                   onObscureConfirmPasswordChanged(obscureConfirmPasswordNotifier.value);
                                 },
-                              );
-                            },
-                          ),
-                          filled: true,
-                          fillColor: hasError ? Colors.red[50] : Colors.grey[50],
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                        ),
-                        obscureText: obscureConfirmPasswordNotifier.value,
+                              ),
+                              filled: true,
+                              fillColor: hasError ? Colors.red[50] : Colors.grey[50],
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                            ),
+                            obscureText: obscureConfirmPassword,
+                          );
+                        },
                       );
                     },
                   ),
                 ),
                 const SizedBox(height: 12),
                 
-                // Location Field
                 LocationAutocompleteField(
                   controller: locationController,
                   label: 'Location (Optional)',
@@ -1853,7 +1815,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                 ),
                 const SizedBox(height: 12),
                 
-                // Age Field
                 RepaintBoundary(
                   child: ValueListenableBuilder<String?>(
                     valueListenable: ageErrorNotifier,
@@ -1905,7 +1866,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                 ),
                 const SizedBox(height: 12),
                 
-                // Phone Number Field
                 RepaintBoundary(
                   child: ValueListenableBuilder<String?>(
                     valueListenable: phoneNumberErrorNotifier,
@@ -1964,7 +1924,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                 ),
                 const SizedBox(height: 12),
                 
-                // Gender Field
                 const Text(
                   'Gender (Optional)',
                   style: TextStyle(
@@ -2018,7 +1977,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                 ),
                 const SizedBox(height: 12),
                 
-                // Role Field
                 const Text(
                   'Role *',
                   style: TextStyle(
@@ -2085,7 +2043,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
           ),
           const SizedBox(height: 16),
           
-          // Current Password Field (to stay logged in)
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -2167,7 +2124,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
           ),
           const SizedBox(height: 12),
           
-          // Info Box
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
@@ -2199,7 +2155,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
           ),
         ),
         
-        // Fixed Footer with Actions (not sticky, stays at bottom)
         SafeArea(
           top: false,
           child: Container(
@@ -2249,7 +2204,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                     final password = passwordController.text;
                     final confirmPassword = confirmPasswordController.text.trim();
 
-                    // Reset all errors
                     String? nameErr;
                     String? emailErr;
                     String? passwordErr;
@@ -2258,7 +2212,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                     String? phoneNumberErr;
                     bool hasError = false;
 
-                    // Validation
                     if (name.isEmpty) {
                       nameErr = 'Please enter a name';
                       hasError = true;
@@ -2279,7 +2232,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                       hasError = true;
                     }
 
-                    // Age validation (18-80)
                     final ageText = ageController.text.trim();
                     if (ageText.isNotEmpty) {
                       final age = int.tryParse(ageText);
@@ -2292,7 +2244,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                       }
                     }
 
-                    // Phone number validation (XXX-XXX XXXX format)
                     final phoneText = phoneNumberController.text.trim();
                     if (phoneText.isNotEmpty) {
                       final digitsOnly = phoneText.replaceAll(RegExp(r'[^\d]'), '');
@@ -2302,7 +2253,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                       }
                     }
 
-                    // Update error states using ValueNotifier (no need for setDialogState)
                     nameErrorNotifier.value = nameErr;
                     emailErrorNotifier.value = emailErr;
                     passwordErrorNotifier.value = passwordErr;
@@ -2314,7 +2264,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                       return;
                     }
 
-                    // Validate role
                     try {
                       final roleService = RoleService();
                       final roleModel = await roleService.getRoleByName(selectedRole.toLowerCase());
@@ -2378,10 +2327,9 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                     
                     final result = await adminUserService.createAdminUser(pageContext, form);
                     
-                    // Ensure loading dialog from createAdminUser is closed
                     if (pageContext.mounted) {
                       try {
-                        // Try to close any remaining dialogs
+                        
                         Navigator.of(pageContext, rootNavigator: true).popUntil((route) {
                           return route.isFirst || !route.willHandlePopInternally;
                         });
@@ -2393,21 +2341,19 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                     await Future.delayed(const Duration(milliseconds: 200));
                     
                     if (result.success) {
-                      // Success - show success message and keep logged in
+                      
                       _showSnackBar(result.message ?? 'Admin user "$name" created successfully');
                       
-                      // Wait a bit before refreshing to ensure UI is ready
                       await Future.delayed(const Duration(milliseconds: 300));
                       
                       if (mounted) {
-                        // Refresh data
+                        
                         await _loadData();
                       }
                     } else {
-                      // Failed - show error message
+                      
                       _showSnackBar(result.error ?? 'Failed to create admin user.', isError: true);
                       
-                      // If password was wrong, navigate to login after showing error
                       if (result.requiresReauth && mounted) {
                         await Future.delayed(const Duration(milliseconds: 2000));
                         if (mounted) {

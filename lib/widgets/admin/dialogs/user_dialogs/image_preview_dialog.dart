@@ -1,8 +1,7 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
-/// Dialog for previewing base64 encoded images
 class ImagePreviewDialog extends StatelessWidget {
   final String base64String;
   final Map<String, Uint8List>? imageCache;
@@ -13,7 +12,6 @@ class ImagePreviewDialog extends StatelessWidget {
     this.imageCache,
   });
 
-  /// Shows the image preview dialog
   static void show({
     required BuildContext context,
     required String base64String,
@@ -49,7 +47,7 @@ class ImagePreviewDialog extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Header
+                
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -74,7 +72,7 @@ class ImagePreviewDialog extends StatelessWidget {
                     ],
                   ),
                 ),
-                // Image
+                
                 Flexible(
                   child: Padding(
                     padding: const EdgeInsets.all(20),
@@ -124,8 +122,7 @@ class ImagePreviewDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // This widget is typically used via the static show method
+    
     return const SizedBox.shrink();
   }
 }
-

@@ -1,11 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../services/user/wallet_service.dart';
 import '../../../../utils/user/dialog_utils.dart';
 import '../../../../utils/user/button_styles.dart';
 
-/// Dialog for adding credits to wallet
-/// Shows credit packages and handles top-up checkout
 class AddCreditsDialog extends StatefulWidget {
   final WalletService walletService;
   final VoidCallback? onTopUpStarted;
@@ -16,7 +14,6 @@ class AddCreditsDialog extends StatefulWidget {
     this.onTopUpStarted,
   });
 
-  /// Shows the add credits dialog
   static Future<void> show({
     required BuildContext context,
     required WalletService walletService,
@@ -39,14 +36,14 @@ class _AddCreditsDialogState extends State<AddCreditsDialog> {
   bool _isLoading = false;
 
   Future<void> _startTopUp({required int credits, required int amountInCents}) async {
-    if (_isLoading) return; // Prevent multiple clicks
+    if (_isLoading) return; 
     
     setState(() {
       _isLoading = true;
     });
     
     try {
-      // Check for pending payments first
+      
       final hasPending = await widget.walletService.hasPendingPayments();
       if (hasPending) {
         if (!mounted) return;
@@ -66,7 +63,7 @@ class _AddCreditsDialogState extends State<AddCreditsDialog> {
       );
       if (!mounted) return;
       
-      Navigator.pop(context); // Close dialog first
+      Navigator.pop(context); 
       widget.onTopUpStarted?.call();
       
       final ok = await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -256,4 +253,3 @@ class _AddCreditsDialogState extends State<AddCreditsDialog> {
     );
   }
 }
-

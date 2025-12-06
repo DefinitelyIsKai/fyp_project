@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:intl/intl.dart';
 import 'package:fyp_project/models/admin/analytics_model.dart';
@@ -17,7 +17,7 @@ class AnalyticsTrendCharts extends StatelessWidget {
 
     return Column(
       children: [
-        // User Activity Trends
+        
         Card(
           elevation: 2,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -84,7 +84,6 @@ class AnalyticsTrendCharts extends StatelessWidget {
         ),
         const SizedBox(height: 16),
 
-        // Job Posts Trend
         Card(
           elevation: 2,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -137,7 +136,6 @@ class AnalyticsTrendCharts extends StatelessWidget {
         ),
         const SizedBox(height: 16),
 
-        // Flagged Content Trend
         Card(
           elevation: 2,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -200,4 +198,3 @@ class AnalyticsTrendCharts extends StatelessWidget {
     );
   }
 }
-

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:fyp_project/models/admin/analytics_model.dart';
 import 'package:fyp_project/services/admin/analytics_service.dart';
@@ -32,12 +32,10 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
   DateTime _startDate = DateTime.now().subtract(const Duration(days: 30));
   DateTime _endDate = DateTime.now();
 
-  // Helper to set start of day
   DateTime _startOfDay(DateTime date) {
     return DateTime(date.year, date.month, date.day, 0, 0, 0);
   }
   
-  // Helper to set end of day
   DateTime _endOfDay(DateTime date) {
     return DateTime(date.year, date.month, date.day, 23, 59, 59);
   }
@@ -45,7 +43,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
   @override
   void initState() {
     super.initState();
-    // Normalize initial dates
+    
     _startDate = _startOfDay(_startDate);
     _endDate = _endOfDay(_endDate);
     _loadAnalytics();
@@ -56,28 +54,25 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
     
     setState(() => _isLoading = true);
     try {
-      // Use the selected date range for analytics
+      
       final analytics = await _analyticsService.getAnalyticsForRange(_startDate, _endDate);
       
-      // Get all-time analytics (from beginning to end date)
       final allTimeAnalytics = await _analyticsService.getAnalyticsForRange(
         DateTime(2020, 1, 1),
         _endDate,
       );
       
-      // Load data for charts - use the selected date range
       List<AnalyticsModel> weekly = [];
       final daysDiff = _endDate.difference(_startDate).inDays;
       final daysToLoad = daysDiff > 7 ? 7 : daysDiff;
       
-      // Calculate step size to evenly distribute points across the range
       final step = daysDiff > 0 ? daysDiff / daysToLoad : 1;
       
       for (int i = 0; i <= daysToLoad; i++) {
         final dayOffset = (step * i).round();
         final day = _startDate.add(Duration(days: dayOffset));
         if (day.isBefore(_endDate.add(const Duration(days: 1)))) {
-          // Get analytics for this specific day
+          
           final dayStart = DateTime(day.year, day.month, day.day);
           final dayEnd = DateTime(day.year, day.month, day.day, 23, 59, 59);
           weekly.add(await _analyticsService.getAnalyticsForRange(dayStart, dayEnd));
@@ -144,8 +139,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
     return '${_formatDate(_startDate)} - ${_formatDate(_endDate)}';
   }
 
-
-
   Future<void> _downloadPDF() async {
     if (_analytics == null || _allTimeAnalytics == null) return;
 
@@ -160,7 +153,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
           margin: const pw.EdgeInsets.all(40),
           build: (pw.Context context) {
             return [
-              // Header
+              
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -180,7 +173,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
               ),
               pw.SizedBox(height: 15),
 
-              // Date Range
               pw.Container(
                 padding: const pw.EdgeInsets.all(10),
                 decoration: pw.BoxDecoration(
@@ -205,7 +197,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
               ),
               pw.SizedBox(height: 20),
 
-              // Overview Statistics
               pw.Text(
                 'Overview Statistics',
                 style: pw.TextStyle(
@@ -242,7 +233,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
               ),
               pw.SizedBox(height: 20),
 
-              // User Engagement
               pw.Text(
                 'User Engagement',
                 style: pw.TextStyle(
@@ -278,7 +268,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
               ),
               pw.SizedBox(height: 20),
 
-              // User Reports & Moderation
               pw.Text(
                 'User Reports & Moderation',
                 style: pw.TextStyle(
@@ -316,7 +305,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
               ),
               pw.SizedBox(height: 20),
 
-              // Growth Rates
               pw.Text(
                 'Growth Rates',
                 style: pw.TextStyle(
@@ -359,7 +347,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
         ),
       );
 
-      // Show PDF preview and allow download
       await Printing.layoutPdf(
         onLayout: (PdfPageFormat format) async => pdf.save(),
       );
@@ -389,7 +376,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
           margin: const pw.EdgeInsets.all(40),
           build: (pw.Context context) {
             return [
-              // Header
+              
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -409,7 +396,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
               ),
               pw.SizedBox(height: 15),
 
-              // Date Range
               pw.Container(
                 padding: const pw.EdgeInsets.all(10),
                 decoration: pw.BoxDecoration(
@@ -434,7 +420,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
               ),
               pw.SizedBox(height: 20),
 
-              // Overview Statistics
               pw.Text(
                 'Overview Statistics',
                 style: pw.TextStyle(
@@ -471,7 +456,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
               ),
               pw.SizedBox(height: 20),
 
-              // User Engagement
               pw.Text(
                 'User Engagement',
                 style: pw.TextStyle(
@@ -507,7 +491,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
               ),
               pw.SizedBox(height: 20),
 
-              // User Reports & Moderation
               pw.Text(
                 'User Reports & Moderation',
                 style: pw.TextStyle(
@@ -545,7 +528,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
               ),
               pw.SizedBox(height: 20),
 
-              // Growth Rates
               pw.Text(
                 'Growth Rates',
                 style: pw.TextStyle(
@@ -588,7 +570,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
         ),
       );
 
-      // Save PDF to temporary file and share
       final bytes = await pdf.save();
       final directory = await getTemporaryDirectory();
       final fileName = 'User_Analytics_Report_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
@@ -596,7 +577,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
       final file = File(filePath);
       await file.writeAsBytes(bytes);
 
-      // Share the file
       try {
         await Share.shareXFiles(
           [XFile(filePath)],
@@ -604,14 +584,13 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
           subject: 'User Analytics Report - ${_formatDate(_startDate)} to ${_formatDate(_endDate)}',
         );
 
-        // Clean up temporary file after a delay (to allow sharing to complete)
         Future.delayed(const Duration(seconds: 5), () async {
           try {
             if (await file.exists()) {
               await file.delete();
             }
           } catch (e) {
-            // Ignore cleanup errors
+            
           }
         });
       } catch (shareError) {
@@ -679,7 +658,7 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
       ),
       body: Column(
         children: [
-          // Header Section
+          
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -720,7 +699,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
             ),
           ),
 
-          // Date Range Selector
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -783,7 +761,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
             ),
           ),
 
-          // Analytics Content
           Expanded(
             child: _isLoading
                 ? Center(
@@ -820,27 +797,22 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Quick Stats Row
+                            
                             _buildQuickStats(),
                             const SizedBox(height: 20),
 
-                            // Period Overview
                             _buildPeriodOverview(),
                             const SizedBox(height: 20),
 
-                            // User Activity Charts
                             _buildChartsSection(),
                             const SizedBox(height: 20),
 
-                            // User Statistics Section
                             _buildUserStatisticsSection(),
                             const SizedBox(height: 20),
 
-                            // User Engagement Section
                             _buildUserEngagementSection(),
                             const SizedBox(height: 20),
 
-                            // User Reports Section
                             _buildUserReportsSection(),
                             const SizedBox(height: 20),
                           ],
@@ -1065,10 +1037,10 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
   Widget _buildChartsSection() {
     return Column(
       children: [
-        // Line Chart
+        
         _buildLineChart(),
         const SizedBox(height: 16),
-        // Pie Chart
+        
         _buildPieChart(),
       ],
     );
@@ -1398,8 +1370,6 @@ class _UserAnalyticsPageState extends State<UserAnalyticsPage> {
     );
   }
 }
-
-// Helper Widgets
 
 class ChartData {
   final String label;

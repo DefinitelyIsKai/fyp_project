@@ -1,4 +1,4 @@
-class AddAdminFormModel {
+﻿class AddAdminFormModel {
   final String name;
   final String email;
   final String password;
@@ -44,4 +44,3 @@ class AddAdminFormModel {
     };
   }
 }
-

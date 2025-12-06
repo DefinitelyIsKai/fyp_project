@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../services/user/availability_service.dart';
 import '../../../../services/user/application_service.dart';
@@ -43,7 +43,7 @@ class PendingRequestDialog extends StatelessWidget {
     try {
       await availabilityService.approveBookingRequest(request.id);
       if (!context.mounted) return;
-      Navigator.pop(context); // Close the pending request dialog
+      Navigator.pop(context); 
       DialogUtils.showSuccessMessage(
         context: context,
         message: 'Booking request approved successfully',
@@ -73,7 +73,7 @@ class PendingRequestDialog extends StatelessWidget {
     try {
       await availabilityService.rejectBookingRequest(request.id);
       if (!context.mounted) return;
-      Navigator.pop(context); // Close the pending request dialog
+      Navigator.pop(context); 
       DialogUtils.showWarningMessage(
         context: context,
         message: 'Booking request rejected',
@@ -103,10 +103,9 @@ class PendingRequestDialog extends StatelessWidget {
         email = 'No email';
       }
 
-      // Load post title from matchId (could be Application ID or JobMatch ID)
       String? postTitle;
       try {
-        // Try to get as Application first
+        
         final applicationDoc = await firestore.collection('applications').doc(matchId).get();
         if (applicationDoc.exists) {
           final appData = applicationDoc.data();
@@ -116,16 +115,16 @@ class PendingRequestDialog extends StatelessWidget {
             postTitle = post?.title;
           }
         } else {
-          // Try to get as JobMatch
+          
           final jobMatchDoc = await firestore.collection('job_matches').doc(matchId).get();
           if (jobMatchDoc.exists) {
             final matchData = jobMatchDoc.data();
-            // JobMatch has jobTitle directly, but we can also get from post
+            
             final jobTitle = matchData?['jobTitle'] as String?;
             if (jobTitle != null && jobTitle.isNotEmpty) {
               postTitle = jobTitle;
             } else {
-              // Fallback: get from post
+              
               final jobId = matchData?['jobId'] as String?;
               if (jobId != null) {
                 final post = await postService.getById(jobId);
@@ -172,7 +171,7 @@ class PendingRequestDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
+            
             Padding(
               padding: const EdgeInsets.all(20),
               child: Row(
@@ -232,7 +231,7 @@ class PendingRequestDialog extends StatelessWidget {
               ),
             ),
             Divider(height: 1, thickness: 1, color: Colors.grey[200]),
-            // Content
+            
             Flexible(
               child: requests.isEmpty
                   ? Padding(
@@ -289,7 +288,6 @@ class PendingRequestDialog extends StatelessWidget {
                             final email = jobseekerData['email'] as String? ?? 'No email';
                             final postTitle = jobseekerData['postTitle'] as String?;
 
-                            // Get initials for avatar
                             final initials = fullName
                                 .split(' ')
                                 .where((word) => word.isNotEmpty)
@@ -330,7 +328,7 @@ class PendingRequestDialog extends StatelessWidget {
                                     padding: const EdgeInsets.all(16),
                                     child: Row(
                                       children: [
-                                        // Avatar
+                                        
                                         Container(
                                           width: 56,
                                           height: 56,
@@ -364,7 +362,7 @@ class PendingRequestDialog extends StatelessWidget {
                                           ),
                                         ),
                                         const SizedBox(width: 16),
-                                        // Name, Post Title, and Email
+                                        
                                         Expanded(
                                           child: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -378,7 +376,7 @@ class PendingRequestDialog extends StatelessWidget {
                                                 ),
                                               ),
                                               const SizedBox(height: 8),
-                                              // Job Post Title
+                                              
                                               Container(
                                                 padding: const EdgeInsets.symmetric(
                                                   horizontal: 10,
@@ -440,7 +438,7 @@ class PendingRequestDialog extends StatelessWidget {
                                             ],
                                           ),
                                         ),
-                                        // Action Menu
+                                        
                                         PopupMenuButton<String>(
                                           color: Colors.white,
                                           shape: RoundedRectangleBorder(
@@ -576,4 +574,3 @@ class PendingRequestDialog extends StatelessWidget {
     );
   }
 }
-

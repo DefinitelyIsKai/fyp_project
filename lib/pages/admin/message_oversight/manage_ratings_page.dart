@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/rating_model.dart';
 import 'package:fyp_project/services/admin/rating_service.dart';
 import 'package:fyp_project/pages/admin/message_oversight/rating_detail_page.dart';
@@ -14,7 +14,7 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
   final RatingService _ratingService = RatingService();
   final GlobalKey<RefreshIndicatorState> _refreshIndicatorKey = GlobalKey<RefreshIndicatorState>();
   String _searchQuery = '';
-  int? _selectedStarFilter; // null = all, 1-5 = specific star rating
+  int? _selectedStarFilter; 
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +26,7 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
       ),
       body: Column(
         children: [
-          // Header Section
+          
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -60,7 +60,6 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
             ),
           ),
 
-          // Filters and Search Section
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -76,7 +75,7 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
             ),
             child: Column(
               children: [
-                // Search Bar
+                
                 TextField(
                   decoration: InputDecoration(
                     hintText: 'Search ratings by comment...',
@@ -97,7 +96,7 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
                     setState(() => _searchQuery = value);
                   },
                 ),
-                // Star Rating Filter Chips
+                
                 const SizedBox(height: 12),
                 Row(
                   children: [
@@ -107,7 +106,7 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: [
-                            // All ratings chip
+                            
                             FilterChip(
                               label: const Text('All'),
                               selected: _selectedStarFilter == null,
@@ -120,7 +119,7 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
                               checkmarkColor: Colors.amber[900],
                             ),
                             const SizedBox(width: 8),
-                            // Star rating chips (1-5)
+                            
                             ...List.generate(5, (index) {
                               final starCount = index + 1;
                               return Padding(
@@ -155,7 +154,6 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
             ),
           ),
 
-          // Ratings List (Real-time)
           Expanded(
             child: StreamBuilder<List<RatingModel>>(
               stream: _getRatingsStream(),
@@ -213,7 +211,7 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
 
                 return Column(
                   children: [
-                    // Results Count
+                    
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       color: Colors.grey[50],
@@ -233,14 +231,13 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
                       ),
                     ),
 
-                    // Ratings List with Pull to Refresh
                     Expanded(
                       child: RefreshIndicator(
                         key: _refreshIndicatorKey,
                         onRefresh: () async {
-                          // Trigger a rebuild to refresh the stream
+                          
                           setState(() {});
-                          // Wait a bit to show the refresh indicator
+                          
                           await Future.delayed(const Duration(milliseconds: 500));
                         },
                         child: ListView.builder(
@@ -269,11 +266,10 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
 
   List<RatingModel> _filterRatings(List<RatingModel> ratings) {
     return ratings.where((rating) {
-      // Filter by search query
+      
       final matchesSearch = _searchQuery.isEmpty ||
           (rating.comment?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
 
-      // Filter by star rating
       final matchesStarFilter = _selectedStarFilter == null ||
           rating.rating.toInt() == _selectedStarFilter;
 
@@ -310,7 +306,7 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
             children: [
               Row(
                 children: [
-                  // Star Rating
+                  
                   Row(
                     children: List.generate(5, (index) {
                       return Icon(
@@ -321,7 +317,7 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
                     }),
                   ),
                   const Spacer(),
-                  // Status Badge (only show if not active)
+                  
                   if (rating.status != RatingStatus.active)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -450,4 +446,3 @@ class _ManageRatingsPageState extends State<ManageRatingsPage> {
     }
   }
 }
-

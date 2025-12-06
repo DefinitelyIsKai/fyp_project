@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
@@ -260,7 +260,6 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
 
                 final logs = snapshot.data!.docs;
                 
-                // Filter by action type and date range
                 final filteredLogs = _filterLogs(logs);
 
                 return RefreshIndicator(
@@ -338,7 +337,6 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
       }
     }
 
-    // Get action type display name and color
     final actionInfo = _getActionInfo(actionType);
 
     return Container(
@@ -500,7 +498,7 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
                 ),
                 const SizedBox(height: 6),
               ],
-              // Strike count change information
+              
               if (previousStrikeCount != null && newStrikeCount != null) ...[
                 Row(
                   children: [
@@ -539,7 +537,7 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
                 ),
                 const SizedBox(height: 6),
               ],
-              // Was suspended flag (for warnings that led to suspension)
+              
               if (wasSuspended) ...[
                 Container(
                   padding: const EdgeInsets.all(8),
@@ -567,7 +565,7 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
                 ),
                 const SizedBox(height: 6),
               ],
-              // Deducted marks (for warnings with mark deduction)
+              
               if (deductedMarks != null && deductedMarks > 0) ...[
                 Row(
                   children: [
@@ -585,7 +583,7 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
                 ),
                 const SizedBox(height: 6),
               ],
-              // Suspension duration (for suspend actions)
+              
               if (durationDays != null) ...[
                 Row(
                   children: [
@@ -1077,7 +1075,6 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
   }
 }
 
-// Filter Chip Widget
 class _FilterChip extends StatelessWidget {
   final String label;
   final String value;
@@ -1148,4 +1145,3 @@ class _FilterChip extends StatelessWidget {
     );
   }
 }
-

@@ -1,6 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-/// A reusable status chip widget for displaying status with appropriate colors
 class StatusChip extends StatelessWidget {
   final String status;
   final Color? color;
@@ -89,4 +88,3 @@ class StatusChip extends StatelessWidget {
     }
   }
 }
-

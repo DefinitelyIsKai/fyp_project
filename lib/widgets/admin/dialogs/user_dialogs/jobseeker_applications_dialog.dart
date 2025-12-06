@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../services/user/application_service.dart';
 import '../../../../services/user/auth_service.dart';
@@ -199,7 +199,6 @@ class JobseekerApplicationsDialog extends StatelessWidget {
                     );
                   }
 
-                  // Filter to show only pending applications (that need approval/rejection)
                   final allApplications = snapshot.data ?? [];
                   final applications = allApplications
                       .where((app) => app.status == ApplicationStatus.pending)
@@ -260,7 +259,6 @@ class JobseekerApplicationsDialog extends StatelessWidget {
                           final fullName = jobseekerData['fullName'] as String? ?? 'Unknown';
                           final email = jobseekerData['email'] as String? ?? 'No email';
 
-                          // Get initials for avatar
                           final initials = fullName
                               .split(' ')
                               .where((word) => word.isNotEmpty)
@@ -288,7 +286,7 @@ class JobseekerApplicationsDialog extends StatelessWidget {
                               padding: const EdgeInsets.all(16),
                               child: Row(
                                 children: [
-                                  // Avatar with initials
+                                  
                                   Container(
                                     width: 56,
                                     height: 56,
@@ -315,7 +313,7 @@ class JobseekerApplicationsDialog extends StatelessWidget {
                                     ),
                                   ),
                                   const SizedBox(width: 16),
-                                  // Jobseeker info
+                                  
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -392,7 +390,7 @@ class JobseekerApplicationsDialog extends StatelessWidget {
                                       ],
                                     ),
                                   ),
-                                  // Action buttons
+                                  
                                   if (application.status == ApplicationStatus.pending)
                                     Column(
                                       mainAxisSize: MainAxisSize.min,
@@ -521,4 +519,3 @@ class JobseekerApplicationsDialog extends StatelessWidget {
     };
   }
 }
-

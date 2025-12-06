@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../models/user/app_notification.dart';
 
@@ -135,7 +135,7 @@ class NotificationDetailDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header with icon and close button
+            
             Row(
               children: [
                 Container(
@@ -225,6 +225,7 @@ class NotificationDetailDialog extends StatelessWidget {
             Divider(height: 1, thickness: 1, color: Colors.grey[200]),
             const SizedBox(height: 20),
             //notification body
+            
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(18),
@@ -245,6 +246,8 @@ class NotificationDetailDialog extends StatelessWidget {
             ),
             // Metadata section (if available)
             if (displayableMetadata.isNotEmpty) ...[
+            
+            if (notification.metadata.isNotEmpty) ...[
               const SizedBox(height: 20),
               Text(
                 'Additional Details',
@@ -320,7 +323,7 @@ class NotificationDetailDialog extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 24),
-            // Close button
+            
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -344,9 +347,8 @@ class NotificationDetailDialog extends StatelessWidget {
               ),
             ),
           ],
-        ),
+        ]),
       ),
     );
   }
 }
-

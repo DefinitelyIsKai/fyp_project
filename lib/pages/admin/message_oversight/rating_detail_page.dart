@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/rating_model.dart';
 import 'package:fyp_project/services/admin/rating_service.dart';
 import 'package:fyp_project/services/admin/user_service.dart';
@@ -49,7 +49,6 @@ class _RatingDetailPageState extends State<RatingDetailPage> {
         orElse: () => users.first,
       );
       
-      // Fetch post title
       String? postTitle;
       try {
         final postDoc = await FirebaseFirestore.instance
@@ -79,7 +78,7 @@ class _RatingDetailPageState extends State<RatingDetailPage> {
   }
 
   Future<void> _deleteRating() async {
-    // Show confirmation dialog
+    
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -193,7 +192,7 @@ class _RatingDetailPageState extends State<RatingDetailPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Rating Card
+            
             Card(
               elevation: 2,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -266,7 +265,6 @@ class _RatingDetailPageState extends State<RatingDetailPage> {
             ),
             const SizedBox(height: 16),
 
-            // Rating Details
             Card(
               elevation: 2,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -335,7 +333,6 @@ class _RatingDetailPageState extends State<RatingDetailPage> {
             ),
             const SizedBox(height: 16),
 
-            // Review Notes
             Card(
               elevation: 2,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -368,7 +365,6 @@ class _RatingDetailPageState extends State<RatingDetailPage> {
             ),
             const SizedBox(height: 24),
 
-            // Delete Button
             if (widget.rating.status != RatingStatus.removed && 
                 widget.rating.status != RatingStatus.deleted && 
                 widget.rating.status != RatingStatus.pendingReview) ...[
@@ -468,4 +464,3 @@ class _DetailRow extends StatelessWidget {
     );
   }
 }
-

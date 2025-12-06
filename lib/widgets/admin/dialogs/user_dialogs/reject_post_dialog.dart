@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/services/admin/user_service.dart';
 import 'package:fyp_project/services/admin/post_service.dart';
@@ -7,7 +7,6 @@ import 'package:fyp_project/models/admin/report_model.dart';
 import 'package:fyp_project/models/admin/report_category_model.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 
-/// Bottom sheet dialog for rejecting a post and issuing warning to the owner
 class RejectPostDialog {
   static Future<Map<String, dynamic>?> show({
     required BuildContext context,
@@ -32,7 +31,6 @@ class RejectPostDialog {
     ReportCategoryModel? matchedCategory;
     double? deductAmount;
     
-    // Get post status and matched category
     try {
       final postDoc = await FirebaseFirestore.instance
           .collection('posts')
@@ -40,14 +38,12 @@ class RejectPostDialog {
           .get();
       postStatus = postDoc.data()?['status']?.toString() ?? 'unknown';
       
-      // Get report to find reason and match category
       final reportDoc = await FirebaseFirestore.instance
           .collection('reports')
           .doc(reportId)
           .get();
       final reportReason = reportDoc.data()?['reason']?.toString() ?? '';
       
-      // Get report categories and match
       final categoriesSnapshot = await FirebaseFirestore.instance
           .collection('report_categories')
           .where('type', isEqualTo: 'recruiter')
@@ -107,7 +103,7 @@ class RejectPostDialog {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header
+              
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -136,7 +132,7 @@ class RejectPostDialog {
                   ],
                 ),
               ),
-              // Content
+              
               Flexible(
                 child: SingleChildScrollView(
                   padding: EdgeInsets.only(
@@ -158,7 +154,7 @@ class RejectPostDialog {
                           color: Colors.grey[800],
                         ),
                       ),
-                      // Show wallet information
+                      
                       const SizedBox(height: 12),
                       Container(
                         padding: const EdgeInsets.all(16),
@@ -378,7 +374,7 @@ class RejectPostDialog {
                   ),
                 ),
               ),
-              // Actions
+              
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -425,7 +421,7 @@ class RejectPostDialog {
                           setDialogState(() {});
 
                           try {
-                            // Get post status first
+                            
                             final postDoc = await FirebaseFirestore.instance
                                 .collection('posts')
                                 .doc(postId)
@@ -433,19 +429,13 @@ class RejectPostDialog {
                             final postData = postDoc.data();
                             final postStatus = postData?['status']?.toString() ?? 'unknown';
                             
-                            // Handle post based on status:
-                            // - If approved/active: reject post + warning + deduct credits
-                            // - If completed: only warning + deduct credits (don't change post status)
                             bool postRejected = false;
                             if (postStatus == 'active' || postStatus == 'approved') {
-                              // Reject the post (change status to rejected)
+                              
                               await postService.rejectPost(postId, violationReason);
                               postRejected = true;
                             }
-                            // If post is completed, don't change status, just issue warning
-
-                            // Issue warning to the post owner (always do this)
-                            // Include credit deduction if category matched
+                            
                             final result = await userService.issueWarning(
                               userId: employerId,
                               violationReason: postRejected 
@@ -463,10 +453,9 @@ class RejectPostDialog {
                               final userName = result['userName'];
                               final deductionResult = result['deductionResult'] as Map<String, dynamic>?;
 
-                              // Build action message with credit deduction info if applicable
                               String actionMessage;
                               if (postRejected) {
-                                // Post was rejected
+                                
                                 String baseMessage = wasSuspended 
                                     ? 'Post rejected - Owner suspended (3 strikes)'
                                     : 'Post rejected - Warning issued to owner (Strike $strikeCount/3)';
@@ -475,7 +464,7 @@ class RejectPostDialog {
                                   if (deductionResult != null && deductionResult['success'] == true) {
                                     actionMessage = '$baseMessage. Credits deducted: ${deductAmount.toInt()}.';
                                   } else {
-                                    // Credit deduction failed (insufficient balance)
+                                    
                                     final errorMsg = deductionResult?['error']?.toString() ?? 'Insufficient balance';
                                     actionMessage = '$baseMessage. Credit deduction failed: $errorMsg.';
                                   }
@@ -483,7 +472,7 @@ class RejectPostDialog {
                                   actionMessage = baseMessage;
                                 }
                               } else {
-                                // Post is completed, only warning
+                                
                                 String baseMessage = wasSuspended 
                                     ? 'Post violation handled - Owner suspended (3 strikes)'
                                     : 'Post violation handled - Warning issued to owner (Strike $strikeCount/3)';
@@ -492,7 +481,7 @@ class RejectPostDialog {
                                   if (deductionResult != null && deductionResult['success'] == true) {
                                     actionMessage = '$baseMessage. Credits deducted: ${deductAmount.toInt()}.';
                                   } else {
-                                    // Credit deduction failed (insufficient balance)
+                                    
                                     final errorMsg = deductionResult?['error']?.toString() ?? 'Insufficient balance';
                                     actionMessage = '$baseMessage. Credit deduction failed: $errorMsg.';
                                   }
@@ -516,7 +505,7 @@ class RejectPostDialog {
                                 'userName': userName,
                               });
                             } else {
-                              // Post was rejected (if applicable) but warning failed
+                              
                               final actionMessage = postRejected
                                   ? 'Post rejected - Warning failed: ${result['error']}'
                                   : 'Post violation handled - Warning failed: ${result['error']}';
@@ -578,4 +567,3 @@ class RejectPostDialog {
     );
   }
 }
-

@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fyp_project/pages/admin/post_moderation/post_moderation_page.dart';
@@ -63,14 +63,11 @@ class _DashboardPageState extends State<DashboardPage> {
     _setupRealtimeUpdates();
   }
 
-  // Setup realtime stream subscriptions for dashboard stats
-  // Staff role doesn't see reports count, so skip that subscription
   void _setupRealtimeUpdates() {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentRole = authService.currentAdmin?.role.toLowerCase() ?? '';
     final isStaff = currentRole == 'staff';
     
-    // Only subscribe to reports if not staff
     if (!isStaff) {
       _reportsSubscription = _dashboardService.streamUnresolvedReportsCount().listen(
         (count) {
@@ -84,7 +81,7 @@ class _DashboardPageState extends State<DashboardPage> {
           debugPrint('Error listening to reports stream: $error');
           if (mounted) {
             setState(() {
-              _unresolvedReports = 0; // Reset to 0 on error
+              _unresolvedReports = 0; 
             });
           }
           _reportsSubscription?.cancel();
@@ -93,7 +90,6 @@ class _DashboardPageState extends State<DashboardPage> {
       );
     }
 
-    // Always listen to pending posts count (all roles need this)
     _pendingPostsSubscription = _dashboardService.streamPendingPostsCount().listen(
       (count) {
         if (mounted) {
@@ -106,7 +102,7 @@ class _DashboardPageState extends State<DashboardPage> {
         debugPrint('Error listening to pending posts stream: $error');
         if (mounted) {
           setState(() {
-            _pendingPosts = 0; // Reset to 0 on error
+            _pendingPosts = 0; 
           });
         }
         _pendingPostsSubscription?.cancel();
@@ -166,9 +162,9 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<void> _refreshDashboard() async {
     try {
-      // Refresh active users count
+      
       final users = await _dashboardService.getActiveUsersCount();
-      // Refresh unresolved reports count
+      
       final unresolvedReports = await _dashboardService.getUnresolvedReportsCount();
 
       if (mounted) {
@@ -200,7 +196,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return WillPopScope(
       onWillPop: () async {
         _showUserProfile(context, authService);
-        return false; // Prevent default back navigation
+        return false; 
       },
       child: Scaffold(
       backgroundColor: Colors.grey[50],
@@ -239,7 +235,6 @@ class _DashboardPageState extends State<DashboardPage> {
                   );
                 }
                 
-                // Perform logout in background (non-blocking)
                 authService.logout().catchError((e) {
                   debugPrint('Logout error (non-critical): $e');
                 });
@@ -350,7 +345,7 @@ class _DashboardPageState extends State<DashboardPage> {
               },
             ),
           ),
-          // Hide Unresolved Reports card for staff role
+          
           if (!isStaff) ...[
             const SizedBox(width: 10),
             Expanded(
@@ -508,7 +503,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         if (context.mounted) {
                           Navigator.of(context).pushNamedAndRemoveUntil(
                             AppRoutes.login,
-                            (route) => false, // Remove all previous routes
+                            (route) => false, 
                           );
                         }
                         
@@ -675,7 +670,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
     final filteredCards = cards.where((c) => allowedPages.contains(c.title)).toList();
     
-    // Debug logging
     debugPrint('Dashboard - Allowed pages: $allowedPages');
     debugPrint('Dashboard - Filtered cards count: ${filteredCards.length}');
     debugPrint('Dashboard - Filtered card titles: ${filteredCards.map((c) => c.title).toList()}');

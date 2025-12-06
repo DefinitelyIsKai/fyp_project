@@ -1,6 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-/// A reusable detail section widget for displaying longer text content with icon
 class UserDetailSection extends StatelessWidget {
   final String label;
   final String value;
@@ -55,4 +54,3 @@ class UserDetailSection extends StatelessWidget {
     );
   }
 }
-

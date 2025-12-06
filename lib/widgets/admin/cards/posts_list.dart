@@ -1,8 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/job_post_model.dart';
 import 'package:fyp_project/widgets/admin/cards/post_card.dart';
 
-/// A reusable posts list widget with refresh indicator and empty state
 class PostsList extends StatelessWidget {
   final List<JobPostModel> posts;
   final String status;
@@ -31,7 +30,7 @@ class PostsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Build scrollable widget
+    
     Widget scrollView;
     
     if (posts.isEmpty) {
@@ -39,7 +38,7 @@ class PostsList extends StatelessWidget {
     } else {
       scrollView = CustomScrollView(
         slivers: [
-          // Header with post count
+          
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -57,7 +56,7 @@ class PostsList extends StatelessWidget {
               ),
             ),
           ),
-          // Posts list
+          
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             sliver: SliverList(
@@ -83,7 +82,6 @@ class PostsList extends StatelessWidget {
       );
     }
 
-    // Wrap with RefreshIndicator if refresh callback is provided
     if (onRefresh != null) {
       return RefreshIndicator(
         onRefresh: onRefresh!,
@@ -152,4 +150,3 @@ class PostsList extends StatelessWidget {
     );
   }
 }
-

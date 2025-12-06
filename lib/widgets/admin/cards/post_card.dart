@@ -1,7 +1,6 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/job_post_model.dart';
 
-/// A reusable post card widget for displaying job posts in moderation pages
 class PostCard extends StatelessWidget {
   final JobPostModel post;
   final void Function(JobPostModel)? onApprove;
@@ -58,7 +57,6 @@ class PostCard extends StatelessWidget {
   Widget build(BuildContext context) {
     List<Widget> actionButtons = [];
 
-    // Build action buttons based on current status
     switch (post.status) {
       case 'pending':
         actionButtons = [
@@ -206,7 +204,6 @@ class PostCard extends StatelessWidget {
         break;
     }
 
-    // Add view button
     actionButtons.add(const SizedBox(width: 8));
     actionButtons.add(
       Container(
@@ -236,7 +233,7 @@ class PostCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header with status
+                
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -271,7 +268,7 @@ class PostCard extends StatelessWidget {
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
-                                  post.location.split(',').first, // Show only first part of location
+                                  post.location.split(',').first, 
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Colors.grey[600],
@@ -304,7 +301,7 @@ class PostCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
-                // Author and date
+                
                 Row(
                   children: [
                     Container(
@@ -348,7 +345,7 @@ class PostCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
-                // Action buttons
+                
                 Row(children: actionButtons),
               ],
             ),
@@ -358,4 +355,3 @@ class PostCard extends StatelessWidget {
     );
   }
 }
-

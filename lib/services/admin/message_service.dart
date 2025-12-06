@@ -1,11 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/models/admin/message_model.dart';
 
 class MessageService {
   final CollectionReference _messagesCollection =
       FirebaseFirestore.instance.collection('messages');
 
-  /// Get all reported/flagged messages
   Future<List<MessageModel>> getReportedMessages() async {
     try {
       final snapshot = await _messagesCollection
@@ -33,7 +32,6 @@ class MessageService {
     }
   }
 
-  /// Get messages by status
   Future<List<MessageModel>> getMessagesByStatus(MessageStatus status) async {
     try {
       final snapshot = await _messagesCollection
@@ -61,7 +59,6 @@ class MessageService {
     }
   }
 
-  /// Review a flagged message
   Future<void> reviewMessage({
     required String messageId,
     required String action,
@@ -79,7 +76,6 @@ class MessageService {
     });
   }
 
-  /// Remove a message
   Future<void> removeMessage(String messageId, {String? reason}) async {
     await _messagesCollection.doc(messageId).update({
       'status': 'removed',
@@ -89,7 +85,6 @@ class MessageService {
     });
   }
 
-  /// Flag a message for review
   Future<void> flagMessage(String messageId, String reason) async {
     await _messagesCollection.doc(messageId).update({
       'status': 'reported',
@@ -98,4 +93,3 @@ class MessageService {
     });
   }
 }
-

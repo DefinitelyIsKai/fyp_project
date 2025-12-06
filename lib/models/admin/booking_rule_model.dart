@@ -1,4 +1,4 @@
-class BookingRuleModel {
+﻿class BookingRuleModel {
   final String id;
   final String name;
   final String description;
@@ -62,4 +62,3 @@ class BookingRuleModel {
     );
   }
 }
-

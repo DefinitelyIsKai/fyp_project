@@ -1,6 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-/// A reusable editable detail row widget for user detail pages
 class EditableDetailRow extends StatelessWidget {
   final String label;
   final TextEditingController controller;
@@ -77,4 +76,3 @@ class EditableDetailRow extends StatelessWidget {
     );
   }
 }
-

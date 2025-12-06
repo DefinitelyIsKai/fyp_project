@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
@@ -441,7 +441,7 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
       }
 
       if (!context.mounted) return;
-      Navigator.pop(context); // Close loading dialog
+      Navigator.pop(context); 
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -461,7 +461,7 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
       }
     } catch (e) {
       if (context.mounted) {
-        Navigator.pop(context); // Close loading dialog
+        Navigator.pop(context); 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: ${e.toString()}'),
@@ -1378,7 +1378,7 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
 
   Future<void> _showSuspendDialog(BuildContext context, UserService userService) async {
     final reasonController = TextEditingController();
-    final durationController = TextEditingController(text: '30'); // Default 30 days
+    final durationController = TextEditingController(text: '30'); 
 
     bool isLoading = false;
     String? reasonError;
@@ -1786,7 +1786,7 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
                         );
 
                         if (context.mounted) {
-                          Navigator.pop(context); // Close delete dialog
+                          Navigator.pop(context); 
 
                           if (result['success'] == true) {
                             final userName = result['userName'];

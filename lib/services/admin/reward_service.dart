@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/scheduler.dart';
@@ -20,7 +20,6 @@ class RewardService {
   final CollectionReference<Map<String, dynamic>> _notificationsRef =
       FirebaseFirestore.instance.collection('notifications');
 
-  /// Preview eligible users for monthly rewards (simplified and optimized)
   Future<Map<String, dynamic>> previewEligibleUsers({
     DateTime? month,
     double minRating = 4.0,
@@ -33,14 +32,11 @@ class RewardService {
       final monthEnd = DateTime(targetMonth.year, targetMonth.month + 1, 0, 23, 59, 59);
       final monthStr = '${targetMonth.year}-${targetMonth.month.toString().padLeft(2, '0')}';
 
-      // Ensure UI has a chance to update before starting
       await SchedulerBinding.instance.endOfFrame;
       await Future.delayed(const Duration(milliseconds: 50));
 
-      // Step 1: Get completed post IDs in the month
       final completedPostIds = await _getCompletedPostIds(monthStart, monthEnd);
       
-      // Yield after posts query
       await SchedulerBinding.instance.endOfFrame;
       await Future.delayed(const Duration(milliseconds: 20));
       
@@ -55,10 +51,8 @@ class RewardService {
         };
       }
 
-      // Step 2: Get approved applications for completed posts (batch query)
       final applications = await _getApprovedApplicationsForPosts(completedPostIds);
       
-      // Yield after applications query
       await SchedulerBinding.instance.endOfFrame;
       await Future.delayed(const Duration(milliseconds: 20));
       
@@ -73,7 +67,6 @@ class RewardService {
         };
       }
 
-      // Step 3: Count completed posts per jobseeker (in-memory, fast)
       final jobseekerPostCounts = <String, int>{};
       final jobseekerPostIds = <String, List<String>>{};
       
@@ -86,13 +79,11 @@ class RewardService {
         }
       }
 
-      // Step 4: Filter by min posts requirement
       final candidateJobseekers = jobseekerPostCounts.entries
           .where((e) => e.value >= minCompletedTasks)
           .map((e) => e.key)
           .toList();
 
-      // Yield before processing candidates
       await SchedulerBinding.instance.endOfFrame;
       await Future.delayed(const Duration(milliseconds: 20));
 
@@ -107,25 +98,23 @@ class RewardService {
         };
       }
 
-      // Step 5: Get user data and ratings for candidates (process one by one with aggressive yields)
       final eligibleUsers = <Map<String, dynamic>>[];
       
       for (int i = 0; i < candidateJobseekers.length; i++) {
-        // Aggressive yielding - yield before every user
+        
         await SchedulerBinding.instance.endOfFrame;
         await Future.delayed(Duration.zero);
         await Future.microtask(() {});
-        await Future.delayed(const Duration(milliseconds: 15)); // Let UI breathe
+        await Future.delayed(const Duration(milliseconds: 15)); 
         
         final jobseekerId = candidateJobseekers[i];
         
         try {
-          // Get user data with timeout
+          
           final userDoc = await _usersRef.doc(jobseekerId).get().timeout(
             const Duration(seconds: 2),
           );
           
-          // Yield after user fetch
           await Future.microtask(() {});
           
           if (!userDoc.exists) {
@@ -141,13 +130,10 @@ class RewardService {
             continue;
           }
           
-          // Get average rating (simple query like review_service)
           final avgRating = await _getAverageRatingForJobseeker(jobseekerId, monthStart, monthEnd);
           
-          // Yield after rating fetch
           await Future.microtask(() {});
           
-          // Check if qualifies
           if (avgRating >= minRating) {
             eligibleUsers.add({
               'userId': jobseekerId,
@@ -181,7 +167,6 @@ class RewardService {
     }
   }
 
-  /// Get completed post IDs for a month (simplified)
   Future<List<String>> _getCompletedPostIds(DateTime monthStart, DateTime monthEnd) async {
     try {
       final snapshot = await _postsRef
@@ -211,17 +196,15 @@ class RewardService {
     }
   }
 
-  /// Get approved applications for completed posts (batch query with aggressive yields)
   Future<List<Map<String, dynamic>>> _getApprovedApplicationsForPosts(List<String> postIds) async {
     final allApplications = <Map<String, dynamic>>[];
     
-    // Query in batches of 10 (Firestore whereIn limit)
     for (int i = 0; i < postIds.length; i += 10) {
-      // Aggressive yielding before each batch
+      
       await Future.delayed(Duration.zero);
       await Future.microtask(() {});
       if (i > 0) {
-        await Future.delayed(const Duration(milliseconds: 20)); // Let UI breathe
+        await Future.delayed(const Duration(milliseconds: 20)); 
       }
       
       final batch = postIds.skip(i).take(10).toList();
@@ -230,9 +213,8 @@ class RewardService {
             .where('postId', whereIn: batch)
             .where('status', isEqualTo: 'approved')
             .get()
-            .timeout(const Duration(seconds: 3)); // Shorter timeout
+            .timeout(const Duration(seconds: 3)); 
         
-        // Yield after query
         await Future.microtask(() {});
         
         for (final doc in snapshot.docs) {
@@ -243,14 +225,13 @@ class RewardService {
           });
         }
       } catch (e) {
-        // Error fetching applications batch - continue
+        
       }
     }
     
     return allApplications;
   }
 
-  /// Get average rating for a jobseeker in a month (simplified like review_service)
   Future<double> _getAverageRatingForJobseeker(
     String jobseekerId,
     DateTime monthStart,
@@ -260,17 +241,17 @@ class RewardService {
       final snapshot = await _reviewsRef
           .where('jobseekerId', isEqualTo: jobseekerId)
           .get()
-          .timeout(const Duration(seconds: 2)); // Shorter timeout
+          .timeout(const Duration(seconds: 2)); 
 
       if (snapshot.docs.isEmpty) {
         return 0.0;
       }
 
       final ratings = <double>[];
-      // Process in chunks with yields
+      
       final docs = snapshot.docs;
       for (int i = 0; i < docs.length; i++) {
-        // Yield every 10 docs
+        
         if (i > 0 && i % 10 == 0) {
           await Future.microtask(() {});
         }
@@ -298,7 +279,6 @@ class RewardService {
     }
   }
 
-  /// Calculate monthly rewards for users based on ratings and completed tasks
   Future<Map<String, dynamic>> calculateMonthlyRewards({
     DateTime? month,
     double minRating = 4.0,
@@ -309,7 +289,6 @@ class RewardService {
       final targetMonth = month ?? _getCurrentMonth();
       final monthStr = '${targetMonth.year}-${targetMonth.month.toString().padLeft(2, '0')}';
 
-      // Use preview to get eligible users
       await Future.delayed(Duration.zero);
       final previewResult = await previewEligibleUsers(
         month: targetMonth,
@@ -332,14 +311,13 @@ class RewardService {
       final eligibleUsers = previewResult['eligibleUsers'] as List<dynamic>? ?? [];
       final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
 
-      // Distribute rewards
       int successCount = 0;
       int failCount = 0;
       final errors = <String>[];
 
       for (final user in eligibleUsers) {
         try {
-          await Future.delayed(Duration.zero); // Yield between distributions
+          await Future.delayed(Duration.zero); 
           
           await _distributeReward(
             userId: user['userId'] as String,
@@ -373,7 +351,6 @@ class RewardService {
     }
   }
 
-  /// Distribute reward to a user
   Future<void> _distributeReward({
     required String userId,
     required String userName,
@@ -383,7 +360,7 @@ class RewardService {
     required int completedTasks,
     String? createdBy,
   }) async {
-    // Ensure wallet exists
+    
     final walletRef = _walletsRef.doc(userId);
     final walletDoc = await walletRef.get();
     
@@ -399,20 +376,17 @@ class RewardService {
     final transactionsRef = walletRef.collection('transactions');
     final txnRef = transactionsRef.doc();
 
-    // Use Firestore transaction to atomically update balance
     await _firestore.runTransaction((tx) async {
       final snap = await tx.get(walletRef);
       final data = snap.data() ?? <String, dynamic>{'balance': 0};
       final int current = (data['balance'] as num?)?.toInt() ?? 0;
       final int next = current + amount;
 
-      // Update wallet balance
       tx.update(walletRef, {
         'balance': next,
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // Create transaction record
       tx.set(txnRef, {
         'id': txnRef.id,
         'userId': userId,
@@ -430,7 +404,6 @@ class RewardService {
       });
     });
 
-    // Create log entry
     try {
       await _logsRef.add({
         'actionType': 'monthly_reward',
@@ -444,10 +417,9 @@ class RewardService {
         'createdBy': createdBy,
       });
     } catch (logError) {
-      // Error creating reward log entry - continue
+      
     }
 
-    // Send notification to user
     try {
       await _notificationsRef.add({
         'userId': userId,
@@ -465,33 +437,29 @@ class RewardService {
         },
       });
     } catch (notifError) {
-      // Error sending reward notification - continue
+      
     }
   }
 
-  /// Get current month
   DateTime _getCurrentMonth() {
     final now = DateTime.now();
     return DateTime(now.year, now.month, 1);
   }
 
-  /// Get reward history grouped by distribution run
   Future<List<Map<String, dynamic>>> getRewardHistory({int limit = 50}) async {
     try {
-      // Fetch logs ordered by createdAt (filter in memory to avoid composite index)
+      
       final snapshot = await _logsRef
           .orderBy('createdAt', descending: true)
-          .limit(limit * 100) // Fetch more to account for filtering and grouping
+          .limit(limit * 100) 
           .get();
 
-      // First, collect all monthly_reward logs
       final allRewards = <Map<String, dynamic>>[];
       
       for (final doc in snapshot.docs) {
         final data = doc.data();
         final actionType = data['actionType'] as String?;
         
-        // Filter for monthly_reward only
         if (actionType != 'monthly_reward') continue;
         
         final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
@@ -509,7 +477,6 @@ class RewardService {
         });
       }
       
-      // Group rewards by distribution run (rewards created within 5 minutes of each other)
       final distributionRuns = <Map<String, dynamic>>[];
       final processedIds = <String>{};
       
@@ -520,7 +487,6 @@ class RewardService {
         final firstDate = firstReward['createdAt'] as DateTime?;
         if (firstDate == null) continue;
         
-        // Find all rewards in the same distribution run (within 5 minutes)
         final runRewards = <Map<String, dynamic>>[];
         final runStartTime = firstDate;
         final runEndTime = runStartTime.add(const Duration(minutes: 5));
@@ -531,7 +497,6 @@ class RewardService {
           final rewardDate = allRewards[j]['createdAt'] as DateTime?;
           if (rewardDate == null) continue;
           
-          // Check if this reward is within the time window
           if (rewardDate.isAfter(runStartTime.subtract(const Duration(minutes: 5))) &&
               rewardDate.isBefore(runEndTime)) {
             runRewards.add(allRewards[j]);
@@ -541,7 +506,6 @@ class RewardService {
         
         if (runRewards.isEmpty) continue;
         
-        // Calculate summary for this distribution run
         final totalAmount = runRewards.fold<int>(0, (sum, r) => sum + (r['amount'] as int));
         final rewardAmount = runRewards.isNotEmpty ? (runRewards[0]['amount'] as int) : 0;
         final month = runRewards.isNotEmpty ? (runRewards[0]['month'] as String? ?? 'Unknown') : 'Unknown';
@@ -552,7 +516,7 @@ class RewardService {
           'successCount': runRewards.length,
           'totalAmount': totalAmount,
           'rewardAmount': rewardAmount,
-          'eligibleUsers': runRewards.length, // Each reward = one eligible user
+          'eligibleUsers': runRewards.length, 
         });
         
         if (distributionRuns.length >= limit) break;
@@ -564,21 +528,19 @@ class RewardService {
     }
   }
 
-  /// Stream reward history grouped by distribution run
   Stream<List<Map<String, dynamic>>> streamRewardHistory({int limit = 50}) {
     return _logsRef
         .orderBy('createdAt', descending: true)
-        .limit(limit * 100) // Fetch more to account for filtering and grouping
+        .limit(limit * 100) 
         .snapshots()
         .map((snapshot) {
-      // First, collect all monthly_reward logs
+      
       final allRewards = <Map<String, dynamic>>[];
       
       for (final doc in snapshot.docs) {
         final data = doc.data();
         final actionType = data['actionType'] as String?;
         
-        // Filter for monthly_reward only
         if (actionType != 'monthly_reward') continue;
         
         final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
@@ -596,7 +558,6 @@ class RewardService {
         });
       }
       
-      // Group rewards by distribution run (rewards created within 5 minutes of each other)
       final distributionRuns = <Map<String, dynamic>>[];
       final processedIds = <String>{};
       
@@ -607,7 +568,6 @@ class RewardService {
         final firstDate = firstReward['createdAt'] as DateTime?;
         if (firstDate == null) continue;
         
-        // Find all rewards in the same distribution run (within 5 minutes)
         final runRewards = <Map<String, dynamic>>[];
         final runStartTime = firstDate;
         final runEndTime = runStartTime.add(const Duration(minutes: 5));
@@ -618,7 +578,6 @@ class RewardService {
           final rewardDate = allRewards[j]['createdAt'] as DateTime?;
           if (rewardDate == null) continue;
           
-          // Check if this reward is within the time window
           if (rewardDate.isAfter(runStartTime.subtract(const Duration(minutes: 5))) &&
               rewardDate.isBefore(runEndTime)) {
             runRewards.add(allRewards[j]);
@@ -628,7 +587,6 @@ class RewardService {
         
         if (runRewards.isEmpty) continue;
         
-        // Calculate summary for this distribution run
         final totalAmount = runRewards.fold<int>(0, (sum, r) => sum + (r['amount'] as int));
         final rewardAmount = runRewards.isNotEmpty ? (runRewards[0]['amount'] as int) : 0;
         final month = runRewards.isNotEmpty ? (runRewards[0]['month'] as String? ?? 'Unknown') : 'Unknown';
@@ -639,7 +597,7 @@ class RewardService {
           'successCount': runRewards.length,
           'totalAmount': totalAmount,
           'rewardAmount': rewardAmount,
-          'eligibleUsers': runRewards.length, // Each reward = one eligible user
+          'eligibleUsers': runRewards.length, 
         });
         
         if (distributionRuns.length >= limit) break;

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 class ReportInternalNotesSection extends StatelessWidget {
   final TextEditingController notesController;
@@ -57,4 +57,3 @@ class ReportInternalNotesSection extends StatelessWidget {
     );
   }
 }
-

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fyp_project/models/admin/category_model.dart';
 import 'package:fyp_project/services/admin/category_service.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
@@ -410,8 +410,8 @@ class _CategoriesPageState extends State<CategoriesPage> {
               try {
                 await _categoryService.toggleCategoryStatus(category.id, newStatus);
                 if (mounted) {
-                  Navigator.pop(context); // Close confirmation dialog
-                  Navigator.pop(context); // Close edit dialog
+                  Navigator.pop(context); 
+                  Navigator.pop(context); 
                   _showSnackBar('Category ${newStatus ? 'activated' : 'deactivated'} successfully');
                   _loadCategories();
                 }
@@ -459,8 +459,8 @@ class _CategoriesPageState extends State<CategoriesPage> {
               try {
                 await _categoryService.toggleCategoryStatus(category.id, !(category.isActive ?? true));
                 if (mounted) {
-                  Navigator.pop(context); // Close confirmation dialog
-                  Navigator.pop(context); // Close edit dialog
+                  Navigator.pop(context); 
+                  Navigator.pop(context); 
                   _showSnackBar('Category ${category.isActive ?? true ? 'deactivated' : 'activated'} successfully');
                   _loadCategories();
                 }
@@ -732,7 +732,7 @@ class _CategoryCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              // Icon
+              
               Container(
                 width: 48,
                 height: 48,

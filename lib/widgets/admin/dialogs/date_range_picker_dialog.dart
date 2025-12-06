@@ -1,8 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:fyp_project/utils/admin/snackbar_utils.dart';
 
-/// A reusable date range picker dialog
 class DateRangePickerDialog extends StatefulWidget {
   final DateTime startDate;
   final DateTime endDate;
@@ -16,7 +15,6 @@ class DateRangePickerDialog extends StatefulWidget {
   @override
   State<DateRangePickerDialog> createState() => _DateRangePickerDialogState();
 
-  /// Show the date range picker dialog
   static Future<Map<String, DateTime>?> show(
     BuildContext context, {
     required DateTime startDate,
@@ -39,7 +37,7 @@ class _DateRangePickerDialogState extends State<DateRangePickerDialog> {
   @override
   void initState() {
     super.initState();
-    // Extract just the date part (remove time)
+    
     _tempStartDate = DateTime(
       widget.startDate.year,
       widget.startDate.month,
@@ -88,7 +86,7 @@ class _DateRangePickerDialogState extends State<DateRangePickerDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Start Date
+            
             const Text(
               'Start Date',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
@@ -116,7 +114,6 @@ class _DateRangePickerDialogState extends State<DateRangePickerDialog> {
             ),
             const SizedBox(height: 16),
 
-            // End Date
             const Text(
               'End Date',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
@@ -144,7 +141,6 @@ class _DateRangePickerDialogState extends State<DateRangePickerDialog> {
             ),
             const SizedBox(height: 16),
 
-            // Quick Presets
             const Text(
               'Quick Presets',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
@@ -267,4 +263,3 @@ class _QuickDateButton extends StatelessWidget {
     );
   }
 }
-

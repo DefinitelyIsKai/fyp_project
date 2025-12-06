@@ -1,4 +1,4 @@
-// services/notification_service.dart
+﻿
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class NotificationService {
@@ -72,7 +72,6 @@ class NotificationService {
     });
   }
 
-  /// Send notification when a post is approved
   Future<void> sendPostApprovalNotification({
     required String userId,
     required String postId,
@@ -81,7 +80,7 @@ class NotificationService {
     await _notificationsRef.add({
       'title': 'Post published',
       'body': '"$postTitle" is now live.',
-      'category': 'post', // Use 'post' category to match user-side NotificationCategory.post
+      'category': 'post', 
       'createdAt': FieldValue.serverTimestamp(),
       'isRead': false,
       'userId': userId,
@@ -93,7 +92,6 @@ class NotificationService {
     });
   }
 
-  /// Send notification when a post is rejected
   Future<void> sendPostRejectionNotification({
     required String userId,
     required String postId,

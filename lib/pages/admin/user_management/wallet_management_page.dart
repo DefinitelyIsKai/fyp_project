@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -61,20 +61,18 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          // Force refresh by triggering a rebuild
+          
           setState(() {});
         },
         color: Colors.blue[700],
         backgroundColor: Colors.white,
         child: Column(
           children: [
-            // Header with Stats
+            
             _buildHeaderSection(),
             
-            // Search Bar
             _buildSearchSection(),
 
-            // Wallets List
             Expanded(
               child: _buildWalletsList(),
             ),
@@ -435,21 +433,18 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
           final userData = userDoc.data();
           final role = userData?['role'] as String?;
           
-          // Exclude admin roles (manager, hr, staff)
           if (role != 'manager' && role != 'hr' && role != 'staff') {
             nonAdminWallets.add(walletData);
           }
         }
       } catch (e) {
-        // Error checking user role - continue with next wallet
+        
       }
     }
     
     return nonAdminWallets;
   }
 
-  // Filter out admin wallets and sort by user name
-  // Only show wallets for regular users (jobseekers and recruiters)
   Future<List<QueryDocumentSnapshot>> _filterNonAdminWallets(List<QueryDocumentSnapshot> wallets) async {
     final walletUserPairs = <Map<String, dynamic>>[];
     
@@ -463,7 +458,6 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
           final userData = userDoc.data();
           final role = userData?['role'] as String?;
           
-          // Skip admin roles - only show regular user wallets
           if (role != 'manager' && role != 'hr' && role != 'staff') {
             final userName = userData?['fullName'] as String? ?? 'Unknown User';
             walletUserPairs.add({
@@ -473,16 +467,14 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
           }
         }
       } catch (e) {
-        // Skip this wallet if we can't check the role
+        
       }
     }
     
-    // Sort alphabetically by name for easier browsing
     walletUserPairs.sort((a, b) => 
       (a['userName'] as String).toLowerCase().compareTo((b['userName'] as String).toLowerCase())
     );
     
-    // Extract just the wallet docs in sorted order
     return walletUserPairs.map((pair) => pair['wallet'] as QueryDocumentSnapshot).toList();
   }
 
@@ -505,7 +497,6 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
         final userName = userData?['fullName'] ?? 'Unknown User';
         final userEmail = userData?['email'] ?? 'No email';
 
-        // Filter by search query
         if (_searchQuery.isNotEmpty) {
           final query = _searchQuery.toLowerCase();
           if (!userName.toLowerCase().contains(query) &&
@@ -572,7 +563,7 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
                   padding: const EdgeInsets.all(16),
                   child: Row(
                     children: [
-                      // User Avatar with Initials
+                      
                       Container(
                         width: 56,
                         height: 56,
@@ -606,7 +597,6 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
                       ),
                       const SizedBox(width: 16),
                       
-                      // User Info
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -686,7 +676,6 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
                       
                       const SizedBox(width: 12),
                       
-                      // Balance and Actions
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
@@ -893,7 +882,6 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
     );
   }
 
-  // Loading State
   Widget _buildLoadingState() {
     return const Center(
       child: Column(
@@ -910,7 +898,6 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
     );
   }
 
-  // Error State
   Widget _buildErrorState(String error) {
     return Center(
       child: Padding(
@@ -966,7 +953,6 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
     );
   }
 
-  // Empty State
   Widget _buildEmptyState() {
     return CustomScrollView(
       slivers: [
@@ -1030,10 +1016,8 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
     return DateFormat('dd MMM yyyy').format(date);
   }
 
-  // Add credit to user wallet using firestore transaction
-  // Also creates transaction record and sends notification
   Future<void> _addCredit(String userId, double amount, String reason, String userName) async {
-    // Show loading dialog
+    
     if (!mounted) return;
     showDialog(
       context: context,
@@ -1079,10 +1063,8 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
     try {
       setState(() => _isLoading = true);
 
-      // Get current admin user ID for logging
       final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
       
-      // Get user info for logging and notifications
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
       final userData = userDoc.data();
       final userName = userData?['fullName'] ?? 'Unknown User';
@@ -1091,7 +1073,6 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
       final transactionsRef = walletRef.collection('transactions');
       final txnRef = transactionsRef.doc();
       
-      // Create wallet if it doesn't exist yet
       final walletDoc = await walletRef.get();
       if (!walletDoc.exists) {
         await walletRef.set({
@@ -1102,8 +1083,6 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
         });
       }
 
-      // Use transaction to ensure balance update and transaction record are atomic
-      // Prevents race conditions if multiple credits added at same time
       await FirebaseFirestore.instance.runTransaction((tx) async {
         final snap = await tx.get(walletRef);
         final data = snap.data() ?? <String, dynamic>{'balance': 0};
@@ -1111,13 +1090,11 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
         final int amountInt = amount.toInt();
         final int next = current + amountInt;
         
-        // Update wallet balance
         tx.update(walletRef, {
           'balance': next,
           'updatedAt': FieldValue.serverTimestamp(),
         });
         
-        // Create transaction record in subcollection for history
         tx.set(txnRef, {
           'id': txnRef.id,
           'userId': userId,
@@ -1129,13 +1106,11 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
         });
       });
 
-      // Get final balance for logging
       final finalWalletDoc = await walletRef.get();
       final finalData = finalWalletDoc.data();
       final finalBalance = (finalData?['balance'] as num?)?.toDouble() ?? 0.0;
       final previousBalance = finalBalance - amount;
 
-      // Create log entry
       try {
         await FirebaseFirestore.instance.collection('logs').add({
           'actionType': 'add_credit',
@@ -1149,10 +1124,9 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
           'createdBy': currentAdminId,
         });
       } catch (logError) {
-        // Error creating log entry - continue
+        
       }
 
-      // Send notification to user
       try {
         await _notificationService.notifyWalletCredit(
           userId: userId,
@@ -1160,16 +1134,15 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
           reason: reason.isEmpty ? 'Credit added by admin' : reason,
         );
       } catch (notifError) {
-        // Don't fail the operation if notification fails
+        
       }
 
-      // Close loading dialog
       if (mounted) {
         Navigator.of(context).pop();
       }
 
       if (mounted) {
-        // Get final balance for display
+        
         final displayWalletDoc = await walletRef.get();
         final displayData = displayWalletDoc.data();
         final displayBalance = (displayData?['balance'] as num?)?.toDouble() ?? 0.0;
@@ -1205,7 +1178,7 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
         );
       }
     } catch (e) {
-      // Close loading dialog if still open
+      
       if (mounted) {
         Navigator.of(context).pop();
       }
@@ -1254,7 +1227,7 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
       );
 
       if (result['success'] == true) {
-        // Send notification to user
+        
         try {
           await _notificationService.notifyWalletDebit(
             userId: userId,
@@ -1262,7 +1235,7 @@ class _WalletManagementPageState extends State<WalletManagementPage> {
             reason: reason,
           );
         } catch (notifError) {
-          // Don't fail the operation if notification fails
+          
         }
 
         if (mounted) {

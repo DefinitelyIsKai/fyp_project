@@ -1,8 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
-/// A reusable tab widget for displaying credit logs/transactions for a user
 class CreditLogsTab extends StatefulWidget {
   final String userId;
 
@@ -319,4 +318,3 @@ class _CreditLogsTabState extends State<CreditLogsTab> {
     }
   }
 }
-

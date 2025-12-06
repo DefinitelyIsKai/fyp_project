@@ -1,4 +1,4 @@
-class ReportCategoryModel {
+﻿class ReportCategoryModel {
   final String id;
   final String name;
   final String description;
@@ -68,4 +68,3 @@ class ReportCategoryModel {
     );
   }
 }
-

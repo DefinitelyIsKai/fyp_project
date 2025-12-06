@@ -1,9 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../../../../utils/user/button_styles.dart';
 import '../../../../services/user/report_service.dart';
 import '../../../../models/admin/report_category_model.dart';
 
-//Report Dialog
 class ReportJobseekerDialog extends StatefulWidget {
   final String jobseekerName;
 
@@ -33,7 +32,7 @@ class _ReportJobseekerDialogState extends State<ReportJobseekerDialog> {
 
   Future<void> _loadCategories() async {
     try {
-      // Get categories based on user role (recruiter reports jobseekers)
+      
       final categories = await _reportService.getReportCategoriesByUserRole();
       if (mounted) {
         setState(() {
@@ -84,7 +83,7 @@ class _ReportJobseekerDialogState extends State<ReportJobseekerDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-            // Header
+            
             Row(
               children: [
                 Container(
@@ -141,7 +140,7 @@ class _ReportJobseekerDialogState extends State<ReportJobseekerDialog> {
               ],
             ),
             const SizedBox(height: 24),
-            // Reason Selection
+            
             const Text(
               'Reason for reporting:',
               style: TextStyle(
@@ -160,7 +159,7 @@ class _ReportJobseekerDialogState extends State<ReportJobseekerDialog> {
               )
             else
               ...[
-                // Show categories if available
+                
                 if (_categories.isNotEmpty)
                   ..._categories.map((category) {
                   return Container(
@@ -215,7 +214,7 @@ class _ReportJobseekerDialogState extends State<ReportJobseekerDialog> {
                     ),
                   );
                   }),
-                // Other option (always available)
+                
                 Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   decoration: BoxDecoration(
@@ -253,7 +252,7 @@ class _ReportJobseekerDialogState extends State<ReportJobseekerDialog> {
                     ),
                   ),
                 ),
-                // Custom reason input (shown when Other is selected)
+                
                 if (_selectedReason == 'Other')
                   Container(
                     margin: const EdgeInsets.only(top: 8, bottom: 8),
@@ -299,7 +298,7 @@ class _ReportJobseekerDialogState extends State<ReportJobseekerDialog> {
                   ),
               ],
             const SizedBox(height: 20),
-            // Description Field
+            
             const Text(
               'Description (optional):',
               style: TextStyle(
@@ -336,7 +335,7 @@ class _ReportJobseekerDialogState extends State<ReportJobseekerDialog> {
               ),
             ),
             const SizedBox(height: 24),
-            // Action Buttons
+            
             Row(
               children: [
                 Expanded(
@@ -395,4 +394,3 @@ class _ReportJobseekerDialogState extends State<ReportJobseekerDialog> {
     );
   }
 }
-

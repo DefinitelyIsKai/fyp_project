@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:fyp_project/services/admin/post_analytics_service.dart';
@@ -30,12 +30,10 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
   DateTime _startDate = DateTime.now().subtract(const Duration(days: 30));
   DateTime _endDate = DateTime.now();
 
-  // Helper to set start of day
   DateTime _startOfDay(DateTime date) {
     return DateTime(date.year, date.month, date.day, 0, 0, 0);
   }
   
-  // Helper to set end of day
   DateTime _endOfDay(DateTime date) {
     return DateTime(date.year, date.month, date.day, 23, 59, 59);
   }
@@ -43,7 +41,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
   @override
   void initState() {
     super.initState();
-    // Normalize initial dates
+    
     _startDate = _startOfDay(_startDate);
     _endDate = _endOfDay(_endDate);
     _loadAnalytics();
@@ -120,7 +118,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           margin: const pw.EdgeInsets.all(40),
           build: (pw.Context context) {
             return [
-              // Header
+              
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -140,7 +138,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
               ),
               pw.SizedBox(height: 15),
 
-              // Date Range
               pw.Container(
                 padding: const pw.EdgeInsets.all(10),
                 decoration: pw.BoxDecoration(
@@ -165,7 +162,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
               ),
               pw.SizedBox(height: 20),
 
-              // Overview Statistics
               pw.Text(
                 'Overview Statistics',
                 style: pw.TextStyle(
@@ -255,7 +251,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
               ),
               pw.SizedBox(height: 20),
 
-              // Budget Analysis
               if (analytics['avgBudgetMin'] != null ||
                   analytics['avgBudgetMax'] != null) ...[
                 pw.Text(
@@ -304,7 +299,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                 pw.SizedBox(height: 20),
               ],
 
-              // Event Breakdown (using event field)
               if (analytics['eventBreakdown'] != null &&
                   (analytics['eventBreakdown'] as Map).isNotEmpty) ...[
                 pw.Text(
@@ -352,7 +346,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                 pw.SizedBox(height: 20),
               ],
 
-              // Job Type Breakdown
               if (analytics['jobTypeBreakdown'] != null &&
                   (analytics['jobTypeBreakdown'] as Map).isNotEmpty) ...[
                 pw.Text(
@@ -399,7 +392,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                 pw.SizedBox(height: 20),
               ],
 
-              // Location Breakdown (State only)
               if (analytics['locationBreakdown'] != null &&
                   (analytics['locationBreakdown'] as Map).isNotEmpty) ...[
                 pw.Text(
@@ -447,7 +439,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                 pw.SizedBox(height: 20),
               ],
 
-              // Tags Breakdown
               if (analytics['tagsBreakdown'] != null &&
                   (analytics['tagsBreakdown'] as Map).isNotEmpty) ...[
                 pw.Text(
@@ -499,7 +490,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
         ),
       );
 
-      // Show PDF preview and allow download
       await Printing.layoutPdf(
         onLayout: (PdfPageFormat format) async => pdf.save(),
       );
@@ -528,7 +518,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           margin: const pw.EdgeInsets.all(40),
           build: (pw.Context context) {
             return [
-              // Header
+              
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -548,7 +538,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
               ),
               pw.SizedBox(height: 15),
 
-              // Date Range
               pw.Container(
                 padding: const pw.EdgeInsets.all(10),
                 decoration: pw.BoxDecoration(
@@ -573,7 +562,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
               ),
               pw.SizedBox(height: 20),
 
-              // Overview Statistics
               pw.Text(
                 'Overview Statistics',
                 style: pw.TextStyle(
@@ -663,7 +651,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
               ),
               pw.SizedBox(height: 20),
 
-              // Budget Analysis
               if (analytics['avgBudgetMin'] != null ||
                   analytics['avgBudgetMax'] != null) ...[
                 pw.Text(
@@ -712,7 +699,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                 pw.SizedBox(height: 20),
               ],
 
-              // Event Breakdown (using event field)
               if (analytics['eventBreakdown'] != null &&
                   (analytics['eventBreakdown'] as Map).isNotEmpty) ...[
                 pw.Text(
@@ -760,7 +746,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                 pw.SizedBox(height: 20),
               ],
 
-              // Job Type Breakdown
               if (analytics['jobTypeBreakdown'] != null &&
                   (analytics['jobTypeBreakdown'] as Map).isNotEmpty) ...[
                 pw.Text(
@@ -807,7 +792,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                 pw.SizedBox(height: 20),
               ],
 
-              // Location Breakdown (State only)
               if (analytics['locationBreakdown'] != null &&
                   (analytics['locationBreakdown'] as Map).isNotEmpty) ...[
                 pw.Text(
@@ -855,7 +839,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                 pw.SizedBox(height: 20),
               ],
 
-              // Tags Breakdown
               if (analytics['tagsBreakdown'] != null &&
                   (analytics['tagsBreakdown'] as Map).isNotEmpty) ...[
                 pw.Text(
@@ -907,7 +890,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
         ),
       );
 
-      // Save PDF to temporary file and share
       final bytes = await pdf.save();
       final directory = await getTemporaryDirectory();
       final fileName = 'Content_Analytics_Report_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
@@ -915,7 +897,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
       final file = File(filePath);
       await file.writeAsBytes(bytes);
 
-      // Share the file
       try {
         await Share.shareXFiles(
           [XFile(filePath)],
@@ -923,14 +904,13 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
           subject: 'Content Analytics Report - ${_formatDateTime(_startDate)} to ${_formatDateTime(_endDate)}',
         );
 
-        // Clean up temporary file after a delay
         Future.delayed(const Duration(seconds: 5), () async {
           try {
             if (await file.exists()) {
               await file.delete();
             }
           } catch (e) {
-            // Ignore cleanup errors
+            
           }
         });
       } catch (shareError) {
@@ -996,7 +976,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
       ),
       body: Column(
         children: [
-          // Header Section
+          
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -1037,13 +1017,11 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
             ),
           ),
 
-          // Date Time Range Selector
           ContentAnalyticsDateRangeSelector(
             dateRangeText: _getDateRangeText(),
             onTap: _selectDateTimeRange,
           ),
 
-          // Content
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -1054,34 +1032,28 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Quick Stats
+                        
                         ContentAnalyticsQuickStats(analytics: _analytics!),
                         const SizedBox(height: 20),
 
-                        // Period Comparison
                         ContentAnalyticsPeriodComparison(
                           totalPosts: _analytics!['totalPosts'] as int,
                           postsInPeriod: _analytics!['postsInPeriod'] as int,
                         ),
                         const SizedBox(height: 20),
 
-                        // Daily Trend Chart
                         _buildDailyTrendChart(),
                         const SizedBox(height: 20),
 
-                        // Status Distribution Chart
                         _buildStatusChart(),
                         const SizedBox(height: 20),
 
-                        // Status Comparison
                         ContentAnalyticsStatusComparison(analytics: _analytics!),
                         const SizedBox(height: 20),
 
-                        // Event Breakdown
                         _buildEventChart(),
                         const SizedBox(height: 20),
 
-                        // Event Comparison
                         ContentAnalyticsBreakdownComparison(
                           title: 'Top Events: All Time vs Selected Period',
                           allTime: _analytics!['eventBreakdown'] as Map<String, dynamic>? ?? {},
@@ -1089,11 +1061,9 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                         ),
                         const SizedBox(height: 20),
 
-                        // Tags Breakdown
                         _buildTagsChart(),
                         const SizedBox(height: 20),
 
-                        // Tags Comparison
                         ContentAnalyticsBreakdownComparison(
                           title: 'Top Tags: All Time vs Selected Period',
                           allTime: _analytics!['tagsBreakdown'] as Map<String, dynamic>? ?? {},
@@ -1101,11 +1071,9 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                         ),
                         const SizedBox(height: 20),
 
-                        // Industry Breakdown
                         _buildIndustryChart(),
                         const SizedBox(height: 20),
 
-                        // Industry Comparison
                         ContentAnalyticsBreakdownComparison(
                           title: 'Top Industries: All Time vs Selected Period',
                           subtitle: 'Based on event field from posts collection',
@@ -1114,11 +1082,9 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                         ),
                         const SizedBox(height: 20),
 
-                        // Job Type Breakdown
                         _buildJobTypeChart(),
                         const SizedBox(height: 20),
 
-                        // Job Type Comparison
                         ContentAnalyticsBreakdownComparison(
                           title: 'Job Types: All Time vs Selected Period',
                           allTime: _analytics!['jobTypeBreakdown'] as Map<String, dynamic>? ?? {},
@@ -1127,11 +1093,9 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                         ),
                         const SizedBox(height: 20),
 
-                        // Location Breakdown
                         _buildLocationChart(),
                         const SizedBox(height: 20),
 
-                        // Location Comparison
                         ContentAnalyticsBreakdownComparison(
                           title: 'Top Locations: All Time vs Selected Period',
                           allTime: _analytics!['locationBreakdown'] as Map<String, dynamic>? ?? {},
@@ -1139,15 +1103,12 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
                         ),
                         const SizedBox(height: 20),
 
-                        // Budget Analysis
                         _buildBudgetAnalysis(),
                         const SizedBox(height: 20),
 
-                        // Budget Comparison
                         _buildBudgetComparison(),
                         const SizedBox(height: 20),
 
-                        // Detailed Statistics Comparison
                         _buildDetailedStatsComparison(),
                       ],
                     ),
@@ -1157,7 +1118,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
       ),
     );
   }
-
 
   Widget _buildDailyTrendChart() {
     final analytics = _analytics!;
@@ -1228,7 +1188,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
 
   Widget _buildStatusChart() {
     final analytics = _analytics!;
-    // Show selected period data
+    
     final statusData = [
       MapEntry('Active', analytics['activeInPeriod'] as int? ?? 0),
       MapEntry('Pending', analytics['pendingInPeriod'] as int? ?? 0),
@@ -1266,7 +1226,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
               style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
-            // Statistics List
+            
             Container(
               constraints: const BoxConstraints(maxHeight: 200),
               child: ListView.builder(
@@ -1356,7 +1316,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
 
   Widget _buildEventChart() {
     final analytics = _analytics!;
-    // Use period data
+    
     final eventBreakdown =
         analytics['eventBreakdownInPeriod'] as Map<String, dynamic>?;
 
@@ -1364,7 +1324,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
       return const SizedBox.shrink();
     }
 
-    // Filter out empty keys and ensure values are valid
     final validEvents = eventBreakdown.entries
         .where(
           (entry) =>
@@ -1401,7 +1360,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
               style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
-            // Statistics List with scroll indicator
+            
             Stack(
               children: [
                 Container(
@@ -1536,7 +1495,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
 
   Widget _buildTagsChart() {
     final analytics = _analytics!;
-    // Use period data
+    
     final tagsBreakdown =
         analytics['tagsBreakdownInPeriod'] as Map<String, dynamic>?;
 
@@ -1544,7 +1503,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
       return const SizedBox.shrink();
     }
 
-    // Filter out empty keys and ensure values are valid
     final validTags = tagsBreakdown.entries
         .where(
           (entry) =>
@@ -1581,7 +1539,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
               style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
-            // Statistics List with scroll indicator
+            
             Stack(
               children: [
                 Container(
@@ -1716,7 +1674,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
 
   Widget _buildIndustryChart() {
     final analytics = _analytics!;
-    // Use period data (now using event field)
+    
     final industryBreakdown =
         analytics['industryBreakdownInPeriod'] as Map<String, dynamic>?;
 
@@ -1724,7 +1682,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
       return const SizedBox.shrink();
     }
 
-    // Filter out empty keys and ensure values are valid
     final validIndustries = industryBreakdown.entries
         .where(
           (entry) =>
@@ -1794,7 +1751,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
 
   Widget _buildJobTypeChart() {
     final analytics = _analytics!;
-    // Use period data
+    
     final jobTypeBreakdown =
         analytics['jobTypeBreakdownInPeriod'] as Map<String, dynamic>?;
 
@@ -1802,7 +1759,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
       return const SizedBox.shrink();
     }
 
-    // Filter out empty keys and ensure values are valid
     final validJobTypes = jobTypeBreakdown.entries
         .where(
           (entry) =>
@@ -1864,7 +1820,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
 
   Widget _buildLocationChart() {
     final analytics = _analytics!;
-    // Use period data
+    
     final locationBreakdown =
         analytics['locationBreakdownInPeriod'] as Map<String, dynamic>?;
 
@@ -1957,7 +1913,7 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
 
   Widget _buildBudgetAnalysis() {
     final analytics = _analytics!;
-    // Use period data
+    
     final avgBudgetMin = analytics['avgBudgetMinInPeriod'] as double?;
     final avgBudgetMax = analytics['avgBudgetMaxInPeriod'] as double?;
 
@@ -2007,7 +1963,6 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
       ),
     );
   }
-
 
   Widget _buildBudgetComparison() {
     final analytics = _analytics!;

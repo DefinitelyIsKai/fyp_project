@@ -1,6 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-/// A reusable widget for displaying label-value pairs in detail pages
 class DetailRow extends StatelessWidget {
   final String label;
   final String value;
@@ -50,4 +49,3 @@ class DetailRow extends StatelessWidget {
     );
   }
 }
-

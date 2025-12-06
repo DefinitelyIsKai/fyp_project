@@ -1,11 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as img;
 import '../../../services/admin/face_recognition_service.dart';
 import '../../../widgets/admin/face_scan_widget.dart';
 
-/// Face verification page
-/// Verifies user identity during login
 class FaceVerificationPage extends StatefulWidget {
   final String profileImageBase64;
   final VoidCallback onVerificationSuccess;
@@ -34,7 +32,7 @@ class _FaceVerificationPageState extends State<FaceVerificationPage> {
   static const int _maxAttempts = 3;
   img.Image? _capturedImage;
   Face? _capturedFace;
-  Face? _detectedFace; // Currently detected face (used to display button)
+  Face? _detectedFace; 
 
   @override
   void initState() {
@@ -79,7 +77,6 @@ class _FaceVerificationPageState extends State<FaceVerificationPage> {
     }
   }
 
-  /// Handle captured image after photo taken
   Future<void> _handleImageCaptured(img.Image image, Face? face) async {
     if (_isVerifying || _attemptCount >= _maxAttempts) {
       print('Skipping verification: isVerifying=$_isVerifying, attemptCount=$_attemptCount');
@@ -96,7 +93,6 @@ class _FaceVerificationPageState extends State<FaceVerificationPage> {
       _statusMessage = '正在验证身份...';
     });
 
-    // Automatically start verification
     await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted || _isVerifying) return;
     
@@ -116,22 +112,19 @@ class _FaceVerificationPageState extends State<FaceVerificationPage> {
     });
 
     try {
-      // If face detected, use face region; otherwise use full image
+      
       final similarity = await _faceService.compareFaces(
         widget.profileImageBase64,
         _capturedImage!,
-        _capturedFace, // May be null
+        _capturedFace, 
       );
 
       print('Similarity score: $similarity');
 
-      // Similarity threshold (0.95 for strict matching)
-      // Very high threshold to prevent false positives (other faces being accepted)
-      // If legitimate users are rejected, lower this value slightly
       const threshold = 0.96;
 
       if (similarity >= threshold) {
-        // Verification successful
+        
         if (mounted) {
           setState(() {
             _statusMessage = 'Verification successful!';
@@ -140,7 +133,7 @@ class _FaceVerificationPageState extends State<FaceVerificationPage> {
           widget.onVerificationSuccess();
         }
       } else {
-        // Verification failed
+        
         _attemptCount++;
         if (mounted) {
           if (_attemptCount >= _maxAttempts) {
@@ -179,7 +172,7 @@ class _FaceVerificationPageState extends State<FaceVerificationPage> {
           _capturedFace = null;
           _detectedFace = null;
         });
-        // Don't show error dialog, directly allow retry
+        
         await Future.delayed(const Duration(milliseconds: 2000));
         if (mounted) {
           setState(() {
@@ -281,13 +274,13 @@ class _FaceVerificationPageState extends State<FaceVerificationPage> {
   Widget _buildScanningState() {
     return Stack(
       children: [
-        // Face scan widget
+        
         FaceScanWidget(
           onImageCaptured: _handleImageCaptured,
           instructionText: _statusMessage,
           showFaceDetection: true,
         ),
-        // Top tip
+        
         Positioned(
           top: 20,
           left: 0,
@@ -333,7 +326,7 @@ class _FaceVerificationPageState extends State<FaceVerificationPage> {
             ),
           ),
         ),
-        // Manual verification button (displayed when face is detected)
+        
         if (_detectedFace != null && !_isVerifying && _attemptCount < _maxAttempts)
           Positioned(
             bottom: 100,
@@ -365,7 +358,7 @@ class _FaceVerificationPageState extends State<FaceVerificationPage> {
               ),
             ),
           ),
-        // Verification overlay
+        
         if (_isVerifying)
           Container(
             color: Colors.black.withOpacity(0.7),
@@ -444,4 +437,3 @@ class _FaceVerificationPageState extends State<FaceVerificationPage> {
     );
   }
 }
-

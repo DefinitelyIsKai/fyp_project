@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/pages/admin/monitoring/search_filter_page.dart';
 import 'package:fyp_project/pages/admin/monitoring/map_oversight_page.dart';
@@ -26,7 +26,6 @@ class MonitoringPage extends StatelessWidget {
         });
   }
 
-  // Real-time stream: counts total users
   Stream<int> _totalUsersCountStream() {
     return FirebaseFirestore.instance
         .collection('users')
@@ -52,7 +51,7 @@ class MonitoringPage extends StatelessWidget {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header Section
+          
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -81,17 +80,14 @@ class MonitoringPage extends StatelessWidget {
             ),
           ),
 
-          // Real-time Stats Section
           _buildStatsSection(),
 
-          // Main Options Grid
           Expanded(child: _buildOptionsGrid(context)),
         ],
       ),
     );
   }
 
-  // REAL-TIME STATS
   Widget _buildStatsSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
@@ -133,7 +129,6 @@ class MonitoringPage extends StatelessWidget {
     );
   }
 
-  // Grid options
   Widget _buildOptionsGrid(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -145,7 +140,7 @@ class MonitoringPage extends StatelessWidget {
           childAspectRatio: 0.8,
         ),
         children: [
-          // Search & Filter Card
+          
           _ManagementCard(
                 title: 'Search & Filter',
                 description: 'Search users and posts by keywords, category, or status',
@@ -162,7 +157,6 @@ class MonitoringPage extends StatelessWidget {
                 badgeCount: 0,
               ),
 
-          // Map Oversight Card
           _ManagementCard(
             title: 'Map Oversight',
             description: 'Visualize users and job posts on an interactive map',
@@ -179,7 +173,6 @@ class MonitoringPage extends StatelessWidget {
             badgeCount: 0,
           ),
 
-          // Admin Logs Card
           _ManagementCard(
             title: 'Admin Logs',
             description: 'View all admin activity logs and system actions',
@@ -201,7 +194,6 @@ class MonitoringPage extends StatelessWidget {
   }
 }
 
-// Management Card
 class _ManagementCard extends StatelessWidget {
   final String title;
   final String description;
@@ -238,7 +230,7 @@ class _ManagementCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Icon with badge
+                  
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -250,7 +242,6 @@ class _ManagementCard extends StatelessWidget {
 
                   const SizedBox(height: 12),
 
-                  // Title
                   SizedBox(
                     height: 40,
                     child: Text(
@@ -267,7 +258,6 @@ class _ManagementCard extends StatelessWidget {
 
                   const SizedBox(height: 6),
 
-                  // Description
                   Expanded(
                     child: Text(
                       description,
@@ -283,7 +273,6 @@ class _ManagementCard extends StatelessWidget {
 
                   const SizedBox(height: 8),
 
-                  // Footer
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -305,7 +294,6 @@ class _ManagementCard extends StatelessWidget {
                 ],
               ),
 
-              // Badge in top-right corner
               if (badgeCount > 0)
                 Positioned(
                   top: 8,
@@ -334,7 +322,6 @@ class _ManagementCard extends StatelessWidget {
   }
 }
 
-//  Stat Card
 class _StatCard extends StatelessWidget {
   final String title;
   final String value;
