@@ -103,6 +103,7 @@ class AuthService extends ChangeNotifier {
           'createdAt': FieldValue.serverTimestamp(),
           'isActive': true,
           'status': 'Active',
+          'login': false, // New admin user starts with login: false
         };
         
         if (location != null && location.isNotEmpty) {
@@ -347,6 +348,30 @@ class AuthService extends ChangeNotifier {
       }
 
       final data = doc.data()!;
+      
+      // Check if user is already logged in on another device
+      final loginValue = data['login'];
+      bool isLoggedIn = false;
+      if (loginValue is bool) {
+        isLoggedIn = loginValue;
+      } else if (loginValue == null) {
+        isLoggedIn = false;
+        debugPrint('Admin login check: login field is null, treating as false');
+      } else if (loginValue is String) {
+        isLoggedIn = loginValue.toLowerCase() == 'true';
+        debugPrint('Admin login check: login field is string "$loginValue", converted to $isLoggedIn');
+      }
+      
+      debugPrint('Admin login check: userId=$uid, login field=$loginValue (type: ${loginValue.runtimeType}), isLoggedIn=$isLoggedIn');
+      
+      if (isLoggedIn == true) {
+        debugPrint('BLOCKING ADMIN LOGIN: User is already logged in on another device (login=$loginValue)');
+        await _auth.signOut();
+        return LoginResult(
+          success: false,
+          error: 'This account is already logged in on another device. Please logout from the other device first.',
+        );
+      }
 
       if (data['isActive'] == false) {
         await _auth.signOut();
@@ -466,7 +491,9 @@ class AuthService extends ChangeNotifier {
 
       await _firestore.collection('users').doc(uid).update({
         'lastLoginAt': FieldValue.serverTimestamp(),
+        'login': true, // Set login status to true on successful login
       });
+      debugPrint('Admin login: Successfully set login=true for userId=$uid');
 
       _isAuthenticated = true;
       notifyListeners();
@@ -506,6 +533,23 @@ class AuthService extends ChangeNotifier {
 
   Future<void> logout() async {
     try {
+      // Get user ID before clearing state
+      final userId = _auth.currentUser?.uid;
+      debugPrint('Admin logout: userId=$userId');
+      
+      // Set login=false before signing out
+      if (userId != null && userId.isNotEmpty) {
+        try {
+          await _firestore.collection('users').doc(userId).update({
+            'login': false, // Set login status to false on logout
+          });
+          debugPrint('Admin logout: Successfully set login=false for userId=$userId');
+        } catch (e) {
+          debugPrint('Error updating login status during admin logout: $e');
+        }
+      } else {
+        debugPrint('Admin logout: No userId found, skipping login status update');
+      }
       
       _currentAdmin = null;
       _isAuthenticated = false;
@@ -522,9 +566,9 @@ class AuthService extends ChangeNotifier {
       _isAuthenticated = false;
       notifyListeners();
       
-      debugPrint('Logout completed successfully');
+      debugPrint('Admin logout: Firebase Auth signOut completed');
     } catch (e) {
-      debugPrint('Error during logout: $e');
+      debugPrint('Error during admin logout: $e');
       
       _currentAdmin = null;
       _isAuthenticated = false;
