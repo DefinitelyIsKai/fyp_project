@@ -34,7 +34,7 @@ class _SignUpPageState extends State<SignUpPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _submitting = true);
     try {
-      // Check if email already exists before attempting registration
+      //check email  exists
       final exists = await _authService.doesEmailExist(_emailController.text);
       if (exists) {
         if (!mounted) return;

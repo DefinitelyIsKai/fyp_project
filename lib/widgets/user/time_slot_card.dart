@@ -73,7 +73,7 @@ class TimeSlotCard extends StatelessWidget {
         return;
       }
 
-      // Show dialog with pending request details
+      //pending request details
       showDialog(
         context: context,
         builder: (context) => PendingRequestDialog(
@@ -96,7 +96,7 @@ class TimeSlotCard extends StatelessWidget {
   }
 
   Future<void> _handleDelete(BuildContext context) async {
-    // Check if slot is booked or has pending requests
+    //check booked or  pending requests
     final isBooked = slot.bookedBy != null;
     String message;
 
@@ -251,7 +251,7 @@ class TimeSlotCard extends StatelessWidget {
             children: [
               Switch(
                 value: slot.isAvailable,
-                onChanged: isBooked ? null : onToggle, // Disable toggle if booked
+                onChanged: isBooked ? null : onToggle, //no toggle booked
                 activeColor: themeColor,
               ),
               IconButton(

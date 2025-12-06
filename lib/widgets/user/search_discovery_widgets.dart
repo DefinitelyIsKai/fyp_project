@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Filter button widget for search/discovery pages
 class FilterButton extends StatelessWidget {
   final String label;
   final bool isActive;
@@ -60,7 +59,7 @@ class FilterButton extends StatelessWidget {
   }
 }
 
-/// View toggle button widget for switching between list and map views
+//toggle button 
 class ViewToggleButton extends StatelessWidget {
   final String label;
   final bool isActive;

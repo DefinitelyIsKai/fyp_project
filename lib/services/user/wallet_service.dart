@@ -7,7 +7,6 @@ import '../../models/user/wallet.dart';
 import '../../utils/user/timestamp_utils.dart';
 import 'notification_service.dart';
 
-// Helper function to safely parse int from Firestore (handles int, double, num)
 int _parseIntFromFirestore(dynamic value) {
   if (value == null) return 0;
   if (value is int) return value;
@@ -61,8 +60,8 @@ class WalletService {
     return _walletDoc.snapshots().map((snap) => Wallet.fromMap(snap.data(), uid: _uid));
   }
 
-  /// Stream transactions in real-time
-  /// Returns a stream of all transactions ordered by createdAt descending
+
+  //ordered createdAt descending
   Stream<List<WalletTransaction>> streamTransactions({int limit = 50}) {
     return _txnCol
         .orderBy('createdAt', descending: true)
@@ -74,16 +73,7 @@ class WalletService {
         );
   }
 
-  Future<List<WalletTransaction>> loadInitialTransactions({int limit = 20}) async {
-    try {
-      final snapshot = await _txnCol.orderBy('createdAt', descending: true).limit(limit).get();
-
-      return snapshot.docs.map((d) => WalletTransaction.fromMap(<String, dynamic>{...d.data(), 'id': d.id})).toList();
-    } catch (e) {
-      print('Error loading initial transactions: $e');
-      return [];
-    }
-  }
+  
 
   Future<List<WalletTransaction>> loadMoreTransactions({
     required DateTime lastTransactionTime,
@@ -133,14 +123,12 @@ class WalletService {
 
       final payments = snapshot.docs.map((d) => <String, dynamic>{...d.data(), 'id': d.id}).toList();
 
-      // Sort by createdAt manually
       payments.sort((a, b) {
         final aTime = TimestampUtils.parseTimestamp(a['createdAt']);
         final bTime = TimestampUtils.parseTimestamp(b['createdAt']);
-        return bTime.compareTo(aTime); // descending
+        return bTime.compareTo(aTime); 
       });
 
-      // Return limited results
       if (payments.length > limit) {
         return payments.sublist(0, limit);
       }
@@ -165,11 +153,11 @@ class WalletService {
             return <String, dynamic>{...data, 'id': d.id};
           }).toList();
 
-          // Sort by createdAt manually to avoid requiring composite index
+          //sort by createdAt 
           payments.sort((a, b) {
             final aTime = TimestampUtils.parseTimestamp(a['createdAt']);
             final bTime = TimestampUtils.parseTimestamp(b['createdAt']);
-            return bTime.compareTo(aTime); // descending
+            return bTime.compareTo(aTime); 
           });
 
           print('Returning ${payments.length} pending payments');
@@ -177,7 +165,6 @@ class WalletService {
         });
   }
 
-  /// Stream cancelled payments in real-time
   Stream<List<Map<String, dynamic>>> streamCancelledPayments() {
     return _firestore
         .collection('pending_payments')
@@ -187,11 +174,10 @@ class WalletService {
         .map((snap) {
           final payments = snap.docs.map((d) => <String, dynamic>{...d.data(), 'id': d.id}).toList();
 
-          // Sort by createdAt manually
           payments.sort((a, b) {
             final aTime = TimestampUtils.parseTimestamp(a['createdAt']);
             final bTime = TimestampUtils.parseTimestamp(b['createdAt']);
-            return bTime.compareTo(aTime); // descending
+            return bTime.compareTo(aTime); 
           });
 
           return payments;
@@ -220,11 +206,10 @@ class WalletService {
 
       final payments = pendingPayments.docs.map((d) => <String, dynamic>{...d.data(), 'id': d.id}).toList();
 
-      // Sort by createdAt manually
       payments.sort((a, b) {
         final aTime = TimestampUtils.parseTimestamp(a['createdAt']);
         final bTime = TimestampUtils.parseTimestamp(b['createdAt']);
-        return bTime.compareTo(aTime); // descending
+        return bTime.compareTo(aTime); 
       });
 
       return payments;
@@ -234,7 +219,6 @@ class WalletService {
     }
   }
 
-  // Cancel a pending payment
   Future<void> cancelPendingPayment(String sessionId) async {
     try {
       final paymentDoc = await _firestore.collection('pending_payments').doc(sessionId).get();
@@ -246,12 +230,11 @@ class WalletService {
       final data = paymentDoc.data()!;
       final uid = data['uid'] as String? ?? '';
 
-      // Verify it's for this user
+      //verifyuser
       if (uid != _uid) {
         throw StateError('Payment belongs to different user');
       }
 
-      // Mark as cancelled instead of deleting
       await paymentDoc.reference.update({'status': 'cancelled', 'cancelledAt': FieldValue.serverTimestamp()});
 
       print('Successfully cancelled pending payment: $sessionId');
@@ -267,7 +250,6 @@ class WalletService {
       if (!doc.exists) {
         tx.set(_walletDoc, {'userId': _uid, 'balance': 0, 'heldCredits': 0, 'updatedAt': FieldValue.serverTimestamp()});
       } else {
-        // Ensure heldCredits field exists for existing wallets
         final data = doc.data();
         if (data != null && !data.containsKey('heldCredits')) {
           tx.update(_walletDoc, {'heldCredits': 0});
@@ -305,15 +287,12 @@ class WalletService {
     );
   }
 
-  
-
-  // Hold credits when jobseeker applies to a post (credits are held, not deducted yet)
   Future<void> holdApplicationCredits({required String postId, int feeCredits = 100}) async {
     if (feeCredits <= 0) throw ArgumentError('feeCredits must be > 0');
     await _ensureWallet();
     final txnRef = _txnCol.doc();
 
-    // Get post title for description
+    //post title for description
     final postTitle = await _getPostTitle(postId);
     final description = postTitle.isNotEmpty
         ? 'Application fee (On Hold) - $postTitle'
@@ -330,10 +309,9 @@ class WalletService {
         throw StateError('INSUFFICIENT_FUNDS');
       }
 
-      // Increase held credits
       tx.update(_walletDoc, {'heldCredits': heldCredits + feeCredits, 'updatedAt': FieldValue.serverTimestamp()});
 
-      // Create transaction record for held credits (jobseeker can create)
+      //crete transaction 
       tx.set(txnRef, {
         'id': txnRef.id,
         'userId': _uid,
@@ -345,7 +323,6 @@ class WalletService {
       });
     });
 
-    // Send notification about credits being held
     try {
       await _notificationService.notifyWalletDebit(
         userId: _uid,
@@ -354,14 +331,11 @@ class WalletService {
         metadata: {'postId': postId, 'type': 'application_fee_hold'},
       );
     } catch (e) {
-      // Log but don't fail - notification is not critical
       print('Error sending wallet hold notification: $e');
     }
   }
 
-  // Release held credits when application is rejected (no deduction, credits stay)
-  // Returns true if credits were released, false if already processed or no credits held
-  // This is called by jobseeker, so can create transaction
+  //release heldcredit when application rejected
   Future<bool> releaseHeldCredits({required String postId, int feeCredits = 100}) async {
     if (feeCredits <= 0) throw ArgumentError('feeCredits must be > 0');
     await _ensureWallet();
@@ -374,14 +348,11 @@ class WalletService {
       final int heldCredits = _parseIntFromFirestore(data['heldCredits']);
 
       if (heldCredits < feeCredits) {
-        // Already processed or no credits held - silently return false
         return;
       }
 
-      // Decrease held credits (release the hold)
       tx.update(_walletDoc, {'heldCredits': heldCredits - feeCredits, 'updatedAt': FieldValue.serverTimestamp()});
 
-      // Create transaction record for released credits (jobseeker can create)
       tx.set(txnRef, {
         'id': txnRef.id,
         'userId': _uid,
@@ -398,7 +369,7 @@ class WalletService {
     return released;
   }
 
-  // 静态方法：释放指定用户的 heldCredits（用于 Application 拒绝时）
+
   static Future<bool> releaseHeldCreditsForUser({
     required FirebaseFirestore firestore,
     required String userId,
@@ -412,17 +383,13 @@ class WalletService {
     final txnCol = walletDoc.collection('transactions');
 
     try {
-      // Get post title for description
       final postTitle = await getPostTitle(firestore: firestore, postId: postId);
       
-      // Find the "On Hold" transaction (query outside transaction)
-      // Look for transactions that contain "Application fee (On Hold)" in description
       final onHoldTransactions = await txnCol
           .where('referenceId', isEqualTo: postId)
           .where('type', isEqualTo: 'debit')
           .get();
 
-      // Find the On Hold transaction (description may contain post title)
       String? onHoldTxnId;
       for (final doc in onHoldTransactions.docs) {
         final desc = doc.data()['description'] as String? ?? '';
@@ -432,10 +399,7 @@ class WalletService {
         }
       }
 
-      // Check if already processed by looking for existing completed transaction (outside transaction)
-      // Use simpler query to avoid needing composite index - query by referenceId and filter client-side
       if (onHoldTxnId != null) {
-        // Query by referenceId (which should have an index) and filter client-side
         final allPostTransactions = await txnCol
             .where('referenceId', isEqualTo: postId)
             .get();
@@ -446,13 +410,11 @@ class WalletService {
         });
         if (alreadyProcessed) {
           print('Transaction already processed (released), skipping duplicate release');
-          return true; // Already processed, exit early
+          return true; 
         }
       }
 
       await firestore.runTransaction((tx) async {
-        // ========== PHASE 1: ALL READS FIRST ==========
-        // Read wallet first to get current values (needed for security rule evaluation)
         final walletSnap = await tx.get(walletDoc);
         if (!walletSnap.exists) {
           throw StateError('Wallet not found for user $userId');
@@ -461,30 +423,24 @@ class WalletService {
         final walletData = walletSnap.data()!;
         final int currentHeldCredits = _parseIntFromFirestore(walletData['heldCredits']);
 
-        // Safety check: Ensure heldCredits is sufficient
         if (currentHeldCredits < feeCredits) {
           print('Warning: heldCredits ($currentHeldCredits) is less than feeCredits ($feeCredits). This may indicate duplicate processing.');
-          // Don't throw error, but clamp to 0 to prevent negative values
         }
 
-        // Read the "On Hold" transaction document if it exists
         DocumentReference? onHoldTxnRef;
         if (onHoldTxnId != null) {
           onHoldTxnRef = txnCol.doc(onHoldTxnId);
           final onHoldTxnSnap = await tx.get(onHoldTxnRef);
           if (!onHoldTxnSnap.exists) {
-            onHoldTxnRef = null; // Transaction was deleted, create new one
+            onHoldTxnRef = null; 
           }
         }
 
-        // ========== PHASE 2: ALL WRITES AFTER READS ==========
-        // Calculate new heldCredits value, clamp to prevent negative values
         final int newHeldCredits = (currentHeldCredits - feeCredits).clamp(0, double.infinity).toInt();
 
-        // Update wallet to release held credits
+       
         tx.update(walletDoc, {'heldCredits': newHeldCredits, 'updatedAt': FieldValue.serverTimestamp()});
 
-        // Create new transaction record instead of updating the old one
         final newTxnRef = txnCol.doc();
         final description = postTitle.isNotEmpty
             ? 'Application fee (Released) - $postTitle'
@@ -494,12 +450,12 @@ class WalletService {
         tx.set(newTxnRef, {
           'id': newTxnRef.id,
           'userId': userId,
-          'type': 'credit', // Released credits should be credit type
+          'type': 'credit', 
           'amount': feeCredits,
           'description': description,
           'createdAt': FieldValue.serverTimestamp(),
           'referenceId': postId,
-          if (onHoldTxnId != null) 'parentTxnId': onHoldTxnId, // Link to original On Hold transaction
+          if (onHoldTxnId != null) 'parentTxnId': onHoldTxnId, 
         });
       });
 
@@ -511,7 +467,6 @@ class WalletService {
     }
   }
 
-  // 静态方法：扣除指定用户的 heldCredits 和 balance（用于 Application 批准时）
   static Future<bool> deductHeldCreditsForUser({
     required FirebaseFirestore firestore,
     required String userId,
@@ -525,17 +480,13 @@ class WalletService {
     final txnCol = walletDoc.collection('transactions');
 
     try {
-      // Get post title for description
       final postTitle = await getPostTitle(firestore: firestore, postId: postId);
-      
-      // Find the "On Hold" transaction (query outside transaction)
-      // Look for transactions that contain "Application fee (On Hold)" in description
+
       final onHoldTransactions = await txnCol
           .where('referenceId', isEqualTo: postId)
           .where('type', isEqualTo: 'debit')
           .get();
 
-      // Find the On Hold transaction (description may contain post title)
       String? onHoldTxnId;
       for (final doc in onHoldTransactions.docs) {
         final desc = doc.data()['description'] as String? ?? '';
@@ -545,10 +496,7 @@ class WalletService {
         }
       }
 
-      // Check if already processed by looking for existing completed transaction (outside transaction)
-      // Use simpler query to avoid needing composite index - query by referenceId and filter client-side
       if (onHoldTxnId != null) {
-        // Query by referenceId (which should have an index) and filter client-side
         final allPostTransactions = await txnCol
             .where('referenceId', isEqualTo: postId)
             .get();
@@ -560,13 +508,12 @@ class WalletService {
         });
         if (alreadyProcessed) {
           print('Transaction already processed, skipping duplicate deduction');
-          return true; // Already processed, exit early
+          return true; 
         }
       }
 
       await firestore.runTransaction((tx) async {
-        // ========== PHASE 1: ALL READS FIRST ==========
-        // Read wallet first to get current values (needed for security rule evaluation)
+
         final walletSnap = await tx.get(walletDoc);
         if (!walletSnap.exists) {
           throw StateError('Wallet not found for user $userId');
@@ -576,43 +523,35 @@ class WalletService {
         final int currentBalance = _parseIntFromFirestore(walletData['balance']);
         final int currentHeldCredits = _parseIntFromFirestore(walletData['heldCredits']);
 
-        // Safety check: Ensure heldCredits is sufficient
         if (currentHeldCredits < feeCredits) {
           print('Warning: heldCredits ($currentHeldCredits) is less than feeCredits ($feeCredits). This may indicate duplicate processing.');
-          // Don't throw error, but clamp to 0 to prevent negative values
         }
 
-        // Read the "On Hold" transaction document if it exists
         DocumentReference? onHoldTxnRef;
         if (onHoldTxnId != null) {
           onHoldTxnRef = txnCol.doc(onHoldTxnId);
           final onHoldTxnSnap = await tx.get(onHoldTxnRef);
           if (!onHoldTxnSnap.exists) {
-            onHoldTxnRef = null; // Transaction was deleted, create new one
+            onHoldTxnRef = null; 
           }
         }
 
-        // ========== PHASE 2: ALL WRITES AFTER READS ==========
-        // Calculate new values
         final int newBalance = currentBalance - feeCredits;
-        // Clamp heldCredits to prevent negative values
+  
         final int newHeldCredits = (currentHeldCredits - feeCredits).clamp(0, double.infinity).toInt();
 
-        // 同时减少 balance 和 heldCredits（将 hold 转换为实际扣款）
-        // Use explicit values so security rules can evaluate them
         tx.update(walletDoc, {
           'balance': newBalance,
           'heldCredits': newHeldCredits,
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        // Create new transaction record instead of updating the old one
         final newTxnRef = txnCol.doc();
         final description = postTitle.isNotEmpty
             ? 'Application fee - $postTitle'
             : 'Application fee';
         
-        print('➕ Creating new transaction record for deducted credits');
+        print('Creating new transaction record for deducted credits');
         tx.set(newTxnRef, {
           'id': newTxnRef.id,
           'userId': userId,
@@ -621,7 +560,7 @@ class WalletService {
           'description': description,
           'createdAt': FieldValue.serverTimestamp(),
           'referenceId': postId,
-          if (onHoldTxnId != null) 'parentTxnId': onHoldTxnId, // Link to original On Hold transaction
+          if (onHoldTxnId != null) 'parentTxnId': onHoldTxnId,
         });
       });
 
@@ -633,17 +572,13 @@ class WalletService {
     }
   }
 
-  // Deduct held credits when application is approved (actual charge)
-  // This is called by jobseeker, so can create transaction
   Future<bool> deductHeldCredits({
     required String postId,
-    required String userId, // 必须接收 userId
+    required String userId, 
     int feeCredits = 100,
   }) async {
     if (feeCredits <= 0) throw ArgumentError('feeCredits must be > 0');
     if (userId.isEmpty) throw ArgumentError('userId must not be empty');
-
-    // Only allow if userId matches current user (jobseeker can only deduct their own credits)
     if (userId != _uid) {
       throw StateError('Cannot deduct credits for other users');
     }
@@ -653,14 +588,12 @@ class WalletService {
 
     try {
       await _firestore.runTransaction((tx) async {
-        // Update wallet
         tx.update(walletDoc, {
           'balance': FieldValue.increment(-feeCredits),
           'heldCredits': FieldValue.increment(-feeCredits),
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        // Create transaction record (jobseeker can create)
         tx.set(txnRef, {
           'id': txnRef.id,
           'userId': userId,
@@ -689,22 +622,17 @@ class WalletService {
     }
   }
 
-  // Legacy method - kept for backward compatibility but now uses hold
+  //kept for backward compatibility but now uses hold
   Future<void> chargeApplication({required String postId, int feeCredits = 100}) async {
     await holdApplicationCredits(postId: postId, feeCredits: feeCredits);
   }
 
   
-
-  // Hold credits when recruiter creates a post (credits are held, not deducted yet)
-  // Credits will be deducted when post is approved (status changes to active)
-  // Credits will be released when post is rejected
   Future<void> holdPostCreationCredits({required String postId, int feeCredits = 200}) async {
     if (feeCredits <= 0) throw ArgumentError('feeCredits must be > 0');
     await _ensureWallet();
     final txnRef = _txnCol.doc();
 
-    // Get post title for description
     final postTitle = await _getPostTitle(postId);
     final description = postTitle.isNotEmpty
         ? 'Post creation fee (On Hold) - $postTitle'
@@ -713,7 +641,6 @@ class WalletService {
     await _firestore.runTransaction((tx) async {
       final snap = await tx.get(_walletDoc);
       final data = snap.data() ?? <String, dynamic>{'balance': 0, 'heldCredits': 0};
-      // Helper to safely parse int from Firestore (handles int, double, num)
       int _parseInt(dynamic value) {
         if (value == null) return 0;
         if (value is int) return value;
@@ -730,10 +657,9 @@ class WalletService {
         throw StateError('INSUFFICIENT_FUNDS');
       }
 
-      // Increase held credits
+    
       tx.update(_walletDoc, {'heldCredits': heldCredits + feeCredits, 'updatedAt': FieldValue.serverTimestamp()});
 
-      // Create transaction record for held credits
       tx.set(txnRef, {
         'id': txnRef.id,
         'userId': _uid,
@@ -745,7 +671,6 @@ class WalletService {
       });
     });
 
-    // Send notification about credits being held
     try {
       await _notificationService.notifyWalletDebit(
         userId: _uid,
@@ -772,17 +697,13 @@ class WalletService {
     final txnCol = walletDoc.collection('transactions');
 
     try {
-      // Get post title for description
       final postTitle = await getPostTitle(firestore: firestore, postId: postId);
       
-      // Find the "On Hold" transaction (query outside transaction)
-      // Look for transactions that contain "Post creation fee (On Hold)" in description
+      
       final onHoldTransactions = await txnCol
           .where('referenceId', isEqualTo: postId)
           .where('type', isEqualTo: 'debit')
           .get();
-
-      // Find the On Hold transaction (description may contain post title)
       String? onHoldTxnId;
       for (final doc in onHoldTransactions.docs) {
         final desc = doc.data()['description'] as String? ?? '';
@@ -801,29 +722,28 @@ class WalletService {
         final walletData = walletSnap.data()!;
         final int currentHeldCredits = _parseIntFromFirestore(walletData['heldCredits']);
 
-        // Safety check: Ensure heldCredits is sufficient
+    
         if (currentHeldCredits < feeCredits) {
           print('Warning: heldCredits ($currentHeldCredits) is less than feeCredits ($feeCredits). This may indicate duplicate processing.');
-          // Don't throw error, but clamp to 0 to prevent negative values
+    
         }
 
-        // Read the "On Hold" transaction document if it exists
+       
         DocumentReference? onHoldTxnRef;
         if (onHoldTxnId != null) {
           onHoldTxnRef = txnCol.doc(onHoldTxnId);
           final onHoldTxnSnap = await tx.get(onHoldTxnRef);
           if (!onHoldTxnSnap.exists) {
-            onHoldTxnRef = null; // Transaction was deleted, create new one
+            onHoldTxnRef = null; 
           }
         }
 
-        // Clamp heldCredits to prevent negative values
+  
         final int newHeldCredits = (currentHeldCredits - feeCredits).clamp(0, double.infinity).toInt();
 
-        // Update wallet to release held credits
+    
         tx.update(walletDoc, {'heldCredits': newHeldCredits, 'updatedAt': FieldValue.serverTimestamp()});
 
-        // Create new transaction record instead of updating the old one
         final newTxnRef = txnCol.doc();
         final description = postTitle.isNotEmpty
             ? 'Post creation fee (Released) - $postTitle'
@@ -833,12 +753,12 @@ class WalletService {
         tx.set(newTxnRef, {
           'id': newTxnRef.id,
           'userId': userId,
-          'type': 'credit', // Released credits should be credit type
+          'type': 'credit', 
           'amount': feeCredits,
           'description': description,
           'createdAt': FieldValue.serverTimestamp(),
           'referenceId': postId,
-          if (onHoldTxnId != null) 'parentTxnId': onHoldTxnId, // Link to original On Hold transaction
+          if (onHoldTxnId != null) 'parentTxnId': onHoldTxnId, 
         });
       });
 
@@ -849,7 +769,6 @@ class WalletService {
     }
   }
 
-  // deduct post creation heldCredits and balance when approved
   static Future<bool> deductPostCreationCreditsForUser({
     required FirebaseFirestore firestore,
     required String userId,
@@ -863,17 +782,15 @@ class WalletService {
     final txnCol = walletDoc.collection('transactions');
 
     try {
-      // Get post title for description
       final postTitle = await getPostTitle(firestore: firestore, postId: postId);
       
-      // Find the "On Hold" transaction (query outside transaction)
-      // Look for transactions that contain "Post creation fee (On Hold)" in description
+ 
       final onHoldTransactions = await txnCol
           .where('referenceId', isEqualTo: postId)
           .where('type', isEqualTo: 'debit')
           .get();
 
-      // Find the On Hold transaction (description may contain post title)
+
       String? onHoldTxnId;
       for (final doc in onHoldTransactions.docs) {
         final desc = doc.data()['description'] as String? ?? '';
@@ -883,10 +800,8 @@ class WalletService {
         }
       }
 
-      // Check if already processed by looking for existing completed transaction (outside transaction)
-      // Use simpler query to avoid needing composite index - query by referenceId and filter client-side
+    
       if (onHoldTxnId != null) {
-        // Query by referenceId (which should have an index) and filter client-side
         final allPostTransactions = await txnCol
             .where('referenceId', isEqualTo: postId)
             .get();
@@ -898,12 +813,11 @@ class WalletService {
         });
         if (alreadyProcessed) {
           print('Transaction already processed, skipping duplicate deduction');
-          return true; // Already processed, exit early
+          return true;
         }
       }
 
       await firestore.runTransaction((tx) async {
-        // ========== PHASE 1: ALL READS FIRST ==========
         final walletSnap = await tx.get(walletDoc);
         if (!walletSnap.exists) {
           throw StateError('Wallet not found for user $userId');
@@ -913,24 +827,20 @@ class WalletService {
         final int currentBalance = _parseIntFromFirestore(walletData['balance']);
         final int currentHeldCredits = _parseIntFromFirestore(walletData['heldCredits']);
 
-        // Safety check: Ensure heldCredits is sufficient
+        //ensure heldCredits sufficient
         if (currentHeldCredits < feeCredits) {
           print('Warning: heldCredits ($currentHeldCredits) is less than feeCredits ($feeCredits). This may indicate duplicate processing.');
-          // Don't throw error, but clamp to 0 to prevent negative values
         }
-
-        // Read the "On Hold" transaction document if it exists
         DocumentReference? onHoldTxnRef;
         if (onHoldTxnId != null) {
           onHoldTxnRef = txnCol.doc(onHoldTxnId);
           final onHoldTxnSnap = await tx.get(onHoldTxnRef);
           if (!onHoldTxnSnap.exists) {
-            onHoldTxnRef = null; // Transaction was deleted, create new one
+            onHoldTxnRef = null;
           }
         }
 
         final int newBalance = currentBalance - feeCredits;
-        // Clamp heldCredits to prevent negative values
         final int newHeldCredits = (currentHeldCredits - feeCredits).clamp(0, double.infinity).toInt();
 
         // Update wallet to deduct from both balance and heldCredits
@@ -940,7 +850,7 @@ class WalletService {
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        // Create new transaction record instead of updating the old one
+        //cretae new transaction record
         final newTxnRef = txnCol.doc();
         final description = postTitle.isNotEmpty
             ? 'Post creation fee - $postTitle'
@@ -955,7 +865,8 @@ class WalletService {
           'description': description,
           'createdAt': FieldValue.serverTimestamp(),
           'referenceId': postId,
-          if (onHoldTxnId != null) 'parentTxnId': onHoldTxnId, // Link to original On Hold transaction
+          if (onHoldTxnId != null) 'parentTxnId': onHoldTxnId, 
+          //link original On Hold transaction
         });
       });
 
@@ -985,7 +896,7 @@ class WalletService {
     final String url = map['checkoutUrl'] as String;
     final String sessionId = map['sessionId'] as String? ?? '';
 
-    // Store pending payment for automatic crediting
+    //store pending payment automatic crediting
     if (sessionId.isNotEmpty) {
       await _firestore.collection('pending_payments').doc(sessionId).set({
         'uid': _uid,
@@ -1001,7 +912,7 @@ class WalletService {
     return Uri.parse(url);
   }
 
-  // Check for pending payments and auto-credit
+  //check pending payments  auto-credit
   Future<void> checkAndCreditPendingPayments() async {
     try {
       final pendingPayments = await _firestore
@@ -1020,24 +931,18 @@ class WalletService {
         if (sessionId.isNotEmpty && credits > 0) {
           try {
             print('Processing payment: sessionId=$sessionId, credits=$credits');
-            // Use the new method that handles duplicate prevention
             await completePendingPayment(sessionId: sessionId);
             print('Successfully processed payment: $sessionId');
           } catch (e) {
-            // Log error but continue with other payments
             print('Error crediting payment $sessionId: $e');
-            // Don't mark as processed if credit failed
           }
         }
       }
     } catch (e) {
       print('Error checking pending payments: $e');
-      // Don't rethrow - fail silently so UI doesn't show errors
     }
   }
 
-  // Complete a specific pending payment (verify and credit atomically)
-  // This method prevents duplicate credits by using atomic status updates
   Future<void> completePendingPayment({required String sessionId}) async {
     final paymentDocRef = _firestore.collection('pending_payments').doc(sessionId);
     
@@ -1053,17 +958,14 @@ class WalletService {
       final status = data['status'] as String? ?? 'pending';
       final uid = data['uid'] as String? ?? '';
       
-      // Verify it's for this user
       if (uid != _uid) {
         throw StateError('Payment belongs to different user');
       }
       
-      // Check if already processed
       if (status == 'processed') {
         throw StateError('PAYMENT_ALREADY_PROCESSED');
       }
       
-      // Handle processing status - check if stuck
       bool shouldProcess = false;
       if (status == 'pending') {
         shouldProcess = true;
@@ -1072,16 +974,14 @@ class WalletService {
         if (processingStartedAt != null) {
           final now = Timestamp.now();
           final duration = now.seconds - processingStartedAt.seconds;
-          // If stuck in processing for more than 5 minutes, allow retry
+          //5 minute retyr
           if (duration > 300) {
             print('Payment stuck in processing for ${duration}s, allowing retry');
-            shouldProcess = true; // Allow retry by updating to processing again
+            shouldProcess = true;
           } else {
-            // Still processing normally, throw error to prevent duplicate
             throw StateError('PAYMENT_ALREADY_PROCESSING');
           }
         } else {
-          // No timestamp, allow retry
           print('Payment in processing state without timestamp, allowing retry');
           shouldProcess = true;
         }
@@ -1089,7 +989,7 @@ class WalletService {
         throw StateError('PAYMENT_INVALID_STATUS: $status');
       }
       
-      // Mark as processing to prevent duplicate processing
+      //prevent duplicate processing
       if (shouldProcess) {
         tx.update(paymentDocRef, {
           'status': 'processing',
@@ -1099,7 +999,7 @@ class WalletService {
     });
     
     try {
-      // Get payment data again (outside transaction)
+      //get payment data again
       final paymentDoc = await paymentDocRef.get();
       final data = paymentDoc.data()!;
       final credits = _parseIntFromFirestore(data['credits']);
@@ -1108,10 +1008,7 @@ class WalletService {
         throw StateError('INVALID_CREDIT_AMOUNT');
       }
       
-      // Verify and credit the payment
       await creditFromStripeSession(sessionId: sessionId, credits: credits);
-      
-      // Mark as processed only after successful credit
       await paymentDocRef.update({
         'status': 'processed',
         'processedAt': FieldValue.serverTimestamp(),
@@ -1119,7 +1016,6 @@ class WalletService {
       
       print('Successfully completed payment: $sessionId');
     } catch (e) {
-      // If credit failed, reset status back to pending so user can retry
       try {
         await paymentDocRef.update({
           'status': 'pending',
@@ -1129,15 +1025,13 @@ class WalletService {
       } catch (updateError) {
         print('Error resetting payment status: $updateError');
       }
-      
-      // Re-throw the original error
       rethrow;
     }
   }
 
   
 
-  // Verify Stripe session with Cloudflare Worker and credit wallet
+  //verify Stripe session with Cloudflare Worker and credit wallet
   Future<void> creditFromStripeSession({required String sessionId, required int credits}) async {
     final verification = await _verifyStripeSession(sessionId);
     if (!verification.paid) {
@@ -1156,8 +1050,7 @@ class WalletService {
       );
     }
 
-    // Check if already credited (prevent duplicate credits)
-    // This is an additional safety check, though the status check should prevent duplicates
+    //prevent duplicate credits
     final existingTxn = await _txnCol
         .where('referenceId', isEqualTo: sessionId)
         .where('type', isEqualTo: 'credit')
@@ -1165,13 +1058,11 @@ class WalletService {
         .get();
 
     if (existingTxn.docs.isNotEmpty) {
-      // Already credited, just return
       print('Payment already credited: $sessionId');
       return;
     }
 
-    // Credit the wallet with the sessionId as reference
-    // Use the verified amount, not the expected amount
+    //credit the wallet sessionId reference
     try {
       await credit(amount: amountToCredit, description: 'Top-up payment', referenceId: sessionId);
 
@@ -1249,8 +1140,6 @@ class WalletService {
     return value;
   }
 
-  /// Helper function to get post title from postId
-  /// Returns post title or empty string if not found
   Future<String> _getPostTitle(String postId) async {
     if (postId.isEmpty) return '';
     try {
@@ -1265,7 +1154,6 @@ class WalletService {
     return '';
   }
 
-  /// Static helper function to get post title from postId
   static Future<String> getPostTitle({
     required FirebaseFirestore firestore,
     required String postId,

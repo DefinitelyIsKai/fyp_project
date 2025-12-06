@@ -4,32 +4,14 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../services/user/location_autocomplete_service.dart' show LocationAutocompleteService, kGoogleApiKey;
 
-/// A reusable location autocomplete field widget
-/// 
-/// Provides location search with Google Places autocomplete suggestions
-/// and automatically retrieves coordinates when a location is selected.
 class LocationAutocompleteField extends StatefulWidget {
-  /// The text controller for the location field
   final TextEditingController controller;
-  
-  /// The label text displayed above the field
   final String label;
-  
-  /// Optional hint text
   final String? hintText;
-  
-  /// Whether the field is required (adds asterisk to label)
   final bool required;
-  
-  /// Callback when a location is selected (provides description, lat, lng)
   final Function(String description, double? latitude, double? longitude)? onLocationSelected;
-  
-  /// Optional helper text
   final String? helperText;
-  
-  /// Whether to restrict results to a specific country (e.g., 'my' for Malaysia)
-  final String? restrictToCountry;
-
+  final String? restrictToCountry; //malaysia
   const LocationAutocompleteField({
     super.key,
     required this.controller,
@@ -81,7 +63,7 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
   }
 
   void _onLocationChanged() {
-    // Debounce API calls
+    //reduce api call delayinmg it
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 500), () {
       if (widget.controller.text.trim().isNotEmpty && _focusNode.hasFocus) {
@@ -103,16 +85,16 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
       });
       return;
     }
-    
+
     setState(() {
       _loading = true;
     });
-    
+
     final suggestions = await LocationAutocompleteService.getAutocomplete(
       query,
       restrictToCountry: widget.restrictToCountry,
     );
-    
+
     if (mounted) {
       setState(() {
         _suggestions = suggestions;
@@ -124,7 +106,7 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
   Future<void> _selectLocation(Map<String, dynamic> suggestion) async {
     final description = suggestion['description'] as String? ?? '';
     final placeId = suggestion['place_id'] as String?;
-    
+
     // Get place details to retrieve coordinates
     if (placeId != null) {
       try {
@@ -134,25 +116,23 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
           '&key=$kGoogleApiKey'
           '&fields=geometry,formatted_address',
         );
-        
+
         final response = await http.get(url);
         final data = json.decode(response.body);
-        
+
         if (data['status'] == 'OK') {
           final result = data['result'];
           final geometry = result['geometry'];
           final location = geometry['location'];
-          
+
           final lat = (location['lat'] as num).toDouble();
           final lng = (location['lng'] as num).toDouble();
-          
+
           setState(() {
             widget.controller.text = description;
             _suggestions = [];
           });
           _focusNode.unfocus();
-          
-          // Call callback with location data
           widget.onLocationSelected?.call(description, lat, lng);
           return;
         }
@@ -160,15 +140,12 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
         debugPrint('Error getting place details: $e');
       }
     }
-    
-    // Fallback: just set the address without coordinates
+
     setState(() {
       widget.controller.text = description;
       _suggestions = [];
     });
     _focusNode.unfocus();
-    
-    // Call callback with location data (no coordinates)
     widget.onLocationSelected?.call(description, null, null);
   }
 
@@ -176,7 +153,7 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
     if (!_focusNode.hasFocus || _suggestions.isEmpty) {
       return const SizedBox.shrink();
     }
-    
+
     return Container(
       constraints: const BoxConstraints(maxHeight: 200),
       margin: const EdgeInsets.only(top: 4),
@@ -184,13 +161,7 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey[300]!),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 4))],
       ),
       child: _loading
           ? const Padding(
@@ -199,64 +170,45 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
                 child: SizedBox(
                   width: 20,
                   height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Color(0xFF00C8A0),
-                  ),
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00C8A0)),
                 ),
               ),
             )
           : _suggestions.isEmpty
-              ? Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    'No locations found',
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                )
-              : ListView.separated(
-                  shrinkWrap: true,
-                  padding: EdgeInsets.zero,
-                  itemCount: _suggestions.length > 5 ? 5 : _suggestions.length,
-                  separatorBuilder: (context, index) => Divider(
-                    height: 1,
-                    color: Colors.grey[200],
-                  ),
-                  itemBuilder: (context, index) {
-                    final suggestion = _suggestions[index];
-                    final description = suggestion['description'] as String? ?? '';
-                    return InkWell(
-                      onTap: () => _selectLocation(suggestion),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16.0,
-                          vertical: 12.0,
+          ? Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text('No locations found', style: TextStyle(color: Colors.grey[600])),
+            )
+          : ListView.separated(
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              itemCount: _suggestions.length > 5 ? 5 : _suggestions.length,
+              separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey[200]),
+              itemBuilder: (context, index) {
+                final suggestion = _suggestions[index];
+                final description = suggestion['description'] as String? ?? '';
+                return InkWell(
+                  onTap: () => _selectLocation(suggestion),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                    child: Row(
+                      children: [
+                        Icon(Icons.location_on_outlined, size: 20, color: Colors.grey[600]),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            description,
+                            style: const TextStyle(fontSize: 14, color: Colors.black87),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.location_on_outlined,
-                              size: 20,
-                              color: Colors.grey[600],
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                description,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.black87,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 
@@ -269,33 +221,17 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
           children: [
             Text(
               widget.label,
-              style: TextStyle(
-                color: Colors.grey[700],
-                fontWeight: FontWeight.w500,
-                fontSize: 14,
-              ),
+              style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w500, fontSize: 14),
             ),
             if (widget.required) ...[
               const SizedBox(width: 4),
-              const Text(
-                '*',
-                style: TextStyle(
-                  color: Colors.red,
-                  fontSize: 14,
-                ),
-              ),
+              const Text('*', style: TextStyle(color: Colors.red, fontSize: 14)),
             ],
           ],
         ),
         if (widget.helperText != null) ...[
           const SizedBox(height: 4),
-          Text(
-            widget.helperText!,
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 12,
-            ),
-          ),
+          Text(widget.helperText!, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
         ],
         const SizedBox(height: 8),
         TextField(
@@ -317,18 +253,15 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
                     },
                   )
                 : _loading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: Padding(
-                          padding: EdgeInsets.all(12.0),
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Color(0xFF00C8A0),
-                          ),
-                        ),
-                      )
-                    : null,
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: Padding(
+                      padding: EdgeInsets.all(12.0),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00C8A0)),
+                    ),
+                  )
+                : null,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Colors.grey),
@@ -344,4 +277,3 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
     );
   }
 }
-

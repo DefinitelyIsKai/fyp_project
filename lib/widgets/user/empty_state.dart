@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Reusable empty state widget
-/// 
-/// Provides consistent empty state UI across the application
 class EmptyState extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -21,19 +18,7 @@ class EmptyState extends StatelessWidget {
     this.action,
   });
 
-  /// Empty state for no items in a list
-  const EmptyState.noItems({
-    super.key,
-    String? title,
-    String? subtitle,
-    this.action,
-  }) : icon = Icons.inbox_outlined,
-       title = title ?? 'No items yet',
-       subtitle = subtitle ?? 'Your items will appear here',
-       iconColor = Colors.grey,
-       iconSize = 64.0;
-
-  /// Empty state for no posts
+  //no posts
   const EmptyState.noPosts({
     super.key,
     String? subtitle,
@@ -44,17 +29,7 @@ class EmptyState extends StatelessWidget {
        iconColor = Colors.grey,
        iconSize = 80.0;
 
-  /// Empty state for no conversations
-  const EmptyState.noConversations({
-    super.key,
-    this.action,
-  }) : icon = Icons.chat_bubble_outline_rounded,
-       title = 'No Conversations',
-       subtitle = 'Your conversations will appear here',
-       iconColor = Colors.grey,
-       iconSize = 80.0;
-
-  /// Empty state for no matches/applications
+  //no matches/applications
   const EmptyState.noMatches({
     super.key,
     required bool isRecruiter,
@@ -67,7 +42,7 @@ class EmptyState extends StatelessWidget {
        iconColor = Colors.grey,
        iconSize = 80.0;
 
-  /// Empty state for no transactions
+  //no transactions
   const EmptyState.noTransactions({
     super.key,
     this.action,
@@ -77,15 +52,6 @@ class EmptyState extends StatelessWidget {
        iconColor = Colors.grey,
        iconSize = 64.0;
 
-  /// Empty state for no locations
-  const EmptyState.noLocations({
-    super.key,
-    this.action,
-  }) : icon = Icons.map_outlined,
-       title = 'No locations found',
-       subtitle = 'Try adjusting your search filters',
-       iconColor = Colors.grey,
-       iconSize = 64.0;
 
   /// Empty state for no applicants
   const EmptyState.noApplicants({

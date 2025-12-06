@@ -5,8 +5,8 @@ class MonthlyCalendar extends StatelessWidget {
   final DateTime? selectedDate;
   final Set<DateTime> availableDates;
   final Set<DateTime> bookedDates;
-  final Set<DateTime> addedSlotDates; // For recruiters - dates with added slots
-  final Set<DateTime> pendingDates; // Dates with pending booking requests
+  final Set<DateTime> addedSlotDates;
+  final Set<DateTime> pendingDates;
   final Function(DateTime) onDateSelected;
   final Function(DateTime) onDateTapped;
 
@@ -25,11 +25,7 @@ class MonthlyCalendar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final firstDayOfMonth = DateTime(currentMonth.year, currentMonth.month, 1);
-    final lastDayOfMonth = DateTime(
-      currentMonth.year,
-      currentMonth.month + 1,
-      0,
-    );
+    final lastDayOfMonth = DateTime(currentMonth.year, currentMonth.month + 1, 0);
     final firstDayWeekday = firstDayOfMonth.weekday;
     final daysInMonth = lastDayOfMonth.day;
 
@@ -37,7 +33,6 @@ class MonthlyCalendar extends StatelessWidget {
 
     return Column(
       children: [
-        // Weekday headers
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Row(
@@ -46,11 +41,7 @@ class MonthlyCalendar extends StatelessWidget {
                 child: Center(
                   child: Text(
                     day,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey[700],
-                    ),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey[700]),
                   ),
                 ),
               );
@@ -58,7 +49,7 @@ class MonthlyCalendar extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        // Calendar grid
+        //calendar grid
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Column(
@@ -92,8 +83,6 @@ class MonthlyCalendar extends StatelessWidget {
     required int daysInMonth,
     required DateTime firstDayOfMonth,
   }) {
-    // firstDayWeekday is 1-7 (Mon=1, Sun=7), but we need 0-6 (Mon=0, Sun=6)
-    // Convert: Mon=1 -> 0, Tue=2 -> 1, ..., Sun=7 -> 6
     final adjustedFirstDay = (firstDayWeekday - 1) % 7;
     final dayNumber = week * 7 + day - adjustedFirstDay + 1;
 
@@ -101,12 +90,8 @@ class MonthlyCalendar extends StatelessWidget {
       return const SizedBox(height: 48);
     }
 
-    // Normalize date to remove time component for accurate comparison
-    final date = DateTime(
-      firstDayOfMonth.year,
-      firstDayOfMonth.month,
-      dayNumber,
-    );
+    //normalize date
+    final date = DateTime(firstDayOfMonth.year, firstDayOfMonth.month, dayNumber);
 
     final isSelected =
         selectedDate != null &&
@@ -114,30 +99,18 @@ class MonthlyCalendar extends StatelessWidget {
         selectedDate!.month == date.month &&
         selectedDate!.day == date.day;
 
-    final isAvailable = availableDates.any(
-      (d) => d.year == date.year && d.month == date.month && d.day == date.day,
-    );
+    final isAvailable = availableDates.any((d) => d.year == date.year && d.month == date.month && d.day == date.day);
 
-    final isBooked = bookedDates.any(
-      (d) => d.year == date.year && d.month == date.month && d.day == date.day,
-    );
+    final isBooked = bookedDates.any((d) => d.year == date.year && d.month == date.month && d.day == date.day);
 
-    final hasAddedSlot = addedSlotDates.any(
-      (d) => d.year == date.year && d.month == date.month && d.day == date.day,
-    );
+    final hasAddedSlot = addedSlotDates.any((d) => d.year == date.year && d.month == date.month && d.day == date.day);
 
-    final hasPending = pendingDates.any(
-      (d) => d.year == date.year && d.month == date.month && d.day == date.day,
-    );
+    final hasPending = pendingDates.any((d) => d.year == date.year && d.month == date.month && d.day == date.day);
 
     final isToday =
-        date.year == DateTime.now().year &&
-        date.month == DateTime.now().month &&
-        date.day == DateTime.now().day;
+        date.year == DateTime.now().year && date.month == DateTime.now().month && date.day == DateTime.now().day;
 
-    final isPast = date.isBefore(
-      DateTime.now().subtract(const Duration(days: 1)),
-    );
+    final isPast = date.isBefore(DateTime.now().subtract(const Duration(days: 1)));
 
     Color? backgroundColor;
     Color? textColor;
@@ -145,9 +118,8 @@ class MonthlyCalendar extends StatelessWidget {
     double? borderWidth;
     List<Widget> cornerIndicators = [];
 
-    // Determine background and text colors first
-    // Priority: booked > pending > available > selected > addedSlot > past
-    // When selected, show full color for booked/pending/available dates
+    //background and text colors
+    //booked then pending then available then selected then addedslot then past
     if (isBooked) {
       backgroundColor = isSelected ? Colors.red[600] : Colors.red[50];
       textColor = isSelected ? Colors.white : Colors.red[800];
@@ -180,8 +152,6 @@ class MonthlyCalendar extends StatelessWidget {
       textColor = Colors.black87;
     }
 
-    // Add corner indicators based on status (show multiple if date has multiple statuses)
-    // Show all applicable indicators
     final List<Color> indicatorColors = [];
 
     if (isBooked) {
@@ -197,9 +167,8 @@ class MonthlyCalendar extends StatelessWidget {
       indicatorColors.add(Colors.blue);
     }
 
-    // If multiple indicators, arrange them horizontally
     if (indicatorColors.length == 1) {
-      // Single indicator
+      //single indicator
       cornerIndicators.add(
         Positioned(
           top: 1,
@@ -210,23 +179,14 @@ class MonthlyCalendar extends StatelessWidget {
             decoration: BoxDecoration(
               color: indicatorColors[0],
               shape: BoxShape.circle,
-              border: Border.all(
-                color: isSelected ? Colors.white : Colors.white,
-                width: isSelected ? 2 : 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 2,
-                  offset: const Offset(0, 1),
-                ),
-              ],
+              border: Border.all(color: isSelected ? Colors.white : Colors.white, width: isSelected ? 2 : 1.5),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 2, offset: const Offset(0, 1))],
             ),
           ),
         ),
       );
     } else if (indicatorColors.length > 1) {
-      // Multiple indicators - arrange horizontally
+      //multiple indicators
       double startRight = 1;
       for (int i = 0; i < indicatorColors.length; i++) {
         cornerIndicators.add(
@@ -239,22 +199,13 @@ class MonthlyCalendar extends StatelessWidget {
               decoration: BoxDecoration(
                 color: indicatorColors[i],
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: isSelected ? Colors.white : Colors.white,
-                  width: isSelected ? 2 : 1.5,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 2,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
+                border: Border.all(color: isSelected ? Colors.white : Colors.white, width: isSelected ? 2 : 1.5),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 2, offset: const Offset(0, 1))],
               ),
             ),
           ),
         );
-        startRight += 10; // Space between indicators
+        startRight += 10;
       }
     }
 
@@ -271,10 +222,7 @@ class MonthlyCalendar extends StatelessWidget {
               : (borderColor != null && !isSelected)
               ? Border.all(color: borderColor, width: borderWidth ?? 2)
               : (isSelected
-                    ? Border.all(
-                        color: borderColor ?? const Color(0xFF00C8A0),
-                        width: borderWidth ?? 2.5,
-                      )
+                    ? Border.all(color: borderColor ?? const Color(0xFF00C8A0), width: borderWidth ?? 2.5)
                     : null),
         ),
         child: Stack(
@@ -285,9 +233,7 @@ class MonthlyCalendar extends StatelessWidget {
                 '$dayNumber',
                 style: TextStyle(
                   fontSize: 14,
-                  fontWeight: isSelected || isToday
-                      ? FontWeight.bold
-                      : FontWeight.normal,
+                  fontWeight: isSelected || isToday ? FontWeight.bold : FontWeight.normal,
                   color: textColor,
                 ),
               ),

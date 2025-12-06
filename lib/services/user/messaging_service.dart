@@ -14,13 +14,13 @@ class MessagingService {
   final ApplicationService _applicationService = ApplicationService();
   final NotificationService _notificationService = NotificationService();
 
-  // Generate conversation ID from two user IDs (consistent ordering)
+  //conversation id from two user  
   String _generateConversationId(String userId1, String userId2) {
     final ids = [userId1, userId2]..sort();
     return '${ids[0]}_${ids[1]}';
   }
 
-  // Get or create conversation
+  //create conversation
   Future<String> getOrCreateConversation({
     required String otherUserId,
     String? matchId,
@@ -28,10 +28,8 @@ class MessagingService {
     final currentUserId = _authService.currentUserId;
     final conversationId = _generateConversationId(currentUserId, otherUserId);
 
-    // Instead of reading first (which is denied when the doc doesn't exist),
-    // upsert the minimal identity fields using merge. This satisfies the
-    // 'create' rule (participantXId must include the current user) and does
-    // not overwrite existing lastMessage data if the doc already exists.
+   
+    // not overwrite existing lastMessage data 
     final currentUserDoc = await _authService.getUserDoc();
     final otherUserDoc = await _firestore
         .collection('users')
@@ -46,14 +44,13 @@ class MessagingService {
         currentUserDoc.data()?['role'] as String? ?? 'jobseeker';
     final otherUserRole = otherUserDoc.data()?['role'] as String? ?? 'jobseeker';
 
-    // Ensure conversation exists with proper structure
-    // Use set() instead of merge to ensure all fields are set correctly
+    //conversation exists with proper structure
     final conversationRef = _firestore.collection('conversations').doc(conversationId);
     
-    // Check if conversation already exists
+    //check  conversation  exists
     final existing = await conversationRef.get();
     if (!existing.exists) {
-      // Create new conversation
+      //create conversation
       await conversationRef.set({
         'participant1Id': currentUserId,
         'participant2Id': otherUserId,
@@ -70,7 +67,7 @@ class MessagingService {
         'lastMessageTime': FieldValue.serverTimestamp(),
       });
     } else {
-      // Update existing conversation with latest names/roles if needed
+      //update latest names
       await conversationRef.set({
         'participant1Id': currentUserId,
         'participant2Id': otherUserId,
@@ -89,9 +86,9 @@ class MessagingService {
     return conversationId;
   }
 
-  // Get conversations for current user
+ 
   Stream<List<Conversation>> streamConversations() {
-    // Check if user is authenticated
+    //check user authenticated
     if (_auth.currentUser == null) {
       return Stream.value(<Conversation>[]);
     }
@@ -108,8 +105,8 @@ class MessagingService {
         return;
       }
 
-      // Filter out conversations with no messages (lastMessage is empty)
-      // Sort in memory by lastMessageTime (descending)
+      // Filter out conversations with no messages 
+      // Sort in memory lastmessagetime 
       final conversations = conversationMap.values
           .where((conv) => conv.lastMessage.isNotEmpty)
           .toList();
@@ -122,13 +119,13 @@ class MessagingService {
       }
     }
 
-    // Stream 1: conversations where user is participant1
+    //conversations participant1
     final stream1 = _firestore
         .collection('conversations')
         .where('participant1Id', isEqualTo: userId)
         .snapshots();
 
-    // Stream 2: conversations where user is participant2
+    //conversations participant2
     final stream2 = _firestore
         .collection('conversations')
         .where('participant2Id', isEqualTo: userId)
@@ -138,7 +135,7 @@ class MessagingService {
       (snapshot1) {
         if (_auth.currentUser == null || controller.isClosed) return;
 
-        // Update conversations from first query
+        //pdate conversations first query
         for (final doc in snapshot1.docs) {
           try {
             final conversation = Conversation.fromFirestore(doc);
@@ -161,7 +158,7 @@ class MessagingService {
       (snapshot2) {
         if (_auth.currentUser == null || controller.isClosed) return;
 
-        // Update conversations from second query
+        //update second query
         for (final doc in snapshot2.docs) {
           try {
             final conversation = Conversation.fromFirestore(doc);
@@ -180,7 +177,7 @@ class MessagingService {
       },
     );
 
-    // Clean up when stream is cancelled
+    //clean up 
     controller.onCancel = () async {
       await sub1?.cancel();
       await sub2?.cancel();
@@ -190,16 +187,16 @@ class MessagingService {
     return controller.stream;
   }
 
-  // Get messages for a conversation
+  //message for a conversation
   Stream<List<Message>> streamMessages(String conversationId) async* {
-    // Check if user is authenticated
+ 
     if (_auth.currentUser == null) {
       yield <Message>[];
       return;
     }
 
     try {
-      // Verify conversation exists and user has access before streaming messages
+      //check conversation exists 
       final conversationDoc = await _firestore
           .collection('conversations')
           .doc(conversationId)
@@ -213,14 +210,14 @@ class MessagingService {
       final conversationData = conversationDoc.data();
       final userId = _authService.currentUserId;
       
-      // Verify user is a participant
+      //check participant
       if (conversationData?['participant1Id'] != userId &&
           conversationData?['participant2Id'] != userId) {
         yield <Message>[];
         return;
       }
 
-      // Use real-time listener instead of polling for instant updates
+      //realtime listener
       try {
         await for (final snapshot in _firestore
             .collection('conversations')
@@ -228,7 +225,6 @@ class MessagingService {
             .collection('messages')
             .orderBy('timestamp', descending: false)
             .snapshots()) {
-          // Check if user is still authenticated
           if (_auth.currentUser == null) {
             yield <Message>[];
             return;
@@ -238,7 +234,6 @@ class MessagingService {
             final messages = snapshot.docs
                 .map((doc) => Message.fromFirestore(doc))
                 .toList();
-            // Already sorted by timestamp from query, but ensure consistency
             messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
             yield messages;
           } catch (e) {
@@ -247,17 +242,15 @@ class MessagingService {
               yield <Message>[];
               return;
             }
-            // Continue on other errors
           }
         }
       } catch (e) {
-        // Handle stream errors (e.g., permission denied during logout)
         debugPrint('Error in streamMessages (likely during logout): $e');
         yield <Message>[];
         return;
       }
     } catch (e) {
-      // Handle any errors gracefully
+    
       if (e.toString().contains('PERMISSION_DENIED')) {
         yield <Message>[];
         return;
@@ -266,7 +259,7 @@ class MessagingService {
     }
   }
 
-  // Send a message
+
   Future<void> sendMessage({
     required String receiverId,
     required String content,
@@ -275,14 +268,12 @@ class MessagingService {
   }) async {
     final senderId = _authService.currentUserId;
 
-    // Check if this is a post-related message and if application is approved
+  
     if (postId != null) {
-      // Get current user role
       final userDoc = await _authService.getUserDoc();
       final userRole = userDoc.data()?['role'] as String? ?? 'jobseeker';
 
       if (userRole == 'jobseeker') {
-        // Jobseeker can only message if application is approved
         final isApproved = await _applicationService.isApplicationApproved(
           postId,
           senderId,
@@ -293,7 +284,6 @@ class MessagingService {
           );
         }
       }
-      // Recruiters can always message (they approved the application)
     }
 
     final conversationId = await getOrCreateConversation(
@@ -310,14 +300,14 @@ class MessagingService {
       timestamp: DateTime.now(),
     );
 
-    // Add message to conversation
+    //addmessage  
     await _firestore
         .collection('conversations')
         .doc(conversationId)
         .collection('messages')
         .add(message.toFirestore());
 
-    // Update conversation last message
+    //update last message
     await _firestore.collection('conversations').doc(conversationId).update({
       'lastMessage': content,
       'lastMessageTime': Timestamp.fromDate(DateTime.now()),
@@ -330,7 +320,7 @@ class MessagingService {
     );
   }
 
-  // Mark messages as read
+  //mark  read
   Future<void> markMessagesAsRead(String conversationId) async {
     final userId = _authService.currentUserId;
     final messagesSnapshot = await _firestore

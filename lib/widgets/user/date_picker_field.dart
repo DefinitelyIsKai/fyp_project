@@ -1,29 +1,12 @@
 import 'package:flutter/material.dart';
 
-/// A reusable date picker field widget
-/// 
-/// Displays a styled date picker button that opens a date picker dialog
-/// with consistent theming across the app.
 class DatePickerField extends StatelessWidget {
-  /// The label text displayed above the field
   final String label;
-  
-  /// The currently selected date (null if no date selected)
   final DateTime? selectedDate;
-  
-  /// Callback when a date is selected
   final Function(DateTime) onDateSelected;
-  
-  /// The earliest selectable date
   final DateTime firstDate;
-  
-  /// The latest selectable date
   final DateTime lastDate;
-  
-  /// Optional helper text displayed below the field
   final String? helperText;
-  
-  /// Whether the field is required (adds asterisk to label)
   final bool required;
 
   const DatePickerField({
@@ -77,7 +60,7 @@ class DatePickerField extends StatelessWidget {
         const SizedBox(height: 8),
         InkWell(
           onTap: () async {
-            // Ensure initialDate is not before firstDate
+            //ensure initial date no before firstdate
             final DateTime initialDate;
             if (selectedDate != null && !selectedDate!.isBefore(firstDate)) {
               initialDate = selectedDate!;

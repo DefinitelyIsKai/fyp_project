@@ -19,7 +19,7 @@ class JobseekerSlotsList extends StatefulWidget {
   final ApplicationService applicationService;
   final PostService postService;
   final VoidCallback onBooked;
-  final VoidCallback? onSlotsLoaded; // Callback when slots finish loading
+  final VoidCallback? onSlotsLoaded; 
 
   const JobseekerSlotsList({
     super.key,
@@ -39,12 +39,12 @@ class JobseekerSlotsList extends StatefulWidget {
 }
 
 class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
-  bool _hasNotifiedLoaded = false; // Track if we've already notified parent
-  DateTime? _lastNotifiedDate; // Track the date we last notified for
+  bool _hasNotifiedLoaded = false; //track if already notified head
+  DateTime? _lastNotifiedDate; //track last notified 
 
   @override
   Widget build(BuildContext context) {
-    // Get approved applications
+    //approved applications
     return FutureBuilder<List<Application>>(
       future: widget.applicationService.streamMyApplications().first,
       builder: (context, snapshot) {
@@ -54,18 +54,16 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
 
         final applications = snapshot.data ?? [];
         
-        // Get approved recruiter IDs from applications
+        //approved recruiterid applications
         final approvedApplications = applications.where((app) => app.status == ApplicationStatus.approved).toList();
         
         final approvedRecruiterIdsSet = approvedApplications
             .map((app) => app.recruiterId)
             .toSet();
 
-        // If a specific recruiter is selected, verify they have an approved application
         Set<String> approvedRecruiterIds;
         Application? applicationToUse = widget.selectedApplication;
         if (widget.selectedRecruiterId != null) {
-          // Verify the selected recruiter has an approved application
           if (approvedRecruiterIdsSet.contains(widget.selectedRecruiterId!)) {
             approvedRecruiterIds = {widget.selectedRecruiterId!};
           } else {
@@ -73,7 +71,7 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
             approvedRecruiterIds = {};
           }
         } else {
-          // Use all approved recruiters
+          //all 
           approvedRecruiterIds = approvedRecruiterIdsSet;
         }
 
@@ -124,13 +122,10 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
             approvedRecruiterIds,
             startDate: startOfDay,
             endDate: endOfDay,
-            jobseekerId: jobseekerId, // Include booked slots for this jobseeker
+            jobseekerId: jobseekerId, 
           ),
           builder: (context, snapshot) {
-            // Notify parent that slots have loaded (only once per date change)
-            // This prevents infinite callbacks when StreamBuilder continuously emits data
             if (snapshot.connectionState == ConnectionState.active) {
-              // Only call callback once when we first get data for this date
               if ((snapshot.hasData || snapshot.hasError) && !_hasNotifiedLoaded) {
                 final currentDate = DateTime(
                   widget.selectedDate.year,
@@ -138,7 +133,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                   widget.selectedDate.day,
                 );
                 
-                // Only notify if this is a new date or we haven't notified yet
                 if (_lastNotifiedDate == null || 
                     _lastNotifiedDate!.year != currentDate.year ||
                     _lastNotifiedDate!.month != currentDate.month ||
@@ -146,7 +140,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                   _hasNotifiedLoaded = true;
                   _lastNotifiedDate = currentDate;
                   
-                  // Use WidgetsBinding to ensure callback is called after build
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     widget.onSlotsLoaded?.call();
                   });
@@ -178,16 +171,14 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
               );
             }
 
-            // If a specific recruiter is selected, show only their slots
+            //show owneed slots
             if (widget.selectedRecruiterId != null) {
               var recruiterSlots = slots
                   .where((slot) => slot.recruiterId == widget.selectedRecruiterId!)
                   .toList();
               
-              // Sort slots by start time
               recruiterSlots.sort((a, b) => a.startTime.compareTo(b.startTime));
               
-              // If applicationToUse is null but we have an approved application, use it
               if (applicationToUse == null && recruiterSlots.isNotEmpty && approvedApplications.isNotEmpty) {
                 try {
                   final approvedApp = approvedApplications.firstWhere(
@@ -195,7 +186,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                   );
                   applicationToUse = approvedApp;
                 } catch (e) {
-                  // Could not find application, will handle gracefully
                 }
               }
               
@@ -219,36 +209,32 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                 );
               }
 
-              // Check for requested slots and post status
+              //check  requested slots and post status
               final jobseekerId = widget.authService.currentUserId;
-              final application = applicationToUse!; // We know it's not null because of the if check
-              final applicationId = application.id; // Get application ID for filtering
+              final application = applicationToUse!;
+              final applicationId = application.id; 
 
-              // Check which slots should be unavailable (after a booked slot)
-              // Note: Only mark slots as unavailable if they are AFTER a slot booked by someone else
-              // Slots booked by the current jobseeker should still be visible
+              //check slot  unavailable 
               final unavailableSlots = <String>{};
               for (int i = 0; i < recruiterSlots.length; i++) {
                 final slot = recruiterSlots[i];
-                // Only mark subsequent slots as unavailable if this slot is booked by someone else
-                // (not by the current jobseeker for this application)
+                //mark subsequent slots as unavailable when slot is booked oter
                 if (slot.bookedBy != null && 
                     !(slot.bookedBy == jobseekerId && slot.matchId == applicationId)) {
-                  // Mark all subsequent slots as unavailable
                   for (int j = i + 1; j < recruiterSlots.length; j++) {
                     unavailableSlots.add(recruiterSlots[j].id);
                   }
-                  break; // Only the first booked slot matters
+                  break; 
                 }
               }
               return FutureBuilder<Map<String, dynamic>>(
                 future: Future.wait([
                   widget.availabilityService.getRequestedSlotIdsForJobseeker(
                     jobseekerId,
-                    matchId: applicationId, // Filter by selected application
+                    matchId: applicationId, 
                   ),
-                  _checkPostStatus(applicationId, widget.postService), // Check if post is completed
-                  widget.postService.getById(application.postId), // Get post to check event date range
+                  _checkPostStatus(applicationId, widget.postService), 
+                  widget.postService.getById(application.postId), 
                 ]).then((results) => {
                   'requestedSlotIds': results[0] as Set<String>,
                   'isPostCompleted': results[1] as bool,
@@ -259,9 +245,8 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                   final isPostCompleted = (dataSnapshot.data?['isPostCompleted'] as bool?) ?? false;
                   final post = dataSnapshot.data?['post'] as Post?;
 
-                  // Filter slots by post event end date (allow booking before event starts)
                   final filteredSlots = recruiterSlots.where((slot) {
-                    // Check if slot date is before or on event end date
+                  
                     if (post != null && post.eventEndDate != null) {
                       final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
                       final eventEndDateOnly = DateTime(
@@ -270,22 +255,18 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                         post.eventEndDate!.day,
                       );
                       
-                      // Only check if slot date is after event end date
                       if (slotDateOnly.isAfter(eventEndDateOnly)) {
-                        return false; // Slot is after event end date
+                        return false; 
                       }
                     }
                     
-                    // Then apply existing filters: show available slots or booked/requested slots for this application
-                    // Show booked slots first (even if isAvailable is false, if booked by this jobseeker for this application)
+                 
                     if (slot.bookedBy != null && slot.matchId == applicationId) {
-                      return true; // Always show booked slots for this application
+                      return true; 
                     }
-                    // Show available slots (not booked yet)
                     if (slot.isAvailable && slot.bookedBy == null) {
-                      return true; // Show all available slots
+                      return true; 
                     }
-                    // Show requested slots (they're already filtered by matchId in the service)
                     return true;
                   }).toList();
 
@@ -320,12 +301,11 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Company name at top in lighter grey
                                 FutureBuilder<String>(
                                   future: _loadRecruiterName(application.recruiterId),
                                   builder: (context, snapshot) {
                                     return Text(
-                                      snapshot.data ?? 'Company',
+                                      snapshot.data ?? 'Recruiter',
                                       style: TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.w500,
@@ -335,17 +315,14 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                                   },
                                 ),
                                 const SizedBox(height: 12),
-                                // Thin light grey separator
                                 Divider(
                                   height: 1,
                                   thickness: 1,
                                   color: Colors.grey[200],
                                 ),
                                 const SizedBox(height: 12),
-                                // Slot content: icon, time, and button
                                 Row(
                                   children: [
-                                    // Circular clock icon filled with teal
                                     Container(
                                       width: 40,
                                       height: 40,
@@ -479,7 +456,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                 },
               );
               } else {
-                // No match found but we have slots - show them anyway
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
@@ -532,21 +508,19 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
               }
             }
 
-            // Group slots by recruiter (for multiple recruiters view)
+            //group slots by recruiter 
             final slotsByRecruiter = <String, List<AvailabilitySlot>>{};
             for (final slot in slots) {
               slotsByRecruiter.putIfAbsent(slot.recruiterId, () => []).add(slot);
             }
 
-             // Check for requested slots and post status
              final jobseekerId = widget.authService.currentUserId;
-             // Get application ID from selectedApplication if available
              final applicationId = widget.selectedApplication?.id;
              return FutureBuilder<Map<String, dynamic>>(
                future: Future.wait([
                  widget.availabilityService.getRequestedSlotIdsForJobseeker(
                    jobseekerId,
-                   matchId: applicationId, // Filter by selected application
+                   matchId: applicationId, 
                  ),
                  applicationId != null ? _checkPostStatus(applicationId, widget.postService) : Future.value(false),
                  widget.selectedApplication != null ? widget.postService.getById(widget.selectedApplication!.postId) : Future<Post?>.value(null),
@@ -565,26 +539,20 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                      final recruiterId = slotsByRecruiter.keys.elementAt(index);
                      var recruiterSlots = slotsByRecruiter[recruiterId]!;
 
-                     // Sort slots by start time
                      recruiterSlots.sort((a, b) => a.startTime.compareTo(b.startTime));
-
-                     // Use selectedApplication if it matches this recruiter, otherwise skip
                      Application? application;
                      if (widget.selectedApplication != null && widget.selectedApplication!.recruiterId == recruiterId) {
                        application = widget.selectedApplication;
                      } else {
-                       // No application available for this recruiter, skip
                        return const SizedBox.shrink();
                      }
 
-                     // Store application in a final variable for null safety (we know it's not null here)
+
                      final currentApplication = application!;
-                     // Get application ID for this specific application
                      final matchApplicationId = currentApplication.id;
 
-                     // Filter slots by post event end date (allow booking before event starts)
                      final dateFilteredSlots = recruiterSlots.where((slot) {
-                       // Check if slot date is before or on event end date
+            
                        if (post != null && post.eventEndDate != null) {
                          final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
                          final eventEndDateOnly = DateTime(
@@ -593,15 +561,14 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                            post.eventEndDate!.day,
                          );
                          
-                         // Only check if slot date is after event end date
+                         //slotis after event end date
                          if (slotDateOnly.isAfter(eventEndDateOnly)) {
-                           return false; // Slot is after event end date
+                           return false; 
                          }
                        }
-                       return true; // If no event end date, show all slots
+                       return true; 
                      }).toList();
 
-                     // Check which slots should be unavailable (after a booked slot)
                      final unavailableSlots = <String>{};
                      for (int i = 0; i < dateFilteredSlots.length; i++) {
                        if (dateFilteredSlots[i].bookedBy != null) {
@@ -609,7 +576,7 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                          for (int j = i + 1; j < dateFilteredSlots.length; j++) {
                            unavailableSlots.add(dateFilteredSlots[j].id);
                          }
-                         break; // Only the first booked slot matters
+                         break;
                        }
                      }
 
@@ -618,16 +585,13 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                        child: Column(
                          children: dateFilteredSlots
                              .where((slot) {
-                               // Filter slots: show available slots or booked/requested slots for this application
-                               // Show booked slots first (even if isAvailable is false, if booked by this jobseeker for this application)
                                if (slot.bookedBy != null && slot.matchId == matchApplicationId) {
-                                 return true; // Always show booked slots for this application
+                                 return true; 
                                }
-                               // Show available slots (not booked yet)
                                if (slot.isAvailable && slot.bookedBy == null) {
-                                 return true; // Show all available slots
+                                 return true; 
                                }
-                               // Show requested slots (they're already filtered by matchId in the service)
+                               //requested slot
                                return true;
                              })
                              .map((slot) {
@@ -657,12 +621,11 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Company name at top in lighter grey
                                   FutureBuilder<String>(
                                     future: _loadRecruiterName(currentApplication.recruiterId),
                                     builder: (context, snapshot) {
                                       return Text(
-                                        snapshot.data ?? 'Company',
+                                        snapshot.data ?? 'Recruiter',
                                         style: TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w500,
@@ -672,17 +635,14 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                                     },
                                   ),
                                   const SizedBox(height: 12),
-                                  // Thin light grey separator
                                   Divider(
                                     height: 1,
                                     thickness: 1,
                                     color: Colors.grey[200],
                                   ),
                                   const SizedBox(height: 12),
-                                  // Slot content: icon, time, and button
                                   Row(
                                     children: [
-                                      // Circular clock icon filled with teal
                                       Container(
                                         width: 40,
                                         height: 40,
@@ -823,20 +783,19 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
     );
   }
 
-  // Check if the post associated with matchId is completed
+  //check post completed
   Future<bool> _checkPostStatus(String matchId, PostService postService) async {
     try {
       final firestore = FirebaseFirestore.instance;
       String? postId;
       
-      // Get as Application (matchId is application ID)
+      //applicationmatchid
       final applicationDoc = await firestore.collection('applications').doc(matchId).get();
       if (applicationDoc.exists) {
         final appData = applicationDoc.data();
         postId = appData?['postId'] as String?;
       }
 
-      // Check post status if postId was found
       if (postId != null) {
         final post = await postService.getById(postId);
         return post?.status == PostStatus.completed;
@@ -852,7 +811,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
       AvailabilitySlot slot,
       Application application,
       ) async {
-    // Load job title first
     final jobTitle = await _loadJobTitle(application.postId, widget.postService);
     
     final confirmed = await DialogUtils.showConfirmationDialog(
@@ -895,7 +853,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
     }
   }
 
-  /// Load recruiter name from Firestore
   Future<String> _loadRecruiterName(String recruiterId) async {
     try {
       final firestore = FirebaseFirestore.instance;
@@ -904,15 +861,14 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
         final data = userDoc.data() ?? {};
         return (data['fullName'] as String?) ??
             (data['professionalProfile'] as String?) ??
-            'Company';
+            'Recruiter';
       }
     } catch (e) {
       debugPrint('Error loading recruiter name: $e');
     }
-    return 'Company';
+    return 'Recruiter';
   }
 
-  /// Load job title from post
   Future<String> _loadJobTitle(String postId, PostService postService) async {
     try {
       final post = await postService.getById(postId);

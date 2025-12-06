@@ -170,32 +170,31 @@ class AvailabilityService {
     // Delete the slot
     await _firestore.collection('availability_slots').doc(slotId).delete();
 
-    // Send notifications asynchronously (don't block on these)
+    // notified asynchronously
     _sendSlotDeletionNotifications(
       recruiterId: recruiterId,
       bookedBy: bookedBy,
       requestingJobseekerIds: requestingJobseekerIds,
       slotTimeDisplay: slotTimeDisplay,
-      slot: slot, // Pass slot for email notification
+      slot: slot, 
     ).catchError((e) {
-      // Log error but don't fail the deletion
+    
       debugPrint('Error sending slot deletion notifications: $e');
     });
   }
 
-  // Helper method to send slot deletion notifications
   Future<void> _sendSlotDeletionNotifications({
     required String recruiterId,
     String? bookedBy,
     required List<String> requestingJobseekerIds,
     required String slotTimeDisplay,
-    AvailabilitySlot? slot, // Add slot parameter to get matchId and date
+    AvailabilitySlot? slot, 
   }) async {
     final recruiterName = await _getUserName(recruiterId);
     final hasBookedJobseeker = bookedBy != null && bookedBy.isNotEmpty;
     final pendingRequestsCount = requestingJobseekerIds.length;
 
-    // Notify jobseekers who have pending requests
+    //noticejobseekers  pending 
     if (requestingJobseekerIds.isNotEmpty) {
       await _notificationService.notifySlotDeletedToRequestingJobseekers(
         jobseekerIds: requestingJobseekerIds,
@@ -204,7 +203,7 @@ class AvailabilityService {
       );
     }
 
-    // Notify jobseeker who has booked the slot (in-app notification + email)
+    //email and app
     if (bookedBy != null && bookedBy.isNotEmpty) {
       await _notificationService.notifySlotDeletedToBookedJobseeker(
         jobseekerId: bookedBy,
@@ -220,13 +219,11 @@ class AvailabilityService {
           recruiterName: recruiterName,
           slot: slot,
         ).catchError((e) {
-          // Log error but don't fail the notification
           debugPrint('Error sending booking cancellation email: $e');
         });
       }
     }
 
-    // Notify recruiter about the deletion
     await _notificationService.notifySlotDeletedToRecruiter(
       recruiterId: recruiterId,
       slotTimeDisplay: slotTimeDisplay,
@@ -235,12 +232,11 @@ class AvailabilityService {
     );
   }
 
-  // Get available slots for booking (for jobseekers)
+  //available slot jobseeker
   Stream<List<AvailabilitySlot>> streamAvailableSlotsForRecruiter(
     String recruiterId,
   ) async* {
-    // Query only by recruiterId and isAvailable to avoid composite index requirement
-    // Filter by date in memory instead
+
     final now = DateTime.now();
     yield* _firestore
         .collection('availability_slots')
@@ -252,7 +248,6 @@ class AvailabilityService {
               .map((doc) => AvailabilitySlot.fromFirestore(doc))
               .where((slot) => slot.date.isAfter(now.subtract(const Duration(seconds: 1))))
               .toList();
-          // Sort by date first, then by time
           slots.sort((a, b) {
             final dateCompare = a.date.compareTo(b.date);
             if (dateCompare != 0) return dateCompare;
@@ -262,28 +257,26 @@ class AvailabilityService {
         });
   }
 
-  // Get available slots for multiple recruiters (for jobseekers with approved matches)
-  // Also includes booked slots if jobseekerId is provided
+  //available slots recruiters 
   Stream<List<AvailabilitySlot>> streamAvailableSlotsForRecruiters(
     Set<String> recruiterIds, {
     DateTime? startDate,
     DateTime? endDate,
-    String? jobseekerId, // Optional: if provided, also include slots booked by this jobseeker
+    String? jobseekerId,
   }) async* {
     if (recruiterIds.isEmpty) {
       yield* Stream.value([]);
       return;
     }
 
-    // Fetch slots for all recruiters and combine
+    
     final now = DateTime.now();
     final start = startDate ?? now;
     final end = endDate ?? DateTime(now.year, now.month + 1, 0);
 
-    // Query available slots (isAvailable == true)
-    // Also query booked slots if jobseekerId is provided
+  
     if (jobseekerId != null && jobseekerId.isNotEmpty) {
-      // Combine available slots and booked slots streams
+      
       final availableSlotsStream = _firestore
           .collection('availability_slots')
           .where('isAvailable', isEqualTo: true)
@@ -294,7 +287,7 @@ class AvailabilityService {
           .where('bookedBy', isEqualTo: jobseekerId)
           .snapshots();
       
-      // Use a controller to combine both streams
+     
       StreamController<List<AvailabilitySlot>>? controller;
       StreamSubscription? availableSub;
       StreamSubscription? bookedSub;
@@ -336,7 +329,6 @@ class AvailabilityService {
       
       yield* controller.stream;
     } else {
-      // Only query available slots (original behavior)
       yield* _firestore
           .collection('availability_slots')
           .where('isAvailable', isEqualTo: true)
@@ -352,11 +344,11 @@ class AvailabilityService {
             }).whereType<AvailabilitySlot>().toList();
             
             final slots = allSlots.where((slot) {
-              // Filter by recruiterId
+              //filter recruiterId
               if (!recruiterIds.contains(slot.recruiterId)) {
                 return false;
               }
-              // Filter by date range
+              //filter by date range
               final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
               final startDateOnly = DateTime(start.year, start.month, start.day);
               final endDateOnly = DateTime(end.year, end.month, end.day);
@@ -370,7 +362,6 @@ class AvailabilityService {
               return true;
             }).toList();
             
-            // Sort by date first, then by time
             slots.sort((a, b) {
               final dateCompare = a.date.compareTo(b.date);
               if (dateCompare != 0) return dateCompare;
@@ -381,7 +372,7 @@ class AvailabilityService {
     }
   }
 
-  // Get dates with available slots for calendar display
+ 
   Future<Set<DateTime>> getAvailableDatesForRecruiters(
     Set<String> recruiterIds, {
     DateTime? startDate,
@@ -393,8 +384,7 @@ class AvailabilityService {
     final start = startDate ?? now;
     final end = endDate ?? DateTime(now.year, now.month + 1, 0);
 
-    // Query only by isAvailable to avoid composite index requirement
-    // Filter by date and recruiterId in memory instead
+  
     final snapshot = await _firestore
         .collection('availability_slots')
         .where('isAvailable', isEqualTo: true)
@@ -403,28 +393,27 @@ class AvailabilityService {
     final dates = <DateTime>{};
     for (final doc in snapshot.docs) {
       final slot = AvailabilitySlot.fromFirestore(doc);
-      // Filter by recruiterId
+    
       if (!recruiterIds.contains(slot.recruiterId)) continue;
-      // Filter by date range
+      
       if (slot.date.isBefore(start) || slot.date.isAfter(end)) continue;
       dates.add(DateTime(slot.date.year, slot.date.month, slot.date.day));
     }
     return dates;
   }
 
-  // Get booked dates for calendar display
+  //booked dates 
   Future<Set<DateTime>> getBookedDatesForJobseeker(
     String jobseekerId, {
     DateTime? startDate,
     DateTime? endDate,
-    String? matchId, // Filter by specific application/match ID
+    String? matchId, 
   }) async {
     final now = DateTime.now();
     final start = startDate ?? now;
     final end = endDate ?? DateTime(now.year, now.month + 1, 0);
 
-    // Query only by bookedBy to avoid composite index requirement
-    // Filter by date and matchId in memory instead
+    //query only by bookedBy 
     final snapshot = await _firestore
         .collection('availability_slots')
         .where('bookedBy', isEqualTo: jobseekerId)
@@ -433,18 +422,18 @@ class AvailabilityService {
     final dates = <DateTime>{};
     for (final doc in snapshot.docs) {
       final slot = AvailabilitySlot.fromFirestore(doc);
-      // Filter by matchId if provided
+      //filter  matchId
       if (matchId != null && slot.matchId != matchId) continue;
-      // Filter by date range in memory
+      //date range in memory
       if (slot.date.isBefore(start) || slot.date.isAfter(end)) continue;
       dates.add(DateTime(slot.date.year, slot.date.month, slot.date.day));
     }
     return dates;
   }
 
-  // ========== Booking Request Functions ==========
+  
 
-  // Helper method to get user name from Firestore
+  
   Future<String> _getUserName(String userId) async {
     try {
       final userDoc = await _firestore.collection('users').doc(userId).get();
@@ -455,25 +444,25 @@ class AvailabilityService {
                'Unknown';
       }
     } catch (e) {
-      // Ignore errors and return default
+
     }
     return 'Unknown';
   }
 
-  // Helper method to format slot time display
+  //format slot time display
   String _formatSlotTimeDisplay(AvailabilitySlot slot) {
     final dateStr = '${slot.date.year}-${slot.date.month.toString().padLeft(2, '0')}-${slot.date.day.toString().padLeft(2, '0')}';
     return '$dateStr ${slot.timeDisplay}';
   }
 
-  // Create a booking request (jobseeker sends request to recruiter)
+  //create booking request 
   Future<String> createBookingRequest({
     required String slotId,
     required String matchId,
     required String jobseekerId,
     required String recruiterId,
   }) async {
-    // Check if slot already has a pending request from this jobseeker
+    //check pending reques slot
     final existingRequest = await _firestore
         .collection('booking_requests')
         .where('slotId', isEqualTo: slotId)
@@ -486,7 +475,7 @@ class AvailabilityService {
       throw Exception('You already have a pending request for this slot');
     }
 
-    // Check if slot is already booked
+    //check  slot  booked
     final slotDoc = await _firestore.collection('availability_slots').doc(slotId).get();
     if (!slotDoc.exists) {
       throw Exception('Slot not found');
@@ -496,17 +485,17 @@ class AvailabilityService {
       throw Exception('This slot is already booked');
     }
 
-    // Check if the job post is completed
+    //check post completed
     String? postId;
     try {
-      // Get as Application (matchId is application ID)
+      //matchid is application id
       final applicationDoc = await _firestore.collection('applications').doc(matchId).get();
       if (applicationDoc.exists) {
         final appData = applicationDoc.data();
         postId = appData?['postId'] as String?;
       }
 
-      // Check post status if postId was found
+      //check post status 
       if (postId != null) {
         final postDoc = await _firestore.collection('posts').doc(postId).get();
         if (postDoc.exists) {
@@ -518,19 +507,16 @@ class AvailabilityService {
         }
       }
     } catch (e) {
-      // Re-throw if it's our custom exception, otherwise log and continue
       if (e.toString().contains('completed')) {
         rethrow;
       }
       debugPrint('Error checking post status: $e');
     }
 
-    // Get slot details for notification
     final slot = AvailabilitySlot.fromFirestore(slotDoc);
     final slotTimeDisplay = _formatSlotTimeDisplay(slot);
 
-    // Note: Multiple jobseekers can request the same slot
-    // When recruiter approves one, others will be automatically rejected
+    //one approves others rejected
 
     final request = BookingRequest(
       id: '',
@@ -546,37 +532,35 @@ class AvailabilityService {
         .collection('booking_requests')
         .add(request.toFirestore());
 
-    // Send notifications asynchronously (don't block on these)
+    //notifications 
     _sendBookingRequestNotifications(
       jobseekerId: jobseekerId,
       recruiterId: recruiterId,
       slotTimeDisplay: slotTimeDisplay,
     ).catchError((e) {
-      // Log error but don't fail the booking request
       debugPrint('Error sending booking request notifications: $e');
     });
 
     return docRef.id;
   }
 
-  // Helper method to send booking request notifications
+
   Future<void> _sendBookingRequestNotifications({
     required String jobseekerId,
     required String recruiterId,
     required String slotTimeDisplay,
   }) async {
-    // Get user names
+
     final jobseekerName = await _getUserName(jobseekerId);
     final recruiterName = await _getUserName(recruiterId);
 
-    // Notify recruiter
     await _notificationService.notifyBookingRequestSentToRecruiter(
       recruiterId: recruiterId,
       jobseekerName: jobseekerName,
       slotTimeDisplay: slotTimeDisplay,
     );
 
-    // Notify jobseeker
+ 
     await _notificationService.notifyBookingRequestSentToJobseeker(
       jobseekerId: jobseekerId,
       recruiterName: recruiterName,
@@ -584,7 +568,7 @@ class AvailabilityService {
     );
   }
 
-  // Get booking requests for an recruiter (stream)
+ 
   Stream<List<BookingRequest>> streamBookingRequestsForRecruiter() async* {
     final userId = _authService.currentUserId;
     yield* _firestore
@@ -595,13 +579,11 @@ class AvailabilityService {
       final requests = snapshot.docs
           .map((doc) => BookingRequest.fromFirestore(doc))
           .toList();
-      // Sort by createdAt descending (client-side to avoid Firestore composite index requirement)
       requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return requests;
     });
   }
 
-  // Get booking requests for an jobseeker (stream)
   Stream<List<BookingRequest>> streamBookingRequestsForJobseeker(String jobseekerId) async* {
     yield* _firestore
         .collection('booking_requests')
@@ -611,16 +593,15 @@ class AvailabilityService {
       final requests = snapshot.docs
           .map((doc) => BookingRequest.fromFirestore(doc))
           .toList();
-      // Sort by createdAt descending (client-side to avoid Firestore composite index requirement)
       requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return requests;
     });
   }
 
-  // Get pending booking request slot IDs for an jobseeker
+
   Future<Set<String>> getRequestedSlotIdsForJobseeker(
     String jobseekerId, {
-    String? matchId, // Filter by specific application/match ID
+    String? matchId,
   }) async {
     final snapshot = await _firestore
         .collection('booking_requests')
@@ -635,7 +616,7 @@ class AvailabilityService {
         .toSet();
   }
 
-  // Get pending booking request slot IDs for an recruiter
+  
   Future<Set<String>> getRequestedSlotIdsForRecruiter(String recruiterId) async {
     final snapshot = await _firestore
         .collection('booking_requests')
@@ -648,7 +629,7 @@ class AvailabilityService {
         .toSet();
   }
 
-  // Approve booking request (and actually book the slot)
+  
   Future<void> approveBookingRequest(String requestId) async {
     final requestDoc = await _firestore
         .collection('booking_requests')
@@ -661,7 +642,7 @@ class AvailabilityService {
 
     final request = BookingRequest.fromFirestore(requestDoc);
 
-    // Check if slot is still available
+   
     final slotDoc = await _firestore
         .collection('availability_slots')
         .doc(request.slotId)
@@ -673,7 +654,6 @@ class AvailabilityService {
 
     final slotData = slotDoc.data()!;
     if (slotData['bookedBy'] != null) {
-      // Slot already booked, reject all other pending requests for this slot
       await _firestore.collection('booking_requests').doc(requestId).update({
         'status': 'rejected',
         'updatedAt': Timestamp.fromDate(DateTime.now()),
@@ -681,23 +661,23 @@ class AvailabilityService {
       throw Exception('This slot is already booked');
     }
 
-    // Get slot details for notification
+  
     final slot = AvailabilitySlot.fromFirestore(slotDoc);
 
-    // Update booking request status
+ 
     await _firestore.collection('booking_requests').doc(requestId).update({
       'status': 'approved',
       'updatedAt': Timestamp.fromDate(DateTime.now()),
     });
 
-    // Actually book the slot
+  
     await _firestore.collection('availability_slots').doc(request.slotId).update({
       'isAvailable': false,
       'bookedBy': request.jobseekerId,
       'matchId': request.matchId,
     });
 
-    // Reject all other pending requests for this slot
+ 
     final otherRequests = await _firestore
         .collection('booking_requests')
         .where('slotId', isEqualTo: request.slotId)
@@ -714,19 +694,19 @@ class AvailabilityService {
     }
     await batch.commit();
 
-    // Send notification and email to jobseeker asynchronously (don't block on this)
+   
     _sendBookingApprovalNotification(
       jobseekerId: request.jobseekerId,
       recruiterId: request.recruiterId,
       slot: slot,
       matchId: request.matchId,
     ).catchError((e) {
-      // Log error but don't fail the approval
+      
       debugPrint('Error sending booking approval notification/email: $e');
     });
   }
 
-  // Helper method to send booking cancellation email
+  
   Future<void> _sendBookingCancellationEmail({
     required String jobseekerId,
     required String recruiterId,
@@ -734,15 +714,13 @@ class AvailabilityService {
     required AvailabilitySlot slot,
   }) async {
     try {
-      // Get jobseeker email and name
       final jobseekerEmail = await _getUserEmail(jobseekerId);
       final jobseekerName = await _getUserName(jobseekerId);
-      
-      // Get job title from application/post
+    
       String jobTitle = 'the job position';
       if (slot.matchId != null && slot.matchId!.isNotEmpty) {
         try {
-          // Get application to find postId
+          //find postid in applicat
           final applicationDoc = await _firestore.collection('applications').doc(slot.matchId).get();
           if (applicationDoc.exists) {
             final appData = applicationDoc.data();
@@ -760,7 +738,6 @@ class AvailabilityService {
       }
 
       if (jobseekerEmail != null && jobseekerEmail.isNotEmpty) {
-        // Format slot date and time
         final slotDate = DateFormat('MMMM d, yyyy').format(slot.date);
         final slotTime = slot.timeDisplay;
 
@@ -776,12 +753,10 @@ class AvailabilityService {
         debugPrint('Jobseeker email not found, skipping cancellation email notification');
       }
     } catch (e) {
-      // Log error but don't fail the notification
       debugPrint('Error sending booking cancellation email: $e');
     }
   }
 
-  // Helper method to send booking approval notification and email
   Future<void> _sendBookingApprovalNotification({
     required String jobseekerId,
     required String recruiterId,
@@ -791,23 +766,21 @@ class AvailabilityService {
     final recruiterName = await _getUserName(recruiterId);
     final slotTimeDisplay = _formatSlotTimeDisplay(slot);
     
-    // Send in-app notification
     await _notificationService.notifyBookingRequestApproved(
       jobseekerId: jobseekerId,
       recruiterName: recruiterName,
       slotTimeDisplay: slotTimeDisplay,
     );
 
-    // Send email notification via SMTP
+    //SMTP
     try {
-      // Get jobseeker email and name
+      
       final jobseekerEmail = await _getUserEmail(jobseekerId);
       final jobseekerName = await _getUserName(jobseekerId);
-      
-      // Get job title from application/post
+  
       String jobTitle = 'the job position';
       try {
-        // Get application to find postId
+        
         final applicationDoc = await _firestore.collection('applications').doc(matchId).get();
         if (applicationDoc.exists) {
           final appData = applicationDoc.data();
@@ -824,7 +797,6 @@ class AvailabilityService {
       }
 
       if (jobseekerEmail != null && jobseekerEmail.isNotEmpty) {
-        // Format slot date and time
         final slotDate = DateFormat('MMMM d, yyyy').format(slot.date);
         final slotTime = slotTimeDisplay;
 
@@ -840,12 +812,10 @@ class AvailabilityService {
         debugPrint('Jobseeker email not found, skipping email notification');
       }
     } catch (e) {
-      // Log error but don't fail the notification
       debugPrint('Error sending booking approval email: $e');
     }
   }
 
-  // Helper method to combine and filter slots
   void _emitCombinedSlots(
     StreamController<List<AvailabilitySlot>>? controller,
     List<AvailabilitySlot>? availableSlots,
@@ -857,12 +827,12 @@ class AvailabilityService {
     if (controller == null || (!controller.isClosed && controller.hasListener)) {
       final allSlots = <AvailabilitySlot>[];
       
-      // Add available slots
+     
       if (availableSlots != null) {
         allSlots.addAll(availableSlots);
       }
       
-      // Add booked slots (avoid duplicates)
+     
       if (bookedSlots != null) {
         final availableSlotIds = allSlots.map((s) => s.id).toSet();
         for (final bookedSlot in bookedSlots) {
@@ -872,13 +842,13 @@ class AvailabilityService {
         }
       }
       
-      // Filter by recruiterId and date range
+     
       final slots = allSlots.where((slot) {
-        // Filter by recruiterId
+      
         if (!recruiterIds.contains(slot.recruiterId)) {
           return false;
         }
-        // Filter by date range
+      
         final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
         final startDateOnly = DateTime(start.year, start.month, start.day);
         final endDateOnly = DateTime(end.year, end.month, end.day);
@@ -892,7 +862,6 @@ class AvailabilityService {
         return true;
       }).toList();
       
-      // Sort by date first, then by time
       slots.sort((a, b) {
         final dateCompare = a.date.compareTo(b.date);
         if (dateCompare != 0) return dateCompare;
@@ -905,7 +874,7 @@ class AvailabilityService {
     }
   }
 
-  // Helper method to get user email
+ 
   Future<String?> _getUserEmail(String userId) async {
     try {
       final userDoc = await _firestore.collection('users').doc(userId).get();
@@ -919,7 +888,7 @@ class AvailabilityService {
     return null;
   }
 
-  // Reject booking request
+  //reject booking request
   Future<void> rejectBookingRequest(String requestId) async {
     await _firestore.collection('booking_requests').doc(requestId).update({
       'status': 'rejected',

@@ -26,11 +26,7 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
   final PageController _controller = PageController();
   final _authService = AuthService();
   final _tagService = TagService();
-
-  // Step 1
   String _seekingChoice = 'actively';
-
-  // Step 2
   final _step2FormKey = GlobalKey<FormState>();
   final _fullNameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
@@ -38,20 +34,16 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
   final _locationController = TextEditingController();
   double? _latitude;
   double? _longitude;
-  String? _selectedGender; // "male", "female"
+  String? _selectedGender;
 
-  // Step 3
   final _profProfileCtrl = TextEditingController();
   final _summaryCtrl = TextEditingController();
   final _workExperienceCtrl = TextEditingController();
   
-
-  // Step 4
   TagSelectionMap _selectedTags = <String, List<String>>{};
   Map<TagCategory, List<Tag>> _tagCategoriesWithTags = {};
   bool _tagsLoading = true;
 
-  // Step 5
   ResumeAttachment? _resumeAttachment;
   bool _acceptedTerms = false;
 
@@ -65,7 +57,6 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
     super.initState();
     _loadTags();
     
-    // Listen to location text changes for autocomplete
   }
   
 
@@ -101,7 +92,6 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
   }
 
   Future<void> _onNext() async {
-    // Validate Step 2 (Personal Information) before proceeding
     if (_index == 1) {
       if (!_step2FormKey.currentState!.validate()) {
         return;
@@ -120,9 +110,8 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
 
     if (!mounted) return;
     
-    // Validate required fields before saving
+    //validate field
     if (_workExperienceCtrl.text.trim().isEmpty) {
-      // Navigate to Step 3 (Professional Profile step) if workExperience is missing
       if (_index != 2) {
         setState(() => _index = 2);
         await _controller.animateToPage(
@@ -141,7 +130,6 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
     
     setState(() => _saving = true);
     try {
-      // Final step → save profile and finish
       final String role = _seekingChoice == 'hiring' ? 'recruiter' : 'jobseeker';
       final tagsToSave = sanitizeTagSelection(_selectedTags);
       final ageText = _ageCtrl.text.trim();
@@ -276,7 +264,6 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
                 controller: _controller,
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
-                  // Step 1
                   _StepContainer(
                     title: 'Are you looking for new opportunities',
                     child: Column(
@@ -297,7 +284,6 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
                       ],
                     ),
                   ),
-                  // Step 2
                   _StepContainer(
                     title: 'Personal Information',
                     child: Form(
@@ -305,8 +291,6 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          
-                          
                           
                           Text(
                             'Phone Number*',
@@ -322,7 +306,6 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
                             keyboardType: TextInputType.phone,
                             decoration: inputDecoration('012-345 6789'),
                             inputFormatters: [
-                              // Auto-format as user types: 012-345 6789
                               PhoneNumberFormatter(),
                             ],
                             validator: (v) => InputValidators.phoneNumberMalaysia(v, allowEmpty: false, errorMessage: 'Phone number is required. Format: 012-345 6789'),
@@ -355,7 +338,6 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
                             keyboardType: TextInputType.number,
                             decoration: inputDecoration('e.g. 25'),
                             inputFormatters: [
-                              // Only allow digits
                               FilteringTextInputFormatter.digitsOnly,
                             ],
                             validator: (v) => InputValidators.age(v, errorMessage: 'Age must be 18 or above'),
@@ -375,7 +357,6 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
                       ),
                     ),
                   ),
-                  // Step 3
                   _StepContainer(
                     title: 'Professional Profile',
                     child: Column(
@@ -425,7 +406,6 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
                       ],
                     ),
                   ),
-                  // Step 4
                   _StepContainer(
                     title: 'Choose the tags that describe you',
                     child: TagSelectionSection(
@@ -435,7 +415,6 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
                       loading: _tagsLoading,
                     ),
                   ),
-                  // Step 5
                   _StepContainer(
                     title: 'Upload your CV to get your recruiter know you',
                     child: Column(
@@ -550,7 +529,6 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
   }
 
   Widget _buildGenderDropdown() {
-    // Validate that _selectedGender is a valid value to prevent DropdownButton assertion error
     const validGenders = ['male', 'female'];
     final String? safeSelectedGender = (_selectedGender != null && validGenders.contains(_selectedGender))
         ? _selectedGender
@@ -781,7 +759,6 @@ class _ResumePickerState extends State<_ResumePicker> {
   }
 
   Future<void> _removeResume() async {
-    // Show confirmation dialog
     final confirmed = await DialogUtils.showConfirmationDialog(
       context: context,
       title: 'Remove Resume',
@@ -801,7 +778,6 @@ class _ResumePickerState extends State<_ResumePicker> {
         'cvUrl': FieldValue.delete(),
       });
       
-      // Update UI state
       if (mounted) {
         widget.onChanged(null);
         

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 class AuthService {
   AuthService({FirebaseAuth? auth, FirebaseFirestore? firestore})
@@ -23,17 +24,14 @@ class AuthService {
     final userEmail = credential.user!.email ?? email.trim();
     await _firestore.collection('users').doc(uid).set({
       'fullName': fullName.trim(),
-      'email': userEmail, // Email from authentication
-      'createdAt': FieldValue.serverTimestamp(), // Account creation timestamp
-      'emailVerified': false, // Track email verification status in Firestore
-      // Used to gate first-time profile setup flow
+      'email': userEmail, //email  auth
+      'createdAt': FieldValue.serverTimestamp(), 
+      'emailVerified': false, 
       'profileCompleted': false,
-      // Default role for new users
       'role': 'jobseeker',
-      // Account status fields - auto created
-      'status': 'Active', // Options: Active, Suspend, Inactive
-      'isActive': true, // Boolean flag for active status
-      // Optional fields for the onboarding flow. They may be filled later.
+      'status': 'Active',
+      'isActive': true, 
+      'login': false, 
       'phoneNumber': null,
       'location': null,
       'professionalProfile': null,
@@ -41,7 +39,7 @@ class AuthService {
       'workExperience': null,
     });
 
-    // Send verification email
+    //verification email
     await credential.user!.sendEmailVerification();
 
     return credential;
@@ -51,12 +49,60 @@ class AuthService {
     required String email,
     required String password,
   }) async {
+    final trimmedEmail = email.trim();
+    
     final credential = await _auth.signInWithEmailAndPassword(
-      email: email.trim(),
+      email: trimmedEmail,
       password: password,
     );
     
-    // Sync emailVerified status to Firestore after sign in
+    //check if user is already logged in on another device
+    if (credential.user != null) {
+      try {
+        final userId = credential.user!.uid;
+        final userDoc = await _firestore.collection('users').doc(userId).get();
+        
+        if (userDoc.exists) {
+          final userData = userDoc.data();
+          final loginValue = userData?['login'];
+          
+          bool isLoggedIn = false;
+          if (loginValue is bool) {
+            isLoggedIn = loginValue;
+          } else if (loginValue == null) {
+            isLoggedIn = false;
+            debugPrint('Login check: login field is null, treating as false');
+          } else if (loginValue is String) {
+            isLoggedIn = loginValue.toLowerCase() == 'true';
+            debugPrint('Login check: login field is string "$loginValue", converted to $isLoggedIn');
+          } else {
+            debugPrint('Login check: login field is unexpected type: ${loginValue.runtimeType}, value=$loginValue');
+          }
+          
+          debugPrint('Login check: userId=$userId, login field=$loginValue (type: ${loginValue.runtimeType}), isLoggedIn=$isLoggedIn');
+          
+          if (isLoggedIn == true) {
+            debugPrint('BLOCKING LOGIN: User is already logged in on another device (login=$loginValue)');
+            await _auth.signOut(); 
+            throw FirebaseAuthException(
+              code: 'already-logged-in',
+              message: 'This account is already logged in on another device. Please logout from the other device first.',
+            );
+          } else {
+            debugPrint('Login check: User is not logged in (login=$loginValue), allowing login');
+          }
+        } else {
+          debugPrint('Login check: User document not found for userId=$userId');
+        }
+      } on FirebaseAuthException {
+        debugPrint('Login check: Re-throwing FirebaseAuthException');
+        rethrow;
+      } catch (e) {
+        debugPrint('Warning: Could not check login status: $e');
+        debugPrint('Warning: Proceeding with login despite check failure');
+      }
+    }
+    
     if (credential.user != null) {
       await credential.user!.reload();
       final isVerified = credential.user!.emailVerified;
@@ -65,14 +111,36 @@ class AuthService {
           'emailVerified': isVerified,
         });
       } catch (e) {
-        // Ignore errors - this is a sync operation, shouldn't block login
       }
     }
     
     return credential;
   }
 
-  Future<void> signOut() => _auth.signOut();
+  Future<void> signOut() async {
+    //check user id before signing out
+    final userId = _auth.currentUser?.uid;
+    
+    debugPrint('SignOut: userId=$userId');
+    
+ 
+    if (userId != null && userId.isNotEmpty) {
+      try {
+        await _firestore.collection('users').doc(userId).update({
+          'login': false, 
+        });
+        debugPrint('SignOut: Successfully set login=false for userId=$userId');
+      } catch (e) {
+        debugPrint('Error updating login status during signOut: $e');
+      }
+    } else {
+      debugPrint('SignOut: No userId found, skipping login status update');
+    }
+    
+    //ssign out firebase Auth
+    await _auth.signOut();
+    debugPrint('SignOut: Firebase Auth signOut completed');
+  }
 
   Future<void> resendVerificationEmail() async {
     final user = _auth.currentUser;
@@ -81,9 +149,7 @@ class AuthService {
     }
   }
 
-  /// Check if email exists by querying Firestore.
-  /// Note: fetchSignInMethodsForEmail was removed in Firebase Auth 6.x due to
-  /// Email Enumeration Protection. We use Firestore as an alternative.
+  // check if email exists 
   Future<bool> doesEmailExist(String email) async {
     final trimmedEmail = email.trim();
     try {
@@ -94,14 +160,10 @@ class AuthService {
           .get();
       return querySnapshot.docs.isNotEmpty;
     } catch (e) {
-      // If Firestore query fails, return false to be safe
       return false;
     }
   }
 
-  /// Checks if password reset should be allowed for the given email.
-  /// Returns true if allowed, false if the account exists but is unverified.
-  /// Throws if email doesn't exist.
   Future<bool> canSendPasswordReset(String email) async {
     final trimmedEmail = email.trim();
     
@@ -114,7 +176,7 @@ class AuthService {
       );
     }
 
-    // Try to find user document in Firestore to check verification status
+    
     try {
       final querySnapshot = await _firestore
           .collection('users')
@@ -125,39 +187,37 @@ class AuthService {
       if (querySnapshot.docs.isNotEmpty) {
         final userData = querySnapshot.docs.first.data();
         
-        // Check if emailVerified status is stored in Firestore
+      
         final emailVerified = userData['emailVerified'];
         if (emailVerified != null) {
-          // If explicitly set to false, block password reset
+        
           if (emailVerified == false) {
             return false;
           }
-          // If explicitly set to true, allow password reset
+          
           if (emailVerified == true) {
             return true;
           }
         }
         
-        // Fallback: Check account age for new accounts
-        // For accounts less than 24 hours old without verification status, assume unverified
+        
         final createdAt = userData['createdAt'] as Timestamp?;
         if (createdAt != null) {
           final accountAge = DateTime.now().difference(createdAt.toDate());
           if (accountAge.inHours < 24) {
-            return false; // Likely unverified, block password reset
+            return false; 
           }
         }
       }
     } catch (e) {
-      // If we can't check, allow the reset (fail open for existing accounts)
-      // This prevents blocking legitimate password resets
+      
     }
 
     return true;
   }
 
   Future<void> sendPasswordResetEmail({required String email}) async {
-    // Check if password reset should be allowed
+    //password reset 
     final canReset = await canSendPasswordReset(email);
     if (!canReset) {
       throw FirebaseAuthException(
@@ -175,35 +235,33 @@ class AuthService {
     try {
       await user.reload();
     } on FirebaseAuthException catch (e) {
-      // Handle network errors gracefully - don't crash the app
-      // Return false so polling can continue when network is restored
+
       if (e.code == 'network-request-failed') {
         return false;
       }
-      // Re-throw other auth exceptions
+
       rethrow;
     } catch (e) {
-      // Handle any other unexpected errors
       return false;
     }
     
     final isVerified = _auth.currentUser?.emailVerified ?? false;
     
-    // Sync emailVerified status to Firestore
+
     if (isVerified && user.uid.isNotEmpty) {
       try {
         await _firestore.collection('users').doc(user.uid).update({
           'emailVerified': true,
         });
       } catch (e) {
-        // Ignore errors - this is a sync operation
+       
       }
     }
     
     return isVerified;
   }
 
-  // Returns current user id or throws if not signed in
+
   String get currentUserId {
     final user = _auth.currentUser;
     if (user == null) {
@@ -213,7 +271,6 @@ class AuthService {
   }
 
   Future<DocumentSnapshot<Map<String, dynamic>>> getUserDoc() async {
-    // Force a server read to avoid stale cached values after console edits
     return _firestore
         .collection('users')
         .doc(currentUserId)
@@ -227,26 +284,43 @@ class AuthService {
     final dynamic raw = data['profileCompleted'];
     if (raw is bool) return raw;
     if (raw is String) {
-      // Tolerate string values set manually in the console
       return raw.toLowerCase() == 'true';
     }
     return false;
   }
 
+  //set login status 
+  Future<void> setLoginStatus(bool isLoggedIn) async {
+    try {
+      final userId = currentUserId;
+      if (userId.isEmpty) {
+        debugPrint('setLoginStatus: ERROR - currentUserId is empty!');
+        throw Exception('Cannot set login status: user ID is empty');
+      }
+      debugPrint('setLoginStatus: userId=$userId, isLoggedIn=$isLoggedIn');
+      await _firestore.collection('users').doc(userId).update({
+        'login': isLoggedIn,
+      });
+      debugPrint('setLoginStatus: Successfully updated login status to $isLoggedIn for user $userId');
+    } catch (e) {
+     
+      debugPrint('Error setting login status: $e');
+      rethrow;
+    }
+  }
+
   Future<void> updateUserProfile(Map<String, dynamic> data) async {
-    // Remove createdAt to prevent overwriting the original account creation timestamp
+    //prevent overwriting 
     final dataToUpdate = Map<String, dynamic>.from(data);
     dataToUpdate.remove('createdAt');
     
-    // Clean up base64 data from resume and image fields to prevent Firestore document size limit (1MB) error
+    //clean up
     if (dataToUpdate['resume'] is Map) {
       final resumeData = Map<String, dynamic>.from(dataToUpdate['resume'] as Map);
-      // Remove base64 data, only keep downloadUrl and metadata
       resumeData.remove('base64');
       if (resumeData.containsKey('downloadUrl') && resumeData['downloadUrl'] != null) {
         dataToUpdate['resume'] = resumeData;
       } else if (resumeData.isEmpty || (resumeData.length == 1 && resumeData.containsKey('uploadedAt'))) {
-        // If only metadata remains without downloadUrl, remove the resume field
         dataToUpdate.remove('resume');
       } else {
         dataToUpdate['resume'] = resumeData;
@@ -255,12 +329,10 @@ class AuthService {
     
     if (dataToUpdate['image'] is Map) {
       final imageData = Map<String, dynamic>.from(dataToUpdate['image'] as Map);
-      // Remove base64 data, only keep downloadUrl and metadata
       imageData.remove('base64');
       if (imageData.containsKey('downloadUrl') && imageData['downloadUrl'] != null) {
         dataToUpdate['image'] = imageData;
       } else if (imageData.isEmpty || (imageData.length == 1 && imageData.containsKey('uploadedAt'))) {
-        // If only metadata remains without downloadUrl, remove the image field
         dataToUpdate.remove('image');
       } else {
         dataToUpdate['image'] = imageData;

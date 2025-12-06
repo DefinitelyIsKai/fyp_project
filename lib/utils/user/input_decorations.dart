@@ -1,13 +1,8 @@
 import 'package:flutter/material.dart';
 
-/// Utility class for consistent input field decorations
-/// 
-/// Provides pre-configured InputDecoration styles for TextFormField
 class InputDecorations {
-  /// Primary app color
   static const Color primaryColor = Color(0xFF00C8A0);
 
-  /// Standard input decoration
   static InputDecoration standard({
     String? hintText,
     String? labelText,
@@ -72,7 +67,7 @@ class InputDecorations {
     );
   }
 
-  /// Input decoration for search fields
+  //search field
   static InputDecoration search({
     String? hintText,
     VoidCallback? onClear,
@@ -107,7 +102,7 @@ class InputDecorations {
     );
   }
 
-  /// Input decoration for text areas (multiline)
+  //text areas
   static InputDecoration textArea({
     String? hintText,
     String? labelText,

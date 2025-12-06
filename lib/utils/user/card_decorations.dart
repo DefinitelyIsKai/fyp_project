@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 
-/// Utility class for consistent card decorations
-/// 
-/// Provides pre-configured BoxDecoration styles for cards
+
 class CardDecorations {
-  /// Standard card decoration with shadow
   static BoxDecoration standard({
     Color? color,
     double? borderRadius,
@@ -30,7 +27,6 @@ class CardDecorations {
     );
   }
 
-  /// Card decoration with border (no shadow)
   static BoxDecoration bordered({
     Color? color,
     double? borderRadius,
@@ -47,7 +43,6 @@ class CardDecorations {
     );
   }
 
-  /// Card decoration with subtle shadow
   static BoxDecoration subtle({
     Color? color,
     double? borderRadius,
@@ -65,7 +60,6 @@ class CardDecorations {
     );
   }
 
-  /// Card decoration with primary color accent
   static BoxDecoration accent({
     Color? color,
     double? borderRadius,
@@ -122,8 +116,7 @@ class CardDecorations {
       ),
     );
   }
-
-  /// Section card decoration (for profile sections, etc.)
+  
   static BoxDecoration section({
     double? borderRadius,
   }) {

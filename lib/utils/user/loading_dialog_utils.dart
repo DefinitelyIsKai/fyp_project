@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
 
-/// Utility class for showing loading dialogs
-/// 
-/// Provides consistent loading dialog UI across the application
+
 class LoadingDialogUtils {
-  /// Shows a loading dialog with optional message
-  /// 
-  /// Returns the dialog context so it can be closed with Navigator.pop(context)
+
   static BuildContext showLoadingDialog({
     required BuildContext context,
     String? message,
@@ -19,7 +15,6 @@ class LoadingDialogUtils {
     ) as BuildContext;
   }
 
-  /// Shows a loading dialog and returns a function to close it
   static void Function() showLoadingDialogWithCloser({
     required BuildContext context,
     String? message,
@@ -39,7 +34,6 @@ class LoadingDialogUtils {
   }
 }
 
-/// Internal loading dialog widget
 class _LoadingDialog extends StatelessWidget {
   final String? message;
 

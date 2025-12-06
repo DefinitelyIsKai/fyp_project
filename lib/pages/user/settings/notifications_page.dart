@@ -19,7 +19,7 @@ class NotificationsPage extends StatefulWidget {
 class _NotificationsPageState extends State<NotificationsPage> {
   final NotificationService _notificationService = NotificationService();
   final PageController _pageController = PageController();
-  
+
   final List<List<AppNotification>> _pages = [];
   int _currentPage = 0;
   bool _isLoadingMore = false;
@@ -27,7 +27,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
   bool _isInitialLoad = true;
   bool _isLoading = false;
   StreamSubscription<List<AppNotification>>? _newNotificationsSubscription;
-  
+
   static const int _itemsPerPage = 10;
 
   @override
@@ -39,16 +39,14 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   Future<void> _loadInitialNotifications() async {
     if (_isLoading) return;
-    
+
     setState(() {
       _isLoading = true;
       _isInitialLoad = true;
     });
 
     try {
-      final initialNotifications = await _notificationService.loadInitialNotifications(
-        limit: _itemsPerPage,
-      );
+      final initialNotifications = await _notificationService.loadInitialNotifications(limit: _itemsPerPage);
 
       if (!mounted) return;
 
@@ -72,10 +70,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
           _isInitialLoad = false;
           _isLoading = false;
         });
-        DialogUtils.showWarningMessage(
-          context: context,
-          message: 'Failed to load notifications: $e',
-        );
+        DialogUtils.showWarningMessage(context: context, message: 'Failed to load notifications: $e');
       }
     }
   }
@@ -88,26 +83,22 @@ class _NotificationsPageState extends State<NotificationsPage> {
       _isLoading = false;
       _isLoadingMore = false;
     });
-    
+
     // Reset page controller to first page
     if (_pageController.hasClients) {
-      await _pageController.animateToPage(
-        0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
+      await _pageController.animateToPage(0, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
     }
-    
+
     await _loadInitialNotifications();
   }
 
   void _listenForNewNotifications() {
     _newNotificationsSubscription = _notificationService.streamNewNotifications(limit: 1).listen((newNotifications) {
       if (!mounted || newNotifications.isEmpty || _isInitialLoad || _pages.isEmpty) return;
-      
+
       final newNotification = newNotifications.first;
       final exists = _pages.expand((page) => page).any((n) => n.id == newNotification.id);
-      
+
       if (!exists) {
         setState(() {
           _pages[0].insert(0, newNotification);
@@ -123,7 +114,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
       }
     });
   }
-
 
   @override
   void dispose() {
@@ -176,10 +166,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
         setState(() {
           _isLoadingMore = false;
         });
-        DialogUtils.showWarningMessage(
-          context: context,
-          message: 'Failed to load next page: $e',
-        );
+        DialogUtils.showWarningMessage(context: context, message: 'Failed to load next page: $e');
       }
     }
   }
@@ -193,9 +180,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
     // Show notification detail dialog
     showDialog(
       context: context,
-      builder: (context) => NotificationDetailDialog(
-        notification: notification,
-      ),
+      builder: (context) => NotificationDetailDialog(notification: notification),
     );
   }
 
@@ -226,24 +211,28 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   void _handleMarkAllAsRead() {
     final hasUnread = _pages.expand((page) => page).any((n) => !n.isRead);
-    
+
     if (!hasUnread) return;
 
     setState(() {
-      _pages.replaceRange(0, _pages.length, _pages.map((page) {
-        return page.map((notification) {
-          return AppNotification(
-            id: notification.id,
-            userId: notification.userId,
-            category: notification.category,
-            title: notification.title,
-            body: notification.body,
-            isRead: true,
-            createdAt: notification.createdAt,
-            metadata: notification.metadata,
-          );
-        }).toList();
-      }).toList());
+      _pages.replaceRange(
+        0,
+        _pages.length,
+        _pages.map((page) {
+          return page.map((notification) {
+            return AppNotification(
+              id: notification.id,
+              userId: notification.userId,
+              category: notification.category,
+              title: notification.title,
+              body: notification.body,
+              isRead: true,
+              createdAt: notification.createdAt,
+              metadata: notification.metadata,
+            );
+          }).toList();
+        }).toList(),
+      );
     });
 
     DialogUtils.showSuccessMessage(
@@ -270,95 +259,85 @@ class _NotificationsPageState extends State<NotificationsPage> {
       appBar: AppBar(
         title: const Text(
           'Notifications',
-          style: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.w700,
-          ),
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.w700),
         ),
         backgroundColor: Colors.white,
         elevation: 1,
         iconTheme: const IconThemeData(color: Colors.black),
         actions: [
           IconButton(
-            icon: const Icon(
-              Icons.done_all,
-              color: Color(0xFF00C8A0),
-            ),
+            icon: const Icon(Icons.done_all, color: Color(0xFF00C8A0)),
             tooltip: 'Mark all as read',
             onPressed: _handleMarkAllAsRead,
           ),
         ],
       ),
       body: _isInitialLoad
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF00C8A0)),
-            )
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF00C8A0)))
           : _pages.isEmpty || _pages[0].isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.notifications_off_outlined, size: 80, color: Colors.grey[300]),
-                      const SizedBox(height: 16),
-                      const Text('No notifications', style: TextStyle(fontSize: 16)),
-                    ],
-                  ),
-                )
-              : Column(
-                  children: [
-                    _buildUnreadHeader(),
-                    Expanded(
-                      child: PageView.builder(
-                        controller: _pageController,
-                        itemCount: _pages.length + (_isLoadingMore || _hasMore ? 1 : 0),
-                        onPageChanged: (index) {
-                          setState(() {
-                            _currentPage = index;
-                          });
-                          
-                          if (index >= _pages.length - 1 && _hasMore && !_isLoadingMore) {
-                            _loadNextPage();
-                          }
-                        },
-                        itemBuilder: (context, pageIndex) {
-                          if (pageIndex >= _pages.length) {
-                            return const Center(
-                              child: CircularProgressIndicator(color: Color(0xFF00C8A0)),
-                            );
-                          }
-                          
-                          final pageNotifications = _pages[pageIndex];
-                          return RefreshIndicator(
-                            onRefresh: _refreshNotifications,
-                            color: const Color(0xFF00C8A0),
-                            child: ListView.separated(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              itemCount: pageNotifications.length,
-                              separatorBuilder: (_, index) {
-                                if (index < pageNotifications.length - 1) {
-                                  return const Divider(height: 1, indent: 72);
-                                }
-                                return const SizedBox.shrink();
-                              },
-                              itemBuilder: (context, index) {
-                                return _buildNotificationCard(pageNotifications[index]);
-                              },
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    if (_pages.length > 1 || _hasMore)
-                      Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: PaginationDotsWidget(
-                          totalPages: _pages.length + (_hasMore ? 1 : 0),
-                          currentPage: _currentPage,
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.notifications_off_outlined, size: 80, color: Colors.grey[300]),
+                  const SizedBox(height: 16),
+                  const Text('No notifications', style: TextStyle(fontSize: 16)),
+                ],
+              ),
+            )
+          : Column(
+              children: [
+                _buildUnreadHeader(),
+                Expanded(
+                  child: PageView.builder(
+                    controller: _pageController,
+                    itemCount: _pages.length + (_isLoadingMore || _hasMore ? 1 : 0),
+                    onPageChanged: (index) {
+                      setState(() {
+                        _currentPage = index;
+                      });
+
+                      if (index >= _pages.length - 1 && _hasMore && !_isLoadingMore) {
+                        _loadNextPage();
+                      }
+                    },
+                    itemBuilder: (context, pageIndex) {
+                      if (pageIndex >= _pages.length) {
+                        return const Center(child: CircularProgressIndicator(color: Color(0xFF00C8A0)));
+                      }
+
+                      final pageNotifications = _pages[pageIndex];
+                      return RefreshIndicator(
+                        onRefresh: _refreshNotifications,
+                        color: const Color(0xFF00C8A0),
+                        child: ListView.separated(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          itemCount: pageNotifications.length,
+                          separatorBuilder: (_, index) {
+                            if (index < pageNotifications.length - 1) {
+                              return const Divider(height: 1, indent: 72);
+                            }
+                            return const SizedBox.shrink();
+                          },
+                          itemBuilder: (context, index) {
+                            return _buildNotificationCard(pageNotifications[index]);
+                          },
                         ),
-                      ),
-                  ],
+                      );
+                    },
+                  ),
                 ),
+                if (_pages.length > 1 || _hasMore)
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: PaginationDotsWidget(
+                      totalPages: _pages.length + (_hasMore ? 1 : 0),
+                      currentPage: _currentPage,
+                    ),
+                  ),
+              ],
+            ),
     );
   }
 
@@ -373,11 +352,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
         children: [
           Text(
             'Recent Notifications',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[700],
-            ),
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey[700]),
           ),
           const Spacer(),
           StreamBuilder<int>(
@@ -387,17 +362,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
               if (unreadCount == 0) return const SizedBox.shrink();
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF00C8A0),
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF00C8A0), borderRadius: BorderRadius.circular(12)),
                 child: Text(
                   '$unreadCount unread',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
                 ),
               );
             },
@@ -406,6 +374,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
       ),
     );
   }
+
   Widget _buildNotificationCard(AppNotification notification) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -418,11 +387,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
         ),
         boxShadow: [
           if (!notification.isRead)
-            BoxShadow(
-              color: const Color(0xFF00C8A0).withOpacity(0.1),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
+            BoxShadow(color: const Color(0xFF00C8A0).withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2)),
         ],
       ),
       child: ListTile(
@@ -434,11 +399,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
             color: _getIconBackgroundColor(notification.category),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(
-            _iconFor(notification.category),
-            color: _getIconColor(notification.category),
-            size: 20,
-          ),
+          child: Icon(_iconFor(notification.category), color: _getIconColor(notification.category), size: 20),
         ),
         title: Text(
           notification.title,
@@ -455,46 +416,27 @@ class _NotificationsPageState extends State<NotificationsPage> {
           children: [
             Text(
               notification.body,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[700],
-                height: 1.3,
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey[700], height: 1.3),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 6),
             Row(
               children: [
-                Icon(
-                  Icons.access_time,
-                  size: 12,
-                  color: Colors.grey[500],
-                ),
+                Icon(Icons.access_time, size: 12, color: Colors.grey[500]),
                 const SizedBox(width: 4),
                 Text(
                   _formatTimestamp(notification.createdAt),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[500],
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500], fontWeight: FontWeight.w500),
                 ),
                 if (!notification.isRead) ...[
                   const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF00C8A0),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
+                    decoration: BoxDecoration(color: const Color(0xFF00C8A0), borderRadius: BorderRadius.circular(6)),
                     child: const Text(
                       'NEW',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w700),
                     ),
                   ),
                 ],
@@ -502,13 +444,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
             ),
           ],
         ),
-        trailing: notification.isRead
-            ? null
-            : const Icon(
-                Icons.circle,
-                size: 8,
-                color: Color(0xFF00C8A0),
-              ),
+        trailing: notification.isRead ? null : const Icon(Icons.circle, size: 8, color: Color(0xFF00C8A0)),
         onTap: () => _handleNotificationTap(notification),
       ),
     );
@@ -610,5 +546,4 @@ class _NotificationsPageState extends State<NotificationsPage> {
     if (diff.inDays < 7) return '${diff.inDays}d ago';
     return DateFormat('MMM d, h:mm a').format(timestamp);
   }
-
 }

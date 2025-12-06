@@ -77,7 +77,7 @@ class _ProfilePageState extends State<ProfilePage> {
           final String? userStatus = _getUserStatus(data);
           final bool isSuspended = _isSuspended(userStatus);
 
-          // Get profile image
+          //profile image
           final Map<String, dynamic>? imageData = (data?['image'] as Map<String, dynamic>?);
           final String? base64Image = (imageData?['base64'] as String?);
           final Uint8List? imageBytes = _decodeBase64(base64Image);
@@ -93,7 +93,6 @@ class _ProfilePageState extends State<ProfilePage> {
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              // Header Section
               SliverAppBar(
                 expandedHeight: 65,
                 flexibleSpace: FlexibleSpaceBar(
@@ -175,10 +174,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 ],
               ),
 
-              // Profile Content
+              //profile 
               SliverList(
                 delegate: SliverChildListDelegate([
-                  // Profile Card
                   Container(
                     margin: const EdgeInsets.all(16),
                     padding: const EdgeInsets.all(24),
@@ -195,7 +193,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     child: Column(
                       children: [
-                        // Profile Photo
+                        //photo
                         GestureDetector(
                           onTap: _uploadingPhoto ? null : _handlePhotoUpdate,
                           child: Stack(
@@ -273,7 +271,6 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                         const SizedBox(height: 20),
                         
-                        // Name
                         Text(
                           isLoading ? 'Loading...' : fullName,
                           style: const TextStyle(
@@ -295,7 +292,6 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                         const SizedBox(height: 16),
                         
-                        // Edit Profile Button
                         SizedBox(
                           width: double.infinity,
                           child: OutlinedButton.icon(
@@ -348,8 +344,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       ],
                     ),
                   ),
-
-                  // Menu Section
+                  //menu
                   Container(
                     margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     decoration: BoxDecoration(
@@ -494,7 +489,7 @@ class _ProfilePageState extends State<ProfilePage> {
           );
         },
       ),
-            // Loading overlay when uploading photo
+            //loading when photo upload
             if (_uploadingPhoto)
               Container(
                 color: Colors.black.withOpacity(0.3),
@@ -513,7 +508,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'Uploading photo...',
+                          'Uploading photo',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -594,7 +589,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildNotificationBadge() {
     return StreamBuilder<int>(
-      // Remove category filter to show ALL unread notifications (not just messages)
       stream: _notificationService.streamUnreadCount(),
       builder: (context, snapshot) {
         final count = snapshot.data ?? 0;
@@ -696,7 +690,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _handlePhotoUpdate() async {
-    // Get current image data to check if photo exists
+    //check photo exists
     final currentDoc = await _authService.getUserDoc();
     final currentData = currentDoc.data();
     final Map<String, dynamic>? currentImageData = (currentData?['image'] as Map<String, dynamic>?);
@@ -789,13 +783,13 @@ class _ProfilePageState extends State<ProfilePage> {
     
     if (source == null) return;
     
-    // Handle remove photo
+    //remove 
     if (source == 'remove') {
       await _removeProfilePhoto();
       return;
     }
     
-    // Handle upload photo
+    //upload 
     if (!mounted) return;
     setState(() => _uploadingPhoto = true);
     
@@ -814,17 +808,15 @@ class _ProfilePageState extends State<ProfilePage> {
         );
       } else {
         setState(() => _uploadingPhoto = false);
-        // Error message is already shown by storage service, but we can add a generic one if needed
       }
     } catch (e) {
       if (!mounted) return;
       setState(() => _uploadingPhoto = false);
       
-      // Extract error message
+      //extract error 
       String errorMessage = 'Failed to upload profile photo';
       if (e is Exception) {
         final errorStr = e.toString();
-        // Remove "Exception: " prefix if present
         errorMessage = errorStr.replaceFirst(RegExp(r'^Exception:\s*'), '');
       }
       
@@ -836,7 +828,6 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _removeProfilePhoto() async {
-    // Show confirmation dialog
     final confirmed = await DialogUtils.showConfirmationDialog(
       context: context,
       title: 'Remove Profile Photo',
@@ -850,12 +841,12 @@ class _ProfilePageState extends State<ProfilePage> {
     if (confirmed != true || !mounted) return;
     
     try {
-      // Immediately delete image from Firestore
+      //delete image 
       await _authService.updateUserProfile({
         'image': FieldValue.delete(),
       });
       
-      // Refresh user data
+      //refresh
       if (mounted) {
         setState(() {
           _userFuture = _authService.getUserDoc();

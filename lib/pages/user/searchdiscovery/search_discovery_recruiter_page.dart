@@ -49,7 +49,7 @@ class _SearchDiscoveryRecruiterPageState
 
   @override
   List<Post> filterPostsForUser(List<Post> posts) {
-    // Recruiters only see their own posts
+    //recruiter owned post
     if (_currentUserId != null) {
       return posts.where((post) => post.ownerId == _currentUserId).toList();
     }
@@ -98,14 +98,13 @@ class _SearchDiscoveryRecruiterPageState
           buildSearchBar(),
           buildFilterButton(),
           const SizedBox(height: 16),
-          // Results Header and View Toggle
           StreamBuilder<List<Post>>(
             key: ValueKey('${searchQuery}_${locationFilter}_${minBudget}_${maxBudget}_${selectedEvents.join(",")}_${searchRadius}_${userLocation?.latitude}_${userLocation?.longitude}'),
             stream: getPostsStream(),
             builder: (context, snapshot) {
               var posts = snapshot.data ?? [];
               posts = filterPostsForUser(posts);
-              // Apply distance filter to match map markers
+              //distance filter
               posts = filterPostsByDistance(posts);
 
               return Padding(
@@ -124,7 +123,6 @@ class _SearchDiscoveryRecruiterPageState
                         color: Colors.black,
                       ),
                     ),
-                    // View Toggle
                     Container(
                       decoration: BoxDecoration(
                         color: Colors.grey[100],
@@ -149,7 +147,6 @@ class _SearchDiscoveryRecruiterPageState
                               setMapView(true);
                               WidgetsBinding.instance.addPostFrameCallback((_) {
                                 if (mounted && mapController != null) {
-                                  // Update markers will be called by base class
                                 }
                               });
                             },
@@ -162,7 +159,6 @@ class _SearchDiscoveryRecruiterPageState
               );
             },
           ),
-          // Content Area
           Expanded(child: isMapView ? buildMapView() : _buildListView()),
         ],
       ),
@@ -175,9 +171,8 @@ class _SearchDiscoveryRecruiterPageState
       color: const Color(0xFF00C8A0),
       child: StreamBuilder<List<Post>>(
       stream: getPostsStream(),
-      initialData: lastPosts, // Use last known posts as initial data
+      initialData: lastPosts, 
       builder: (context, snapshot) {
-        // Handle errors first
         if (snapshot.hasError) {
           return SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -209,12 +204,9 @@ class _SearchDiscoveryRecruiterPageState
           );
         }
 
-        // Get posts data - use snapshot data if available
-        // With initialData, snapshot.hasData will be true immediately
+        
         var posts = snapshot.data ?? [];
         
-        // Only show loading if we're truly waiting with no data at all
-        // initialData ensures we have data immediately when switching views
         if (posts.isEmpty && 
             snapshot.connectionState == ConnectionState.waiting &&
             !snapshot.hasData &&
@@ -232,7 +224,6 @@ class _SearchDiscoveryRecruiterPageState
         
         posts = filterPostsForUser(posts);
 
-        // Filter by distance if user location is available
         List<Post> nearbyPosts = List<Post>.from(posts);
         if (userLocation != null && searchRadius != null) {
           nearbyPosts = nearbyPosts.where((post) {
@@ -245,9 +236,7 @@ class _SearchDiscoveryRecruiterPageState
           }).toList();
         }
 
-        // Sort posts
-        // Only sort by distance if both userLocation and searchRadius are available
-        // Otherwise, sort by creation date (newest first)
+       
         if (userLocation != null && searchRadius != null) {
           nearbyPosts.sort((a, b) {
             if (a.latitude == null || a.longitude == null) {
@@ -274,12 +263,10 @@ class _SearchDiscoveryRecruiterPageState
             return distanceComparison;
           });
         } else {
-          // Sort by creation date descending (newest first) when no distance filter is active
           nearbyPosts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         }
 
         if (nearbyPosts.isEmpty) {
-          // Update pages even if empty to clear previous state
           updatePages(nearbyPosts);
           return SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -318,11 +305,8 @@ class _SearchDiscoveryRecruiterPageState
           );
         }
 
-        // Compute pages directly from nearbyPosts (don't wait for state update)
-        // This ensures immediate display when switching views
         final computedPages = PostUtils.computePages(nearbyPosts, itemsPerPage: 10);
         
-        // Update pages state in background (for caching, but don't wait for it)
         updatePages(nearbyPosts);
 
         if (computedPages.isEmpty) {

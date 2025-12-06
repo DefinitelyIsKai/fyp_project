@@ -38,8 +38,6 @@ class DialogUtils {
     );
   }
 
-  /// Shows a simple confirmation dialog with default styling
-  /// Useful for quick confirmations without custom icons
   static Future<bool?> showSimpleConfirmation({
     required BuildContext context,
     required String title,
@@ -56,8 +54,6 @@ class DialogUtils {
     );
   }
 
-  /// Shows a destructive confirmation dialog (e.g., delete, logout)
-  /// Automatically uses red styling
   static Future<bool?> showDestructiveConfirmation({
     required BuildContext context,
     required String title,
@@ -77,8 +73,7 @@ class DialogUtils {
     );
   }
 
-  /// Shows a success message box (green/teal color)
-  /// Displays at the top of the screen and auto-dismisses after 3 seconds
+  //gren
   static void showSuccessMessage({
     required BuildContext context,
     required String message,
@@ -92,8 +87,7 @@ class DialogUtils {
     );
   }
 
-  /// Shows a warning message box (red color)
-  /// Displays at the top of the screen and auto-dismisses after 3 seconds
+  //red
   static void showWarningMessage({
     required BuildContext context,
     required String message,
@@ -107,8 +101,7 @@ class DialogUtils {
     );
   }
 
-  /// Shows an info message box (blue color)
-  /// Displays at the top of the screen and auto-dismisses after 3 seconds
+  //blue
   static void showInfoMessage({
     required BuildContext context,
     required String message,
@@ -122,8 +115,7 @@ class DialogUtils {
     );
   }
 
-  /// Shows logout confirmation dialog and handles the logout flow
-  /// This is a unified method that can be used across all user pages
+//lougout
   static Future<void> showLogoutConfirmation({
     required BuildContext context,
     AuthService? authService,
@@ -140,19 +132,15 @@ class DialogUtils {
     if (confirmed == true && context.mounted) {
       final service = authService ?? AuthService();
       
-      // Navigate away first to stop all streams and listeners
-      // This prevents Firestore permission errors during logout
       if (context.mounted) {
         Navigator.of(context).pushReplacementNamed(AppRoutes.userLogin);
       }
       
-      // Wait a bit for streams to be cancelled before signing out
-      // This reduces Firestore permission warnings in logs
+      //delay streams 
       Future.delayed(const Duration(milliseconds: 100), () async {
         try {
           await service.signOut();
         } catch (e) {
-          // Ignore errors during logout - user is already navigated away
           debugPrint('Error during signOut (non-critical): $e');
         }
       });

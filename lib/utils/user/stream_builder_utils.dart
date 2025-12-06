@@ -1,10 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Utility functions for common StreamBuilder patterns
-/// 
-/// Provides helper functions to reduce boilerplate when using StreamBuilder
 class StreamBuilderUtils {
-  /// Builds a loading indicator for StreamBuilder waiting state
   static Widget buildLoading({
     Color? color,
     EdgeInsets? padding,
@@ -19,7 +15,6 @@ class StreamBuilderUtils {
     );
   }
 
-  /// Builds an error widget for StreamBuilder error state
   static Widget buildError({
     required String title,
     String? message,
@@ -65,7 +60,6 @@ class StreamBuilderUtils {
     );
   }
 
-  /// Builds an empty state widget for StreamBuilder empty data
   static Widget buildEmpty({
     required IconData icon,
     required String title,

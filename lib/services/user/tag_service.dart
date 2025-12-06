@@ -14,7 +14,7 @@ class TagService {
   CollectionReference<Map<String, dynamic>> get _tagsCol =>
       _firestore.collection('tags');
 
-  /// Fetch all active tag categories with their tags from Firestore
+
   Future<Map<TagCategory, List<Tag>>> getActiveTagCategoriesWithTags() async {
     try {
       // Fetch active tag categories
@@ -26,7 +26,7 @@ class TagService {
           .map((doc) => TagCategory.fromFirestore(doc))
           .toList();
 
-      // Fetch all active tags
+  
       final tagsSnapshot = await _tagsCol
           .where('isActive', isEqualTo: true)
           .get();
@@ -34,8 +34,6 @@ class TagService {
       final allTags = tagsSnapshot.docs
           .map((doc) => Tag.fromFirestore(doc))
           .toList();
-
-      // Group tags by categoryId
       final Map<TagCategory, List<Tag>> result = {};
       for (final category in categories) {
         final categoryTags = allTags
@@ -45,18 +43,15 @@ class TagService {
         result[category] = categoryTags;
       }
 
-      // Sort categories by title
       final sortedEntries = result.entries.toList()
         ..sort((a, b) => a.key.title.compareTo(b.key.title));
 
       return Map.fromEntries(sortedEntries);
     } catch (e) {
-      // Return empty map on error
       return {};
     }
   }
 
-  /// Stream all active tag categories with their tags from Firestore
   Stream<Map<TagCategory, List<Tag>>> streamActiveTagCategoriesWithTags() {
     return _tagCategoriesCol
         .where('isActive', isEqualTo: true)
@@ -66,7 +61,7 @@ class TagService {
           .map((doc) => TagCategory.fromFirestore(doc))
           .toList();
 
-      // Fetch all active tags
+      //fetch all active tag
       final tagsSnapshot = await _tagsCol
           .where('isActive', isEqualTo: true)
           .get();
@@ -75,7 +70,7 @@ class TagService {
           .map((doc) => Tag.fromFirestore(doc))
           .toList();
 
-      // Group tags by categoryId
+      //group tag categoryId
       final Map<TagCategory, List<Tag>> result = {};
       for (final category in categories) {
         final categoryTags = allTags
@@ -85,7 +80,7 @@ class TagService {
         result[category] = categoryTags;
       }
 
-      // Sort categories by title
+      //sort by title
       final sortedEntries = result.entries.toList()
         ..sort((a, b) => a.key.title.compareTo(b.key.title));
 
@@ -93,7 +88,7 @@ class TagService {
     });
   }
 
-  /// Fetch a single tag category by ID
+  //fetch a single tag category by ID
   Future<TagCategory?> getTagCategoryById(String id) async {
     try {
       final doc = await _tagCategoriesCol.doc(id).get();
@@ -104,7 +99,7 @@ class TagService {
     }
   }
 
-  /// Fetch all tags for a specific category
+  //fetch all tag in specific category
   Future<List<Tag>> getTagsByCategoryId(String categoryId) async {
     try {
       final snapshot = await _tagsCol

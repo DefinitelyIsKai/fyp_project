@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-
 import '../../../models/user/resume_attachment.dart';
 import '../../../models/user/tag_category.dart';
 import '../../../services/user/tag_service.dart';
@@ -112,7 +111,6 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
           return RefreshIndicator(
             onRefresh: () async {
               setState(() {
-                // Force refresh by updating state
               });
               await Future.delayed(const Duration(milliseconds: 100));
             },

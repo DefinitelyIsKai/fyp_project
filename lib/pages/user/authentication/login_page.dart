@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../../services/user/auth_service.dart';
 import '../../../services/admin/auth_service.dart' as admin_auth;
@@ -46,13 +48,13 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       if (_loginMode == LoginMode.user) {
-        // User login flow
+        //user
         final credential = await _authService.signIn(
           email: _emailController.text,
           password: _passwordController.text,
         );
         if (!mounted) return;
-        // Block email not verified
+        //block email 
         await credential.user?.reload();
         if (!(credential.user?.emailVerified ?? false)) {
           DialogUtils.showWarningMessage(
@@ -68,6 +70,22 @@ class _LoginPageState extends State<LoginPage> {
         } catch (_) {
       
         }
+        
+        //bool logintrue 
+        try {
+          final userId = credential.user?.uid;
+          if (userId != null && userId.isNotEmpty) {
+            await FirebaseFirestore.instance.collection('users').doc(userId).update({
+              'login': true,
+            });
+            debugPrint('Login status set to true for user: $userId');
+          } else {
+            debugPrint('ERROR: Cannot set login status - user ID is null or empty');
+          }
+        } catch (e) {
+          debugPrint('Error setting login status to true: $e');
+        }
+        
         DialogUtils.showSuccessMessage(
           context: context,
           message: 'Login successful',
@@ -78,7 +96,7 @@ class _LoginPageState extends State<LoginPage> {
           MaterialPageRoute(builder: (_) => goToSetup ? const ProfileSetupFlow() : const HomePage()),
         );
       } else {
-        // Admin login flow
+        //admin
         admin_auth.AuthService adminAuthService;
         try {
           adminAuthService = Provider.of<admin_auth.AuthService>(context, listen: false);
@@ -113,14 +131,24 @@ class _LoginPageState extends State<LoginPage> {
         }
       }
     } on FirebaseAuthException catch (e) {
-      final message = e.message ?? 'Login failed';
       if (!mounted) return;
-      DialogUtils.showWarningMessage(
-        context: context,
-        message: message,
-      );
+      final message = e.message ?? 'Login failed';
+      debugPrint('FirebaseAuthException during login: code=${e.code}, message=$message');
+      
+      if (e.code == 'already-logged-in') {
+        DialogUtils.showWarningMessage(
+          context: context,
+          message: 'This account is already logged in on another device. Please logout from the other device first.',
+        );
+      } else {
+        DialogUtils.showWarningMessage(
+          context: context,
+          message: message,
+        );
+      }
     } catch (e) {
       if (!mounted) return;
+      debugPrint('Unexpected error during login: $e');
       DialogUtils.showWarningMessage(
         context: context,
         message: 'Unexpected error during login: $e',
@@ -343,7 +371,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   if (_loginMode == LoginMode.user) ...[
                     const SizedBox(height: 24),
-                    // Sign Up Link
+                    //signup
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -376,7 +404,7 @@ class _LoginPageState extends State<LoginPage> {
                     Divider(thickness: 1, color: Colors.grey[300]),
                     const SizedBox(height: 16),
 
-                    //Admin Login
+                    //admin
                     Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [

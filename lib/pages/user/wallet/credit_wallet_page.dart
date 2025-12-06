@@ -18,7 +18,7 @@ class CreditWalletPage extends StatefulWidget {
   State<CreditWalletPage> createState() => _CreditWalletPageState();
 }
 
-// Helper to safely parse int from Firestore (handles int, double, num)
+//parsing
 int _parseInt(dynamic value) {
   if (value == null) return 0;
   if (value is int) return value;
@@ -33,18 +33,18 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
   WalletTxnType? _selectedFilter;
   List<Map<String, dynamic>> _pendingPayments = [];
   
-  // Pagination state
+  //agination
   final PageController _pageController = PageController();
   final ValueNotifier<int> _currentPageNotifier = ValueNotifier<int>(0);
   List<List<_UnifiedTransaction>> _pages = [];
-  List<List<_UnifiedTransaction>> _filteredPages = []; // Cache filtered pages
+  List<List<_UnifiedTransaction>> _filteredPages = []; //cache
   int _currentPage = 0;
   bool _isLoadingMore = false;
   bool _hasMore = true;
   List<_UnifiedTransaction> _allTransactions = [];
-  WalletTxnType? _lastFilter; // Track filter changes
+  WalletTxnType? _lastFilter; 
   static const int _itemsPerPage = 10;
-  static const int _initialStreamLimit = 50; // Load first 50 transactions in real-time
+  static const int _initialStreamLimit = 50; //load50
   
   // Cache the stream to avoid recreating it on every rebuild
   Stream<List<_UnifiedTransaction>>? _cachedUnifiedStream;
@@ -62,7 +62,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
       _refreshPendingPayments();
     });
     
-    // Removed automatic scroll-based shrink - now manual toggle only
   }
 
   @override
@@ -81,9 +80,8 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
     });
   }
 
-  /// Combine transactions and cancelled payments streams
+  //transactions cancelled payments 
   Stream<List<_UnifiedTransaction>> _getUnifiedTransactionsStream() {
-    // Return cached stream if it exists
     if (_cachedUnifiedStream != null) {
       return _cachedUnifiedStream!;
     }
@@ -97,7 +95,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
     
     void emitIfReady() {
       if (latestTransactions != null && latestCancelledPayments != null) {
-        // Convert to unified format
         final unified = <_UnifiedTransaction>[];
         
         for (final txn in latestTransactions!) {
@@ -124,7 +121,7 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
           ));
         }
 
-        // Sort by date
+        //date sorting
         unified.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
         if (!controller.isClosed) {
@@ -157,11 +154,11 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
       },
     );
     
-    // Clean up subscriptions when stream is closed
+    //clean
     controller.onCancel = () {
       transactionsSubscription.cancel();
       cancelledSubscription.cancel();
-      _cachedUnifiedStream = null; // Clear cache when stream is cancelled
+      _cachedUnifiedStream = null;
     };
     
     _cachedUnifiedStream = controller.stream;
@@ -177,15 +174,12 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
 
     try {
       final lastTransaction = _allTransactions.last;
-      
-      // Load more regular transactions
       final moreTransactions = await _walletService.loadMoreTransactions(
         lastTransactionTime: lastTransaction.createdAt,
         lastTransactionId: lastTransaction.isCancelled ? null : lastTransaction.id,
         limit: _itemsPerPage,
       );
 
-      // Convert to unified format
       final unified = <_UnifiedTransaction>[];
       
       for (final txn in moreTransactions) {
@@ -199,8 +193,7 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
         ));
       }
 
-      // For cancelled payments, we'll load all and filter client-side
-      // This is simpler since cancelled payments are less common
+      //cancelled payments
       final allCancelled = await _walletService.loadInitialCancelledPayments(limit: 1000);
       final existingIds = _allTransactions
           .where((t) => t.isCancelled)
@@ -212,8 +205,7 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
         
         final credits = payment['credits'] as int? ?? 0;
         final createdAt = TimestampUtils.parseTimestamp(payment['createdAt']);
-        
-        // Only add if it's older than the last transaction
+      
         if (createdAt.isBefore(lastTransaction.createdAt) ||
             (createdAt.isAtSameMomentAs(lastTransaction.createdAt) &&
              payment['id'] as String != lastTransaction.id)) {
@@ -240,11 +232,11 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
         return;
       }
 
-      // Add new transactions and re-sort
+      //new transactions and re-sort
       _allTransactions.addAll(unified);
       _allTransactions.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-      // Reorganize into pages
+      //pages
       final pages = <List<_UnifiedTransaction>>[];
       for (int i = 0; i < _allTransactions.length; i += _itemsPerPage) {
         final end = (i + _itemsPerPage < _allTransactions.length) 
@@ -253,7 +245,7 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
         pages.add(_allTransactions.sublist(i, end));
       }
 
-      // Recalculate filtered pages with new data
+      //recalculate filtered new data
       final filteredTransactions = _selectedFilter == null
           ? _allTransactions
           : _allTransactions.where((t) {
@@ -303,7 +295,7 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
     if (!mounted) return;
     try {
       await _walletService.checkAndCreditPendingPayments();
-      // Also refresh pending payments list
+      //refresh pending payment
       await _refreshPendingPayments();
     } catch (e) {
       print('Error checking pending payments: $e');
@@ -312,7 +304,7 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
 
   Future<void> _refreshPendingPayments() async {
     try {
-      // Get pending payments directly as a one-time fetch
+      //get pending payments 
       final pendingPayments = await _walletService.getPendingPayments();
       if (mounted) {
         setState(() {
@@ -358,8 +350,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
 
   Future<void> _completePendingPayment(String sessionId, String paymentId, {String checkoutUrl = ''}) async {
     if (!mounted) return;
-    
-    // Show loading indicator
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -375,24 +365,21 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
       
       if (!mounted) return;
       
-      // Close loading dialog
+      //close 
       Navigator.of(context).pop();
       
       // Refresh pending payments
       await _refreshPendingPayments();
       
-      // Show success message
       DialogUtils.showSuccessMessage(
         context: context,
         message: 'Payment completed successfully! Credits have been added to your wallet.',
       );
     } catch (e) {
       if (!mounted) return;
-      
-      // Close loading dialog
+    
       Navigator.of(context).pop();
       
-      // Handle PAYMENT_NOT_COMPLETED - show dialog with option to open payment page
       if (e.toString().contains('PAYMENT_NOT_COMPLETED')) {
         if (checkoutUrl.isNotEmpty) {
           final shouldOpen = await DialogUtils.showConfirmationDialog(
@@ -417,12 +404,10 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
         return;
       }
       
-      // Show appropriate error message for other errors
       String errorMessage = 'Failed to complete payment';
       
       if (e.toString().contains('PAYMENT_ALREADY_PROCESSED')) {
         errorMessage = 'This payment has already been processed. Please refresh the page.';
-        // Refresh to update UI
         await _refreshPendingPayments();
       } else if (e.toString().contains('PAYMENT_ALREADY_PROCESSING')) {
         errorMessage = 'Payment is being processed. Please wait a moment and refresh.';
@@ -442,8 +427,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
 
   Future<void> _cancelPendingPayment(String sessionId, String paymentId) async {
     if (!mounted) return;
-    
-    // Show confirmation dialog using the existing widget
     final confirmed = await DialogUtils.showConfirmationDialog(
       context: context,
       title: 'Cancel Payment?',
@@ -457,8 +440,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
     if (confirmed != true) return;
 
     if (!mounted) return;
-
-    // Show loading indicator
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -474,21 +455,14 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
       
       if (!mounted) return;
       
-      // Close loading dialog
       Navigator.of(context).pop();
-      
-      // Refresh pending payments
-      await _refreshPendingPayments();
-      
-      // Show success message
+      await _refreshPendingPayments();     
       DialogUtils.showSuccessMessage(
         context: context,
         message: 'Payment cancelled successfully',
       );
     } catch (e) {
       if (!mounted) return;
-      
-      // Close loading dialog
       Navigator.of(context).pop();
       
       DialogUtils.showWarningMessage(
@@ -518,7 +492,7 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
       body: RefreshIndicator(
           onRefresh: () async {
             setState(() {
-              // Force refresh by updating state
+              
             });
             await Future.delayed(const Duration(milliseconds: 100));
           },
@@ -531,23 +505,20 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Pending Payments Section
+                //pending paym
                 StreamBuilder<List<Map<String, dynamic>>>(
                   stream: _walletService.streamPendingPayments(),
                   builder: (context, snap) {
-              // Use stream data if available, otherwise fallback to cached data
               List<Map<String, dynamic>> pendingPayments = [];
               
               if (snap.hasData) {
                 pendingPayments = snap.data ?? [];
-                // Update cached data
+                //cached data
                 _pendingPayments = pendingPayments;
               } else if (snap.hasError) {
                 print('Error loading pending payments from stream: ${snap.error}');
-                // Use cached data as fallback
                 pendingPayments = _pendingPayments;
               } else {
-                // Still loading or no data, use cached
                 pendingPayments = _pendingPayments;
               }
               
@@ -1005,7 +976,7 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
                   ),
                 ),
 
-                // Filter Chips
+                //filter
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Row(
@@ -1034,14 +1005,13 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
             ),
           ),
           
-          // Transactions List
+          //trans
           SliverToBoxAdapter(
             child: LayoutBuilder(
               builder: (context, constraints) {
                 return Container(
                   margin: const EdgeInsets.symmetric(horizontal: 16),
-                  height: MediaQuery.of(context).size.height - 
-                          (_isCardShrunk ? 250 : 450), // Dynamic height based on card state
+                  height: MediaQuery.of(context).size.height - (_isCardShrunk ? 250 : 450), 
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
@@ -1072,8 +1042,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
         }
 
         final allTransactions = snap.data ?? [];
-        
-        // Organize into pages directly from stream data (no setState in builder)
         final pages = <List<_UnifiedTransaction>>[];
         for (int i = 0; i < allTransactions.length; i += _itemsPerPage) {
           final end = (i + _itemsPerPage < allTransactions.length) 
@@ -1085,7 +1053,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
           pages.add(allTransactions);
         }
 
-        // Update state only if data actually changed (avoid unnecessary rebuilds)
         final dataChanged = _allTransactions.length != allTransactions.length ||
             _pages.length != pages.length;
         final filterChanged = _lastFilter != _selectedFilter;
@@ -1093,19 +1060,14 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
         if (dataChanged || filterChanged) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              // Apply filter to all transactions first, then paginate
               final filteredTransactions = _selectedFilter == null
                   ? allTransactions
                   : allTransactions.where((t) {
-                      // For "Added" filter, only show credit transactions that are NOT cancelled
                       if (_selectedFilter == WalletTxnType.credit) {
                         return t.type == WalletTxnType.credit && !t.isCancelled;
                       }
-                      // For "Spent" filter, show debit transactions (cancelled payments are not debits)
                       return t.type == _selectedFilter;
                     }).toList();
-
-              // Organize filtered transactions into pages
               final filteredPages = <List<_UnifiedTransaction>>[];
               for (int i = 0; i < filteredTransactions.length; i += _itemsPerPage) {
                 final end = (i + _itemsPerPage < filteredTransactions.length) 
@@ -1123,7 +1085,7 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
                 _filteredPages = filteredPages;
                 _hasMore = allTransactions.length >= _initialStreamLimit;
                 _lastFilter = _selectedFilter;
-                // Reset to first page if filter changed
+                //go first page when changed
                 if (filterChanged) {
                   _currentPage = 0;
                   _currentPageNotifier.value = 0;
@@ -1136,13 +1098,13 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
           });
         }
 
-        // Use cached filtered pages to avoid recalculation on every rebuild
+       
         final filteredPages = _filteredPages.isEmpty && _allTransactions.isNotEmpty
-            ? _pages // Fallback to unfiltered pages if filtered pages not yet calculated
+            ? _pages 
             : _filteredPages;
 
         if (filteredPages.isEmpty || filteredPages.every((page) => page.isEmpty)) {
-          // Check if we should load more when filter results are empty
+          
           if (_hasMore && !_isLoadingMore && allTransactions.length >= _initialStreamLimit) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _loadMoreTransactions();
@@ -1151,8 +1113,7 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
           return const EmptyState.noTransactions();
         }
 
-        // Check if we need to load more when reaching the last page
-        // Only load more if we have filtered results and there might be more data
+      
         final shouldLoadMore = _currentPage >= filteredPages.length - 1 && 
                               _hasMore && 
                               !_isLoadingMore &&
@@ -1170,13 +1131,12 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
                 controller: _pageController,
                 itemCount: filteredPages.length + (_isLoadingMore ? 1 : 0),
                 onPageChanged: (index) {
-                  // Update current page using ValueNotifier to avoid full rebuild
+                 
                   if (_currentPage != index) {
                     _currentPage = index;
                     _currentPageNotifier.value = index;
                   }
-                  // Load more if approaching the end
-                  // Only load if we're near the end of filtered pages and there might be more data
+                 
                   if (index >= filteredPages.length - 2 && 
                       _hasMore && 
                       !_isLoadingMore &&
@@ -1186,7 +1146,7 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
                 },
                 itemBuilder: (context, pageIndex) {
               if (pageIndex == filteredPages.length) {
-                // Loading page
+               
                 return const LoadingIndicator.standard();
               }
 
@@ -1199,11 +1159,11 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
                   final bool isCredit = t.type == WalletTxnType.credit;
                   final dateStr = DateUtilsHelper.DateUtils.formatRelativeDate(t.createdAt);
                   
-                  // Check for held credits flow
+                  //held credits 
                   final bool isOnHold = t.description.contains('(On Hold)');
                   final bool isReleased = t.description.contains('(Released)');
                   
-                  // Determine colors based on transaction type
+                  //color determin
                   Color iconColor;
                   Color backgroundColor;
                   IconData iconData;
@@ -1399,11 +1359,11 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
               : label == 'Added' 
                   ? WalletTxnType.credit 
                   : WalletTxnType.debit;
-          // Reset to first page when filter changes
+          //reset
           _currentPage = 0;
           _currentPageNotifier.value = 0;
         });
-        // Jump to first page
+        //first page
         if (_pageController.hasClients) {
           _pageController.jumpToPage(0);
         }
@@ -1417,7 +1377,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
   }
 }
 
-// Helper class to unify regular transactions and cancelled payments
 class _UnifiedTransaction {
   final String id;
   final WalletTxnType type;

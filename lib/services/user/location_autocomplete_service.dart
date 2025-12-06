@@ -5,11 +5,7 @@ import 'package:http/http.dart' as http;
 const String kGoogleApiKey = 'AIzaSyCwNKysMyhIndCzLxpdbNJxnAofw2xdA4A';
 
 class LocationAutocompleteService {
-  /// Fetches location autocomplete predictions from Google Places API
-  /// 
-  /// [query] - The search query text
-  /// [restrictToCountry] - Optional country code (e.g., 'my' for Malaysia)
-  /// Returns a list of predictions with 'description' and 'place_id'
+
   static Future<List<Map<String, dynamic>>> getAutocomplete(
     String query, {
     String? restrictToCountry,
@@ -36,7 +32,6 @@ class LocationAutocompleteService {
       } else if (data['status'] == 'ZERO_RESULTS') {
         return [];
       } else {
-        // Log error but don't throw - return empty list
         debugPrint('Places API error: ${data['status']} - ${data['error_message'] ?? 'Unknown error'}');
         return [];
       }
@@ -46,7 +41,7 @@ class LocationAutocompleteService {
     }
   }
 
-  /// Gets the formatted address for a place ID
+  //formatted addressplace ID
   static Future<String?> getPlaceDetails(String placeId) async {
     try {
       final url = Uri.parse(

@@ -23,7 +23,7 @@ class NotificationService {
     return uid;
   }
 
-  // Load initial notifications (one-time query, not stream)
+  //lload notifications once
   Future<List<AppNotification>> loadInitialNotifications({int limit = 10}) async {
     if (_auth.currentUser == null) {
       debugPrint('No authenticated user for loading notifications');
@@ -46,7 +46,7 @@ class NotificationService {
       
       debugPrint('Loaded ${notifications.length} notifications (requested limit: $limit)');
       
-      // Ensure we don't return more than the limit (safety check)
+      //check limit
       if (notifications.length > limit) {
         debugPrint('WARNING: Received ${notifications.length} notifications but limit was $limit. Truncating.');
         return notifications.sublist(0, limit);
@@ -60,7 +60,7 @@ class NotificationService {
     }
   }
 
-  // Stream for new notifications only (for real-time updates)
+  //Stream notifications   real-time 
   Stream<List<AppNotification>> streamNewNotifications({int limit = 1}) {
     if (_auth.currentUser == null) {
       return Stream.value(<AppNotification>[]);
@@ -84,8 +84,7 @@ class NotificationService {
     });
   }
 
-  /// Load more notifications for pagination
-  // FIX: Default limit changed to 10
+  //pagination
   Future<List<AppNotification>> loadMoreNotifications({
     required DateTime lastNotificationTime,
     String? lastNotificationId,
@@ -97,14 +96,12 @@ class NotificationService {
     }
 
     try {
-      // IMPORTANT: We convert DateTime back to a Firestore Timestamp
-      // because Firestore cannot compare a DateTime object in the query cursor.
+      //compare convert datetime: firestore timestamp
+
       final Timestamp timestampCursor = Timestamp.fromDate(lastNotificationTime);
 
       debugPrint('loadMoreNotifications: Loading with cursor time: $timestampCursor, docId: $lastNotificationId, limit: $limit');
 
-      // If we have a document ID, try composite query for more reliable pagination
-      // This handles cases where multiple notifications have the same timestamp
       if (lastNotificationId != null) {
         try {
           debugPrint('loadMoreNotifications: Attempting composite query with document ID');
@@ -123,12 +120,11 @@ class NotificationService {
           debugPrint('loadMoreNotifications: Composite query returned ${notifications.length} notifications');
           return notifications;
         } catch (e) {
-          // If composite index doesn't exist, fall back to simple query
           debugPrint('loadMoreNotifications: Composite index may be missing, using simple pagination: $e');
         }
       }
 
-      // Simple pagination with just timestamp (fallback or default)
+      //pagination timestamp 
       debugPrint('loadMoreNotifications: Using simple query with timestamp only');
       final snapshot = await _col
           .where('userId', isEqualTo: _uid)
@@ -176,7 +172,7 @@ class NotificationService {
     final unread = await _col
         .where('userId', isEqualTo: uid)
         .where('isRead', isEqualTo: false)
-        .limit(200) // Safety limit for batch operations
+        .limit(200) 
         .get();
 
     if (unread.docs.isEmpty) return;
@@ -191,10 +187,6 @@ class NotificationService {
   Future<void> markAsRead(String notificationId) async {
     await _col.doc(notificationId).update({'isRead': true});
   }
-
-  // ---------------------------------------------------------------------------
-  // NOTIFICATION CREATION HELPERS
-  // ---------------------------------------------------------------------------
 
   Future<void> notifyMessageReceived({
     required String receiverId,
@@ -327,7 +319,6 @@ class NotificationService {
     );
   }
 
-  // Booking-related notifications
   Future<void> notifyBookingRequestSentToRecruiter({
     required String recruiterId,
     required String jobseekerName,

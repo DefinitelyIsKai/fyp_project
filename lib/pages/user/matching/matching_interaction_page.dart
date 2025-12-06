@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../services/user/auth_service.dart';
 import '../../../services/user/matching_service.dart';
-import '../../../services/user/hybrid_matching_engine.dart';
 import '../../../models/user/computed_match.dart';
 import '../../../models/user/recruiter_match.dart';
 import '../../../models/user/post.dart';
@@ -129,8 +128,6 @@ class _MatchesTab extends StatefulWidget {
 class _MatchesTabState extends State<_MatchesTab> {
   final MatchingService _matchingService = MatchingService();
   bool _recomputing = false;
-  // Recruiter always uses ANN (embeddingsAnn), no strategy selection needed
-  static const MatchingStrategy _recruiterStrategy = MatchingStrategy.embeddingsAnn;
   
 //refresh by updating state
   Future<void> _refreshData() async {
@@ -149,7 +146,6 @@ class _MatchesTabState extends State<_MatchesTab> {
         MatchingService.clearWeightsCache();
         await _matchingService.recomputeMatches(
           role: 'recruiter',
-          strategy: _recruiterStrategy,
         );
         if (!mounted) return;
         DialogUtils.showSuccessMessage(
@@ -384,7 +380,6 @@ class _MatchesTabState extends State<_MatchesTab> {
               final post = activePosts[index];
               return _RecruiterPostCard(
                 post: post,
-                strategy: _recruiterStrategy,
                 onTap: () => _showApplicantMatches(context, post),
               );
             },
@@ -414,7 +409,6 @@ class _MatchesTabState extends State<_MatchesTab> {
       final matches = await _matchingService.computeMatchesForRecruiterPost(
         postId: post.id,
         recruiterId: recruiterId,
-        strategy: _recruiterStrategy,
       );
 
       if (!context.mounted) return;
@@ -789,12 +783,10 @@ class _ComputedMatchCard extends StatelessWidget {
 class _RecruiterPostCard extends StatelessWidget {
   final Post post;
   final VoidCallback onTap;
-  final MatchingStrategy strategy;
 
   const _RecruiterPostCard({
     required this.post,
     required this.onTap,
-    required this.strategy,
   });
 
   @override
@@ -845,7 +837,6 @@ class _RecruiterPostCard extends StatelessWidget {
                         ? matchingService.getMatchedApplicantCount(
                             postId: post.id,
                             recruiterId: recruiterId,
-                            strategy: strategy,
                           )
                         : Future.value(0),
                     builder: (context, snapshot) {

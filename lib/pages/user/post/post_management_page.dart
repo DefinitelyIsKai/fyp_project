@@ -647,10 +647,9 @@ class _PostCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool isActive = !post.isDraft && post.status == PostStatus.active;
     final bool isPending = !post.isDraft && post.status == PostStatus.pending;
-    final bool isCompleted = post.status == PostStatus.completed;
     final bool isRejected = post.status == PostStatus.rejected;
     final bool canMarkCompleted = post.status == PostStatus.active && !post.isDraft;
-    final bool canEdit = !isActive && !isCompleted && !isRejected;
+    final bool canEdit = post.isDraft; // Only draft posts can be edited
     final bool canDelete = post.isDraft || isPending;
 
     return Container(
@@ -728,16 +727,18 @@ class _PostCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                OutlinedButton(
-                  onPressed: onView,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF00C8A0),
-                    side: const BorderSide(color: Color(0xFF00C8A0)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                // View button - only show for non-draft posts
+                if (!post.isDraft)
+                  OutlinedButton(
+                    onPressed: onView,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF00C8A0),
+                      side: const BorderSide(color: Color(0xFF00C8A0)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    ),
+                    child: const Text('View'),
                   ),
-                  child: const Text('View'),
-                ),
                  //edit when not active and completed and rejected
                 if (canEdit)
                   OutlinedButton(

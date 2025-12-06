@@ -32,9 +32,6 @@ class ImageUploadSection extends StatefulWidget {
   /// Whether the section is disabled (e.g., during save)
   final bool disabled;
   
-  /// Optional custom upload function
-  final Future<List<String>> Function()? customUploadFunction;
-  
   /// Maximum number of images allowed (null for unlimited)
   final int? maxImages;
 
@@ -48,7 +45,6 @@ class ImageUploadSection extends StatefulWidget {
     required this.storageService,
     required this.uploadId,
     this.disabled = false,
-    this.customUploadFunction,
     this.maxImages,
   });
 
@@ -165,13 +161,8 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
     }
     
     try {
-      List<String> urls;
-      if (widget.customUploadFunction != null) {
-        urls = await widget.customUploadFunction!();
-      } else {
-        // Only pick images and convert to base64, don't upload to Firestore yet
-        urls = await widget.storageService.pickPostImages();
-      }
+      // Only pick images and convert to base64, don't upload to Firestore yet
+      final urls = await widget.storageService.pickPostImages();
       
       if (urls.isNotEmpty && mounted) {
         // Limit the number of images to add based on maxImages

@@ -16,12 +16,12 @@ class ReviewService {
   }) async {
     final recruiterId = _auth.currentUserId;
     
-    // Validate rating value
+    //rating value
     if (rating < 1 || rating > 5) {
       throw StateError('Rating must be between 1 and 5');
     }
     
-    // Check if rating already exists
+    
     final existingReviewQuery = await _col
         .where('postId', isEqualTo: postId)
         .where('jobseekerId', isEqualTo: jobseekerId)
@@ -33,7 +33,7 @@ class ReviewService {
       throw StateError('You have already rated this applicant for this post');
     }
     
-    // Verify post exists, is completed, and owned by recruiter
+    //chekc post exists completed owned by who
     final postDoc = await _firestore.collection('posts').doc(postId).get();
     if (!postDoc.exists) {
       throw StateError('Post not found');
@@ -54,7 +54,7 @@ class ReviewService {
       throw StateError('Only the post owner can write reviews');
     }
     
-    // Verify jobseeker applied to this post
+    //cvheck jobseeker applied 
     final applicationQuery = await _firestore
         .collection('applications')
         .where('postId', isEqualTo: postId)
@@ -87,7 +87,7 @@ class ReviewService {
         .map((snap) => snap.docs.map((d) => Review.fromFirestore(d)).toList());
   }
 
-  // Reviews authored by the current recruiter (ratings they gave to jobseekers)
+  //review authored 
   Stream<List<Review>> streamReviewsByRecruiter(String userId) {
     return _col
         .where('recruiterId', isEqualTo: userId)
@@ -104,7 +104,7 @@ class ReviewService {
     return total / qs.docs.length;
   }
 
-  /// Stream to check if a rating exists for a specific post and applicant
+  //check rating 
   Stream<bool> streamRatingExists({
     required String postId,
     required String jobseekerId,

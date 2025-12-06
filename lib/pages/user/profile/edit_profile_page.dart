@@ -135,7 +135,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     try {
       final tagsToSave = sanitizeTagSelection(_selectedTags);
       
-      // Prepare resume data - only save downloadUrl, not base64 data to avoid Firestore size limit
+      //save download url
       Map<String, dynamic>? resumeData;
       if (_resumeAttachment != null) {
         resumeData = {
@@ -166,7 +166,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         'profileCompleted': true,
       };
       if (resumeData != null) {
-        //save when have url
+        //save url
         payload['resume'] = resumeData;
       } else {
         payload['resume'] = FieldValue.delete();
@@ -305,7 +305,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   key: _formKey,
                   child: Column(
                     children: [
-                      // Header Card
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -439,7 +438,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
                       const SizedBox(height: 20),
 
-                      // Professional Information Card
+                      //professional diplay
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -505,7 +504,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
                       const SizedBox(height: 20),
 
-                      //ttags 
+                      //tags 
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -723,7 +722,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   Widget _buildGenderDropdown() {
-    // Validate that _selectedGender is a valid value to prevent DropdownButton assertion error
     const validGenders = ['male', 'female'];
     final String? safeSelectedGender = (_selectedGender != null && validGenders.contains(_selectedGender))
         ? _selectedGender

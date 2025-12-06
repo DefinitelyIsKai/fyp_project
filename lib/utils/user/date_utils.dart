@@ -1,19 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
-/// Utility class for date and time formatting
-/// 
-/// Provides consistent date formatting across the application
+
 class DateUtils {
-  /// Formats a date as a relative time string (e.g., "2h ago", "Yesterday", "3d ago")
-  /// 
-  /// Examples:
-  /// - "Just now" for < 1 minute
-  /// - "5m ago" for minutes
-  /// - "2h ago" for hours
-  /// - "Yesterday" for 1 day ago
-  /// - "3d ago" for 2-6 days ago
-  /// - "25/12/2024" for older dates
+ 
   static String formatRelativeDate(DateTime date) {
     final now = DateTime.now();
     final difference = now.difference(date);
@@ -35,18 +25,18 @@ class DateUtils {
     }
   }
 
-  /// Formats a date as "YYYY-MM-DD" string
+  //YYYY-MM-DD
   static String formatDateString(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
-  /// Formats a date as "MMM d, yyyy" (e.g., "Dec 25, 2024")
+  //MMM d, yyyy
   static String formatDate(DateTime date) {
     final month = _getMonthAbbreviation(date.month);
     return '${month} ${date.day.toString().padLeft(2, '0')}, ${date.year}';
   }
 
-  /// Formats a time as "h:mm AM/PM" (e.g., "9:00 AM", "2:30 PM")
+  //AM/PM
   static String formatTime(DateTime date) {
     final hour = date.hour == 0 ? 12 : (date.hour > 12 ? date.hour - 12 : date.hour);
     final minute = date.minute.toString().padLeft(2, '0');
@@ -158,14 +148,6 @@ class DateUtils {
     }
   }
 
-  /// Formats a date as "time ago" string (short version, e.g., "2d ago", "3h ago")
-  /// 
-  /// Compact version without pluralization
-  /// Examples:
-  /// - "Just now" for < 1 minute
-  /// - "5m ago" for minutes
-  /// - "2h ago" for hours
-  /// - "3d ago" for days
   static String formatTimeAgoShort(DateTime dateTime) {
     final now = DateTime.now();
     final difference = now.difference(dateTime);

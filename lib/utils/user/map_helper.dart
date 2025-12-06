@@ -5,15 +5,14 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dialog_utils.dart';
 
-/// Helper class for Google Maps operations
 class MapHelper {
-  /// Default center location (Malaysia)
+  //center location
   static const LatLng defaultCenter = LatLng(2.7456, 101.7072);
   
-  /// Default zoom level
+  //zom level
   static const double defaultZoom = 5.0;
   
-  /// Calculate bounds for a list of positions
+  //bounds for a list of positions
   static LatLngBounds calculateBounds(List<LatLng> positions) {
     if (positions.isEmpty) {
       return LatLngBounds(
@@ -40,7 +39,7 @@ class MapHelper {
     );
   }
   
-  /// Get initial camera position based on markers
+  //initial camera position with markers
   static CameraPosition getInitialCameraPosition(List<LatLng> positions) {
     if (positions.isEmpty) {
       return const CameraPosition(
@@ -68,7 +67,6 @@ class MapHelper {
     );
   }
   
-  /// Show error message for map issues
   static void showMapError(BuildContext context, String message) {
     DialogUtils.showWarningMessage(
       context: context,
@@ -77,7 +75,7 @@ class MapHelper {
     );
   }
 
-  /// Calculate distance between two coordinates in kilometers
+  //count distance between two coordinates 
   static double calculateDistance(LatLng point1, LatLng point2) {
     return Geolocator.distanceBetween(
           point1.latitude,
@@ -85,10 +83,10 @@ class MapHelper {
           point2.latitude,
           point2.longitude,
         ) /
-        1000; // Convert to kilometers
+        1000; 
   }
 
-  /// Create a simple circular dot marker bitmap
+  //dot marker 
   static Future<BitmapDescriptor> createDotMarker(
     Color color, {
     int size = 96,
@@ -98,13 +96,13 @@ class MapHelper {
     final ui.Paint paint = ui.Paint()..color = color;
     final double radius = size / 2.0;
 
-    // Outer glow
+    //glow
     final ui.Paint glow = ui.Paint()
       ..color = color.withOpacity(0.25)
       ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 6);
     canvas.drawCircle(ui.Offset(radius, radius), radius * 0.9, glow);
 
-    // Solid circle
+    //dot
     canvas.drawCircle(ui.Offset(radius, radius), radius * 0.55, paint);
 
     final ui.Image image = await recorder.endRecording().toImage(size, size);
@@ -114,8 +112,6 @@ class MapHelper {
     return BitmapDescriptor.fromBytes(bytes!.buffer.asUint8List());
   }
 
-  /// Safely call camera operations with retry logic
-  /// Returns true if operation succeeded, false otherwise
   static Future<bool> safeCameraOperation(
     GoogleMapController controller,
     Future<void> Function() operation, {

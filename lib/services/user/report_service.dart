@@ -7,7 +7,7 @@ class ReportService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AuthService _authService = AuthService();
 
-  /// Create a report for a post (by jobseeker)
+  //jobseeker report
   Future<void> reportPost({
     required String postId,
     required String reason,
@@ -17,7 +17,7 @@ class ReportService {
       final userDoc = await _authService.getUserDoc();
       final reporterId = userDoc.id;
 
-      // Get post details to find recruiter
+      //find recruiter
       final postDoc = await _firestore.collection('posts').doc(postId).get();
       if (!postDoc.exists) {
         throw Exception('Post not found');
@@ -26,7 +26,7 @@ class ReportService {
       final postData = postDoc.data()!;
       final recruiterId = postData['ownerId'] as String;
 
-      // Check if user already reported this post
+      //check reported
       final existingReport = await _firestore
           .collection('reports')
           .where('reporterId', isEqualTo: reporterId)
@@ -58,7 +58,7 @@ class ReportService {
     }
   }
 
-  /// Create a report for an jobseeker (by recruiter)
+  //recruiter report 
   Future<void> reportJobseeker({
     required String jobseekerId,
     required String postId,
@@ -69,7 +69,7 @@ class ReportService {
       final userDoc = await _authService.getUserDoc();
       final reporterId = userDoc.id;
 
-      // Verify the post belongs to the reporter
+      //vverify the post belonging
       final postDoc = await _firestore.collection('posts').doc(postId).get();
       if (!postDoc.exists) {
         throw Exception('Post not found');
@@ -81,9 +81,6 @@ class ReportService {
       if (postOwnerId != reporterId) {
         throw Exception('You can only report jobseekers from your own posts');
       }
-
-      // Allow multiple reports for the same jobseeker (user may report for different reasons or new incidents)
-      // No need to check for existing reports
 
       final report = Report(
         id: _firestore.collection('reports').doc().id,
@@ -104,7 +101,7 @@ class ReportService {
     }
   }
 
-  /// Check if user has already reported a post
+
   Future<bool> hasReportedPost(String postId) async {
     try {
       final userDoc = await _authService.getUserDoc();
@@ -124,7 +121,7 @@ class ReportService {
     }
   }
 
-  /// Check if recruiter has already reported an jobseeker for a post
+  //check recruiter reported jobseekr
   Future<bool> hasReportedJobseeker(String jobseekerId, String postId) async {
     try {
       final userDoc = await _authService.getUserDoc();
@@ -145,28 +142,12 @@ class ReportService {
     }
   }
 
-  /// Stream all reports (for admin use)
-  Stream<List<Report>> streamReports() {
-    return _firestore
-        .collection('reports')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => Report.fromFirestore(doc))
-            .toList());
-  }
-
-  /// Get report categories based on current user's role
-  /// - If user is jobseeker: returns type='jobseeker' categories (for reporting posts)
-  /// - If user is recruiter: returns type='recruiter' categories (for reporting jobseekers)
   Future<List<ReportCategoryModel>> getReportCategoriesByUserRole() async {
     try {
       final userDoc = await _authService.getUserDoc();
       final userData = userDoc.data();
       final role = userData?['role'] as String? ?? 'jobseeker';
       
-      // Jobseekers report posts, so they need 'jobseeker' type categories
-      // Recruiters report jobseekers, so they need 'recruiter' type categories
       final categoryType = role == 'jobseeker' ? 'jobseeker' : 'recruiter';
       
       return await getReportCategories(categoryType);
@@ -176,17 +157,14 @@ class ReportService {
     }
   }
 
-  /// Get report categories from Firebase by type
-  /// type: 'jobseeker' for jobseekers to report posts, 'recruiter' for recruiters to report jobseekers
   Future<List<ReportCategoryModel>> getReportCategories(String type) async {
     try {
-      // First, get all categories with the specified type
       final snapshot = await _firestore
           .collection('report_categories')
           .where('type', isEqualTo: type)
           .get();
 
-      // Filter enabled categories in memory (to avoid composite index requirement)
+      //filter  categories in memory
       final categories = snapshot.docs
           .map((doc) {
             try {
@@ -198,14 +176,11 @@ class ReportService {
           .where((category) => category != null && category.isEnabled)
           .cast<ReportCategoryModel>()
           .toList();
-
-      // Sort by name alphabetically
       categories.sort((a, b) => a.name.compareTo(b.name));
 
       return categories;
     } catch (e) {
       print('Error loading report categories for type $type: $e');
-      // If query fails (e.g., missing index), try fetching all and filtering in memory
       try {
         final allSnapshot = await _firestore
             .collection('report_categories')

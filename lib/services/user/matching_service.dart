@@ -7,14 +7,6 @@ import '../../models/user/recruiter_match.dart';
 import 'hybrid_matching_engine.dart';
 
 
-
-
-
-
-// Re-export MatchingStrategy for convenience
-export 'hybrid_matching_engine.dart' show MatchingStrategy;
-
-
 class MatchingService {
   MatchingService({
     FirebaseFirestore? firestore,
@@ -29,31 +21,20 @@ class MatchingService {
   final FirebaseAuth _auth;
   final HybridMatchingEngine _matchingEngine;
 
-  // Removed streamJobMatches, applyToJobMatch, and scheduleInterview methods
-  // These methods were used for the old job_matches collection system
-  // The system now uses real-time computed matches (ComputedMatch and RecruiterMatch)
-
-  // Recompute matches using matching engine (for recruiters only, no longer stores to job_matches)
   Future<void> recomputeMatches({
     String? role,
-    MatchingStrategy strategy = MatchingStrategy.embeddingsAnn,
   }) async {
     await _matchingEngine.recomputeMatches(
       explicitRole: role,
-      strategy: strategy,
     );
   }
 
-  /// Stream computed matches in real-time without storing to Firestore.
-  /// This is for jobseekers to see their matches based on active job posts.
-  /// Returns a stream that recomputes matches when user data or posts change.
+
   Stream<List<ComputedMatch>> streamComputedMatches() {
     final userId = _auth.currentUser?.uid;
     if (userId == null) {
       return Stream.value(<ComputedMatch>[]);
     }
-
-    // Combine streams: user data changes, posts changes, and manual refresh
     final userStream = _firestore
         .collection('users')
         .doc(userId)
@@ -65,17 +46,12 @@ class MatchingService {
         .where('status', isEqualTo: 'active')
         .snapshots();
 
-    // When either user data or posts change, recompute matches
-    // Also listen to refresh controller for manual refresh
     return userStream.asyncExpand((userDoc) {
-      // Combine posts stream with refresh controller
-      // Create a stream that emits when either posts change or refresh is triggered
       final combinedStream = StreamController<QuerySnapshot<Map<String, dynamic>>>.broadcast();
       
       StreamSubscription? postsSubscription;
       StreamSubscription? refreshSubscription;
       
-      // Listen to posts stream
       postsSubscription = postsStream.listen(
         (snapshot) {
           if (!combinedStream.isClosed) {
@@ -83,18 +59,16 @@ class MatchingService {
           }
         },
         onError: (error) {
-          // Ignore permission errors during logout - don't add anything to stream
           debugPrint('Error listening to posts stream (likely during logout): $error');
-          // Stream will naturally end, which will result in empty matches list
         },
-        cancelOnError: false, // Don't cancel stream on error
+        cancelOnError: false, 
       );
       
-      // Listen to refresh controller
+      //listener
       refreshSubscription = _refreshController.stream.listen((_) async {
         if (!combinedStream.isClosed) {
           try {
-            // On manual refresh, fetch latest posts
+            //manual refresh
             final postsSnapshot = await _firestore
                 .collection('posts')
                 .where('isDraft', isEqualTo: false)
@@ -104,14 +78,11 @@ class MatchingService {
               combinedStream.add(postsSnapshot);
             }
           } catch (error) {
-            // Ignore permission errors during logout
             debugPrint('Error refreshing posts (likely during logout): $error');
-            // Don't add anything - stream will handle empty state naturally
           }
         }
       });
       
-      // Get initial posts
       _firestore
           .collection('posts')
           .where('isDraft', isEqualTo: false)
@@ -123,12 +94,10 @@ class MatchingService {
             }
           })
           .catchError((error) {
-            // Ignore permission errors during logout
             debugPrint('Error getting initial posts (likely during logout): $error');
-            // Don't add anything - stream will handle empty state naturally
           });
       
-      // Clean up when stream is cancelled
+      //clean up
       combinedStream.onCancel = () {
         postsSubscription?.cancel();
         refreshSubscription?.cancel();
@@ -140,7 +109,7 @@ class MatchingService {
           final userData = userDoc.data();
           if (userData == null) return <ComputedMatch>[];
           
-          // Only compute for jobseekers
+          //computefor jobseeker
           final role = userData['role'] as String? ?? 'jobseeker';
           if (role != 'jobseeker') return <ComputedMatch>[];
 
@@ -149,11 +118,9 @@ class MatchingService {
             userData: userData,
           );
         } catch (error, stackTrace) {
-          // Log full error details for debugging
           debugPrint('Error computing matches: $error');
           debugPrint('Stack trace: $stackTrace');
           
-          // If it's a cache-related error, try to reset caches
           if (error.toString().contains('microsecondsSinceEpoch') || 
               error.toString().contains('NoSuchMethodError')) {
             debugPrint('Detected cache corruption, resetting caches...');
@@ -164,11 +131,9 @@ class MatchingService {
             }
           }
           
-          // Return empty list instead of crashing
           return <ComputedMatch>[];
         }
       }).handleError((error, stackTrace) {
-        // Ignore permission errors during logout
         debugPrint('Error in computed matches stream: $error');
         debugPrint('Stack trace: $stackTrace');
         return <ComputedMatch>[];
@@ -176,50 +141,41 @@ class MatchingService {
     });
   }
 
-  /// Manually trigger a refresh of computed matches
-  /// Also clears weights cache to ensure fresh data
+  //manual trigger refresh clears weights cache 
   void refreshComputedMatches() {
-    // Clear weights cache before refreshing
+    //clear weights cache before refresh
     MatchingService.clearWeightsCache();
     _refreshController.add(null);
   }
 
-  /// Compute matches for a specific recruiter post and its applicants.
-  /// Returns list of RecruiterMatch objects showing which applicants match the post.
+  //Compute matches for a specific recruiter post and its applicants.
   Future<List<RecruiterMatch>> computeMatchesForRecruiterPost({
     required String postId,
     required String recruiterId,
-    MatchingStrategy strategy = MatchingStrategy.embeddingsAnn,
   }) async {
     return await _matchingEngine.computeMatchesForRecruiterPost(
       postId: postId,
       recruiterId: recruiterId,
-      strategy: strategy,
     );
   }
 
-  /// Get count of matched applicants for a specific post.
-  /// This is a lightweight method that returns only the count.
+  //get count of matched applicants for a specific post.
   Future<int> getMatchedApplicantCount({
     required String postId,
     required String recruiterId,
-    MatchingStrategy strategy = MatchingStrategy.embeddingsAnn,
   }) async {
     return await _matchingEngine.getMatchedApplicantCount(
       postId: postId,
       recruiterId: recruiterId,
-      strategy: strategy,
     );
   }
 
-  /// Clear the cached matching weights to force refresh from Firestore
-  /// Call this after updating matching rules to see changes immediately
-  /// This clears cache across ALL MatchingService and HybridMatchingEngine instances
+  //clear cached matching weight
   static void clearWeightsCache() {
     HybridMatchingEngine.clearWeightsCache();
   }
   
-  /// Reset all caches (for recovery from cache corruption)
+  //reset  caches 
   static void resetAllCaches() {
     HybridMatchingEngine.resetAllCaches();
   }

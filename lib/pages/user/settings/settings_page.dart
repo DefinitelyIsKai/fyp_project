@@ -42,7 +42,6 @@ class _SettingsPageState extends State<SettingsPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Account Section
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -136,7 +135,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
           const SizedBox(height: 16),
 
-          // Notifications Section
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -178,7 +176,6 @@ class _SettingsPageState extends State<SettingsPage> {
                     setState(() {
                       _emailNotifications = value;
                     });
-                    // TODO: Save to Firestore or local storage
                   },
                 ),
                 const SizedBox(height: 12),
@@ -191,7 +188,6 @@ class _SettingsPageState extends State<SettingsPage> {
                     setState(() {
                       _pushNotifications = value;
                     });
-                    // TODO: Save to Firestore or local storage
                   },
                 ),
                 const SizedBox(height: 12),
@@ -204,7 +200,6 @@ class _SettingsPageState extends State<SettingsPage> {
                     setState(() {
                       _smsNotifications = value;
                     });
-                    // TODO: Save to Firestore or local storage
                   },
                 ),
               ],
@@ -213,7 +208,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
           const SizedBox(height: 16),
 
-          // Privacy & Security Section
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -281,10 +275,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
           ),
-
           const SizedBox(height: 16),
-
-          // App Settings Section
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -340,13 +331,6 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
           ),
-
-          const SizedBox(height: 16),
-
-         
-
-          
-
           const SizedBox(height: 20),
         ],
       ),
@@ -553,7 +537,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
 
     if (confirmed == true) {
-      // TODO: Implement cache clearing logic
       if (!mounted) return;
       DialogUtils.showSuccessMessage(
         context: context,

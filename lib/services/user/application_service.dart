@@ -13,13 +13,11 @@ class ApplicationService {
   CollectionReference<Map<String, dynamic>> get _col =>
       _firestore.collection('applications');
 
-  // Create an application
   Future<String> createApplication({
     required String postId,
     required String recruiterId,
   }) async {
     final jobseekerId = _authService.currentUserId;
-    // Ensure the post is not completed
     final postSnap = await _firestore.collection('posts').doc(postId).get();
     final postData = postSnap.data();
     final String status = postData?['status'] as String? ?? 'active';
@@ -27,7 +25,7 @@ class ApplicationService {
       throw StateError('POST_COMPLETED');
     }
 
-    // Check if application already exists
+    //chekc application exists
     final existing = await _col
         .where('postId', isEqualTo: postId)
         .where('jobseekerId', isEqualTo: jobseekerId)
@@ -51,7 +49,7 @@ class ApplicationService {
 
     final docRef = await _col.add(application.toFirestore());
 
-    // Update post applicants count
+    //up applicants count
     await _firestore.collection('posts').doc(postId).update({
       'applicants': FieldValue.increment(1),
     });
@@ -66,20 +64,15 @@ class ApplicationService {
         postTitle: postTitle,
       );
     } catch (_) {
-      // Best-effort notification, ignore errors
     }
 
     return docRef.id;
   }
 
-  // Get applications for a post (recruiter view)
+  //applications for a post recruiter 
   Stream<List<Application>> streamPostApplications(String postId) {
-    // Scope by both post and recruiter to align with security rules and
-    // avoid permission errors when non-owners attempt to query this stream.
     final recruiterId = _authService.currentUserId;
-    // Trigger auto-reject check when stream is first accessed
     checkAndAutoRejectApplications();
-    // Initialize approvedApplicants field if missing (for old posts)
     _initializeApprovedApplicantsIfMissing(postId, recruiterId);
     return _col
         .where('postId', isEqualTo: postId)
@@ -89,18 +82,17 @@ class ApplicationService {
           final applications = snapshot.docs
               .map((doc) => Application.fromFirestore(doc))
               .toList();
-          // Sort by createdAt descending (newest first)
+          //sort new
           applications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           return applications;
         })
         .handleError((error) {
-          // Ignore permission errors during logout - return empty list instead
           debugPrint('Error in streamPostApplications (likely during logout): $error');
           return <Application>[];
         });
   }
 
-  // Helper method to initialize approvedApplicants field if missing
+  
   Future<void> _initializeApprovedApplicantsIfMissing(
     String postId,
     String recruiterId,
@@ -110,12 +102,11 @@ class ApplicationService {
       if (!postDoc.exists) return;
 
       final postData = postDoc.data();
-      // Check if field exists
+     
       if (postData?.containsKey('approvedApplicants') == true) {
-        return; // Field already exists
+        return; 
       }
 
-      // Calculate and initialize the field
       final approvedApplications = await _col
           .where('postId', isEqualTo: postId)
           .where('recruiterId', isEqualTo: recruiterId)
@@ -124,22 +115,19 @@ class ApplicationService {
 
       final approvedCount = approvedApplications.docs.length;
 
-      // Initialize the field
       await _firestore.collection('posts').doc(postId).update({
         'approvedApplicants': approvedCount,
       });
     } catch (e) {
-      // Silently fail - this is a background initialization
       debugPrint('Error initializing approvedApplicants: $e');
     }
   }
 
-  // Get applications for current user (jobseeker view)
+  //applications jobseeker 
   Stream<List<Application>> streamMyApplications() {
     final jobseekerId = _authService.currentUserId;
-    // Trigger auto-reject check when stream is first accessed
+    //check
     checkAndAutoRejectApplications();
-    // Process held credits for applications (deduct if approved, release if rejected)
     _processHeldCreditsForApplications(jobseekerId);
     return _col.where('jobseekerId', isEqualTo: jobseekerId).snapshots().map((
       snapshot,
@@ -147,19 +135,16 @@ class ApplicationService {
       final applications = snapshot.docs
           .map((doc) => Application.fromFirestore(doc))
           .toList();
-      // Sort by createdAt descending (newest first)
       applications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return applications;
     }).handleError((error) {
-      // Ignore permission errors during logout - return empty list instead
       debugPrint('Error in streamMyApplications (likely during logout): $error');
       return <Application>[];
     });
   }
 
-  // Process held credits based on application status
-  // Deducts held credits for approved applications, releases for rejected ones
-  // Only processes credits once per application (idempotent)
+
+  //deducts held credits approved releases whne rejected ones
   Future<void> _processHeldCreditsForApplications(String jobseekerId) async {
     try {
       final walletService = WalletService();
@@ -176,41 +161,37 @@ class ApplicationService {
 
         if (postId.isEmpty) continue;
 
-        // Skip if credits were already processed
+        //skip processed
         if (creditsProcessed) continue;
 
         try {
           bool processed = false;
           if (status == 'approved') {
-            // Deduct held credits (actual charge)
-            // ✅ 修复：传入 jobseekerId 作为 userId 参数
             processed = await walletService.deductHeldCredits(
               postId: postId,
-              userId: jobseekerId, // 这里直接使用方法参数中已有的 jobseekerId
+              userId: jobseekerId, 
               feeCredits: 100,
             );
           } else if (status == 'rejected') {
-            // Release held credits (no charge)
+            //release 
             processed = await walletService.releaseHeldCredits(
               postId: postId,
               feeCredits: 100,
             );
-            // If no credits were held (already processed), still mark as processed
-            // to avoid retrying
+            //no credits then processed
             if (!processed) {
               processed =
-                  true; // Mark as processed even if no credits to release
+                  true; 
             }
           }
 
-          // Mark as processed if operation succeeded
+          //succeeded then boolean true
           if (processed) {
             await appDoc.reference.set({
               'creditsProcessed': true,
             }, SetOptions(merge: true));
           }
         } catch (e) {
-          // Log but don't fail - might already be processed
           debugPrint(
             'Error processing held credits for application ${appDoc.id}: $e',
           );
@@ -218,14 +199,11 @@ class ApplicationService {
       }
     } catch (e) {
       debugPrint('Error processing held credits: $e');
-      // Don't throw - this is a background process
     }
   }
 
-  // Get all applications for recruiter's posts
   Stream<List<Application>> streamRecruiterApplications() {
     final recruiterId = _authService.currentUserId;
-    // Trigger auto-reject check when stream is first accessed
     checkAndAutoRejectApplications();
     return _col.where('recruiterId', isEqualTo: recruiterId).snapshots().map((
       snapshot,
@@ -233,17 +211,15 @@ class ApplicationService {
       final applications = snapshot.docs
           .map((doc) => Application.fromFirestore(doc))
           .toList();
-      // Sort by createdAt descending (newest first)
       applications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return applications;
     }).handleError((error) {
-      // Ignore permission errors during logout - return empty list instead
       debugPrint('Error in streamRecruiterApplications (likely during logout): $error');
       return <Application>[];
     });
   }
 
-  // Check if user has applied to a post
+  //check applied
   Future<bool> hasApplied(String postId) async {
     final jobseekerId = _authService.currentUserId;
     final result = await _col
@@ -254,7 +230,7 @@ class ApplicationService {
     return result.docs.isNotEmpty;
   }
 
-  // Get application for a post by current user
+  //application current user
   Future<Application?> getApplicationForPost(String postId) async {
     final jobseekerId = _authService.currentUserId;
     final result = await _col
@@ -267,7 +243,7 @@ class ApplicationService {
     return Application.fromFirestore(result.docs.first);
   }
 
-  // Stream application for a post by current user (for real-time updates)
+
   Stream<Application?> streamApplicationForPost(String postId) {
     final jobseekerId = _authService.currentUserId;
     return _col
@@ -280,13 +256,13 @@ class ApplicationService {
           return Application.fromFirestore(snapshot.docs.first);
         })
         .handleError((error) {
-          // Ignore permission errors during logout - return null instead
+          
           debugPrint('Error in streamApplicationForPost (likely during logout): $error');
           return null;
         });
   }
 
-  // Approve an application
+  //approval
   Future<void> approveApplication(String applicationId) async {
     final docRef = _col.doc(applicationId);
     final snapshot = await docRef.get();
@@ -300,7 +276,6 @@ class ApplicationService {
       throw StateError('Post ID not found in application');
     }
 
-    // Extract required fields early for use in quota check and update
     final jobseekerId = data['jobseekerId'] as String?;
     final recruiterId = data['recruiterId'] as String?;
     final createdAt = data['createdAt'];
@@ -312,7 +287,7 @@ class ApplicationService {
       throw StateError('Recruiter ID not found in application');
     }
 
-    // Helper to safely parse int from Firestore (handles int, double, num)
+   
     int? _parseInt(dynamic value) {
       if (value == null) return null;
       if (value is int) return value;
@@ -322,20 +297,18 @@ class ApplicationService {
       return null;
     }
 
-    // Check if applicant quota has been reached (based on approved applications)
     final postSnap = await _firestore.collection('posts').doc(postId).get();
     final postData = postSnap.data();
     final applicantQuota = _parseInt(postData?['applicantQuota']);
 
-    // Check current status to see if already approved
+  
     final currentStatus = data['status'] as String? ?? 'pending';
     final isAlreadyApproved = currentStatus == 'approved';
 
-    // Get current approved count from post document
-    // If field is missing, initialize it first
+    
     int currentApprovedCount = _parseInt(postData?['approvedApplicants']) ?? 0;
 
-    // If field is missing (old post), calculate and initialize it
+  
     if (postData?.containsKey('approvedApplicants') != true) {
       try {
         final approvedApplications = await _col
@@ -345,35 +318,33 @@ class ApplicationService {
             .get();
         currentApprovedCount = approvedApplications.docs.length;
 
-        // Initialize the field
+
         await _firestore.collection('posts').doc(postId).update({
           'approvedApplicants': currentApprovedCount,
         });
       } catch (e) {
         debugPrint('Error initializing approvedApplicants: $e');
-        // Continue with 0 as fallback
+      
       }
     }
 
     if (applicantQuota != null) {
-      // If not already approved and quota is reached, block approval
+     
       if (!isAlreadyApproved && currentApprovedCount >= applicantQuota) {
         throw StateError('QUOTA_EXCEEDED');
       }
     }
 
-    // Use set with merge to ensure all fields are present for security rule validation
-    // This ensures request.resource.data contains all required fields
+   
     await docRef.set({
       'status': 'approved',
       'updatedAt': FieldValue.serverTimestamp(),
       'jobseekerId': jobseekerId,
       'recruiterId': recruiterId,
       'postId': postId,
-      'createdAt': createdAt, // Preserve original createdAt
+      'createdAt': createdAt, 
     }, SetOptions(merge: true));
 
-    // Update approved count in post document (increment only if not already approved)
     if (!isAlreadyApproved) {
       await _firestore.collection('posts').doc(postId).update({
         'approvedApplicants': FieldValue.increment(1),
@@ -390,7 +361,7 @@ class ApplicationService {
       );
     }
 
-    // Deduct held credits immediately when application is approved
+    //deduct heldcredits
     if (jobseekerId.isNotEmpty && currentStatus == 'pending') {
       try {
         final success = await WalletService.deductHeldCreditsForUser(
@@ -399,10 +370,10 @@ class ApplicationService {
           postId: postId,
           feeCredits: 100,
         );
-        // Mark as processed immediately
+      
         await docRef.set({'creditsProcessed': true}, SetOptions(merge: true));
         
-        // Send wallet notification if deduction was successful
+       
         if (success) {
           try {
             await _notificationService.notifyWalletDebit(
@@ -412,12 +383,12 @@ class ApplicationService {
               metadata: {'postId': postId, 'type': 'application_fee'},
             );
           } catch (e) {
-            // Log but don't fail - notification is not critical
+           
             debugPrint('Error sending wallet debit notification: $e');
           }
         }
       } catch (e) {
-        // Log error but don't fail approval - credits can be processed later
+        
         debugPrint(
           'Error deducting held credits for jobseeker $jobseekerId: $e',
         );
@@ -425,7 +396,7 @@ class ApplicationService {
     }
   }
 
-  // Reject an application
+  //reject application
   Future<void> rejectApplication(String applicationId) async {
     final docRef = _col.doc(applicationId);
     final snapshot = await docRef.get();
@@ -434,8 +405,6 @@ class ApplicationService {
       throw StateError('Application not found');
     }
 
-    // Include all required fields in update to satisfy Firestore security rules
-    // Ensure all fields are non-null strings to match security rule requirements
     final jobseekerId = data['jobseekerId'] as String?;
     final recruiterId = data['recruiterId'] as String?;
     final postId = data['postId'] as String? ?? '';
@@ -451,29 +420,28 @@ class ApplicationService {
       throw StateError('Post ID not found in application');
     }
 
-    // Check if application was previously approved (to decrement count)
+   
     final currentStatus = data['status'] as String? ?? 'pending';
     final wasApproved = currentStatus == 'approved';
 
-    // Use set with merge to ensure all fields are present for security rule validation
-    // This ensures request.resource.data contains all required fields
+   
     await docRef.set({
       'status': 'rejected',
       'updatedAt': FieldValue.serverTimestamp(),
       'jobseekerId': jobseekerId,
       'recruiterId': recruiterId,
       'postId': postId,
-      'createdAt': createdAt, // Preserve original createdAt
+      'createdAt': createdAt, 
     }, SetOptions(merge: true));
 
-    // Update approved count in post document (decrement only if was approved)
+    
     if (wasApproved) {
       await _firestore.collection('posts').doc(postId).update({
         'approvedApplicants': FieldValue.increment(-1),
       });
     }
 
-    // Release held credits immediately when application is rejected
+    //release 
     if (jobseekerId.isNotEmpty && currentStatus == 'pending') {
       try {
         final success = await WalletService.releaseHeldCreditsForUser(
@@ -482,10 +450,10 @@ class ApplicationService {
           postId: postId,
           feeCredits: 100,
         );
-        // Mark as processed immediately
+      
         await docRef.set({'creditsProcessed': true}, SetOptions(merge: true));
         
-        // Send wallet notification if release was successful
+        //notification 
         if (success) {
           try {
             await _notificationService.notifyWalletCredit(
@@ -495,12 +463,10 @@ class ApplicationService {
               metadata: {'postId': postId, 'type': 'application_fee_released'},
             );
           } catch (e) {
-            // Log but don't fail - notification is not critical
             debugPrint('Error sending wallet credit notification: $e');
           }
         }
       } catch (e) {
-        // Log error but don't fail rejection - credits can be processed later
         debugPrint(
           'Error releasing held credits for jobseeker $jobseekerId: $e',
         );
@@ -635,20 +601,19 @@ class ApplicationService {
     }
   }
 
-  // Delete all applications for a given post
-  // Requires recruiterId to comply with Firestore security rules
+
   Future<void> deleteApplicationsByPostId({
     required String postId,
     required String recruiterId,
   }) async {
     try {
-      // Get all applications for this post (filtered by recruiterId for security)
+
       final applicationsSnapshot = await _col
           .where('postId', isEqualTo: postId)
           .where('recruiterId', isEqualTo: recruiterId)
           .get();
 
-      // Mark each application as deleted instead of actually deleting it
+
       final batch = _firestore.batch();
       for (final doc in applicationsSnapshot.docs) {
         batch.update(doc.reference, {
@@ -657,27 +622,23 @@ class ApplicationService {
         });
       }
 
-      // Commit the batch update
       if (applicationsSnapshot.docs.isNotEmpty) {
         await batch.commit();
       }
     } catch (e) {
-      // Log error but don't throw - cleanup failure shouldn't prevent post deletion
+
       debugPrint('Error marking applications as deleted for post $postId: $e');
-      // Re-throw only if it's a critical error that should be handled
-      // For permission errors, we'll just log and continue
+      
     }
   }
 
-  // Check and auto-reject pending applications for posts where event start date is one day away
-  // This should be called when loading applications to ensure they are rejected in time
+  //auto-reject pending applications
   Future<void> checkAndAutoRejectApplications() async {
     try {
       final now = DateTime.now();
       final tomorrow = DateTime(now.year, now.month, now.day + 1);
 
-      // Get pending applications for current user's posts (as recruiter)
-      // This ensures we only query applications the user has permission to read
+      //pending applications for current user posts  recruiter
       final recruiterId = _authService.currentUserId;
       final pendingApplications = await _col
           .where('status', isEqualTo: 'pending')
@@ -688,7 +649,6 @@ class ApplicationService {
         return;
       }
 
-      // Group applications by postId to minimize Firestore reads
       final Map<String, List<DocumentSnapshot>> applicationsByPost = {};
       for (final doc in pendingApplications.docs) {
         final postId = doc.data()['postId'] as String? ?? '';
@@ -697,7 +657,6 @@ class ApplicationService {
         }
       }
 
-      // Check each post's event start date
       final batch = _firestore.batch();
       int rejectedCount = 0;
 
@@ -715,7 +674,6 @@ class ApplicationService {
           final postData = postDoc.data();
           if (postData == null) continue;
 
-          // Get event start date
           final eventStartDateValue = postData['eventStartDate'];
           if (eventStartDateValue == null) continue;
 
@@ -727,24 +685,20 @@ class ApplicationService {
           }
 
           if (eventStartDate == null) continue;
-
-          // Normalize dates to compare only dates (ignore time)
           final eventStartDateOnly = DateTime(
             eventStartDate.year,
             eventStartDate.month,
             eventStartDate.day,
           );
 
-          // Check if event start date is exactly one day from now (tomorrow)
           if (eventStartDateOnly.isAtSameMomentAs(tomorrow)) {
-            // Reject all pending applications for this post
             for (final appDoc in applications) {
               final appData = appDoc.data() as Map<String, dynamic>?;
               if (appData == null) continue;
 
               final currentStatus = appData['status'] as String? ?? 'pending';
 
-              // Only reject if still pending (might have been approved/rejected since query)
+              //reject  pending 
               if (currentStatus == 'pending') {
                 batch.update(appDoc.reference, {
                   'status': 'rejected',
@@ -752,7 +706,7 @@ class ApplicationService {
                 });
                 rejectedCount++;
 
-                // Send notification to jobseeker
+                //send notification 
                 final jobseekerId = appData['jobseekerId'] as String? ?? '';
                 final postTitle = postData['title'] as String? ?? 'your post';
                 if (jobseekerId.isNotEmpty) {
@@ -773,11 +727,11 @@ class ApplicationService {
           }
         } catch (e) {
           debugPrint('Error checking post $postId for auto-rejection: $e');
-          // Continue with other posts
+  
         }
       }
 
-      // Commit all rejections in a single batch
+  
       if (rejectedCount > 0) {
         await batch.commit();
         debugPrint(
@@ -786,11 +740,11 @@ class ApplicationService {
       }
     } catch (e) {
       debugPrint('Error in checkAndAutoRejectApplications: $e');
-      // Don't throw - this is a background check that shouldn't break the app
+ 
     }
   }
 
-  // Helper method to check a single application and auto-reject if needed
+  
   Future<void> checkAndAutoRejectApplication(String applicationId) async {
     try {
       final appDoc = await _col.doc(applicationId).get();
@@ -800,7 +754,7 @@ class ApplicationService {
       if (appData == null) return;
 
       final status = appData['status'] as String? ?? 'pending';
-      if (status != 'pending') return; // Only check pending applications
+      if (status != 'pending') return; 
 
       final postId = appData['postId'] as String? ?? '';
       if (postId.isEmpty) return;
@@ -831,7 +785,7 @@ class ApplicationService {
         eventStartDate.day,
       );
 
-      // If event starts tomorrow, reject the application
+      //event starts tomorrow reject 
       if (eventStartDateOnly.isAtSameMomentAs(tomorrow)) {
         await appDoc.reference.update({
           'status': 'rejected',

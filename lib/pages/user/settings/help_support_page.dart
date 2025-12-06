@@ -64,7 +64,6 @@ class _HelpSupportPageState extends State<HelpSupportPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Contact Support Section
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -116,7 +115,6 @@ class _HelpSupportPageState extends State<HelpSupportPage> {
           
           const SizedBox(height: 16),
           
-          // FAQs Section
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -179,7 +177,6 @@ class _HelpSupportPageState extends State<HelpSupportPage> {
           
           const SizedBox(height: 16),
           
-          // Additional Help Section
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),

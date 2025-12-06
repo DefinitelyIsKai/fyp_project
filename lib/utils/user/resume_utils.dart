@@ -7,7 +7,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/user/resume_attachment.dart';
 
-/// Returns true if the attachment could be opened successfully.
 Future<bool> openResumeAttachment(ResumeAttachment attachment) async {
   if (attachment.hasRemoteUrl) {
     final uri = Uri.tryParse(attachment.downloadUrl!);

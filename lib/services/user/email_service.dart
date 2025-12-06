@@ -3,23 +3,14 @@ import 'package:mailer/smtp_server.dart';
 import 'package:flutter/foundation.dart';
 
 class EmailService {
-  // SMTP 配置选项：
-  // 选项 1: Gmail (推荐 - 更可靠)
-  // 选项 2: Office 365 (如果 IT 部门允许 SMTP 访问)
-  
-  // ===== Gmail 配置 =====
   static const String _smtpHost = 'smtp.gmail.com';
   static const int _smtpPort = 587;
-  static const String _senderEmail = 'lowbryan022@gmail.com'; // 你的 Gmail
-  static const String _senderPassword = 'jcvsitkyjscsoyho'; // Gmail App Password
+  static const String _senderEmail = 'lowbryan022@gmail.com'; 
+  static const String _senderPassword = 'jcvsitkyjscsoyho'; 
   
-  // ===== Office 365 配置 (备用) =====
-  // static const String _smtpHost = 'smtp.office365.com';
-  // static const int _smtpPort = 587;
-  // static const String _senderEmail = 'lowkh-wm22@student.tarc.edu.my';
-  // static const String _senderPassword = 'swewaktbmtszlwfz';
+ 
 
-  /// Send email notification when booking request is approved
+  //approved
   Future<void> sendBookingApprovalEmail({
     required String recipientEmail,
     required String recipientName,
@@ -29,19 +20,17 @@ class EmailService {
     required String jobTitle,
   }) async {
     try {
-      // 创建 SMTP 服务器配置
-      // Office 365 使用 STARTTLS (port 587)
-      // 注意：确保使用正确的 App Password，不是普通密码
+      
       final smtpServer = SmtpServer(
         _smtpHost,
         port: _smtpPort,
-        ssl: false, // Use STARTTLS, not SSL
+        ssl: false, //STARTTLS
         allowInsecure: false,
         username: _senderEmail,
         password: _senderPassword,
       );
 
-      // 创建邮件消息
+   
       final message = Message()
         ..from = Address(_senderEmail, 'JobSeek Team')
         ..recipients.add(recipientEmail)
@@ -61,7 +50,7 @@ class EmailService {
           jobTitle: jobTitle,
         );
 
-      // 发送邮件
+     
       debugPrint('Attempting to send email via SMTP...');
       debugPrint('SMTP Host: $_smtpHost');
       debugPrint('SMTP Port: $_smtpPort');
@@ -136,7 +125,7 @@ class EmailService {
       <body>
         <div class="container">
           <div class="header">
-            <h1>Booking Approved! 🎉</h1>
+            <h1>Booking Approved!</h1>
           </div>
           <div class="content">
             <p>Dear $recipientName,</p>
@@ -202,7 +191,7 @@ class EmailService {
     ''';
   }
 
-  /// Send email notification when booked slot is cancelled/deleted
+ 
   Future<void> sendBookingCancellationEmail({
     required String recipientEmail,
     required String recipientName,
@@ -212,17 +201,17 @@ class EmailService {
     required String jobTitle,
   }) async {
     try {
-      // Create SMTP server configuration
+      //SMTP configuration
       final smtpServer = SmtpServer(
         _smtpHost,
         port: _smtpPort,
-        ssl: false, // Use STARTTLS, not SSL
+        ssl: false, //STARTTLS
         allowInsecure: false,
         username: _senderEmail,
         password: _senderPassword,
       );
 
-      // Create email message
+      //create  message
       final message = Message()
         ..from = Address(_senderEmail, 'JobSeek Team')
         ..recipients.add(recipientEmail)
@@ -242,7 +231,7 @@ class EmailService {
           jobTitle: jobTitle,
         );
 
-      // Send email
+    
       debugPrint('Attempting to send cancellation email via SMTP...');
       debugPrint('SMTP Host: $_smtpHost');
       debugPrint('SMTP Port: $_smtpPort');
@@ -324,7 +313,7 @@ class EmailService {
       <body>
         <div class="container">
           <div class="header">
-            <h1>Booking Cancelled ⚠️</h1>
+            <h1>Booking Cancelled</h1>
           </div>
           <div class="content">
             <p>Dear $recipientName,</p>

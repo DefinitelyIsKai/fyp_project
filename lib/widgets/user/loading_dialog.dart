@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Reusable loading dialog widget
-/// 
-/// Provides consistent loading dialog UI
 class LoadingDialog extends StatelessWidget {
   final String? message;
   final Color? color;
@@ -13,7 +10,7 @@ class LoadingDialog extends StatelessWidget {
     this.color,
   });
 
-  /// Shows a loading dialog
+  //load
   static void show({
     required BuildContext context,
     String? message,
@@ -26,7 +23,7 @@ class LoadingDialog extends StatelessWidget {
     );
   }
 
-  /// Closes the loading dialog if it's open
+  //close
   static void hide(BuildContext context) {
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();

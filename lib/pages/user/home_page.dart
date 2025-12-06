@@ -38,7 +38,6 @@ class _HomePageState extends State<HomePage> {
       final userId = _authService.currentUserId;
       return _firestore.collection('users').doc(userId).snapshots();
     } catch (e) {
-      // Return empty stream if user not authenticated
       return const Stream<DocumentSnapshot<Map<String, dynamic>>>.empty();
     }
   }
@@ -92,13 +91,12 @@ class _HomePageState extends State<HomePage> {
       ];
 
   void _onItemTapped(int index, String? userStatus) {
-    // Block navigation to all tabs except Profile (index 4) if suspended
     if (_isSuspended(userStatus) && index != 4) {
       DialogUtils.showWarningMessage(
         context: context,
         message: 'Your account has been suspended. You can only access your profile page.',
       );
-      // Force navigation to Profile page
+
       setState(() {
         _selectedIndex = 4;
       });
@@ -107,8 +105,8 @@ class _HomePageState extends State<HomePage> {
     
     setState(() {
       _selectedIndex = index;
-      // Clear initial search events when switching away from search tab
-      // This allows filters to be reset when user navigates back
+      //clear initial search events
+     
       if (index != 1) {
         _initialSearchEvents = null;
       }
@@ -132,7 +130,6 @@ class _HomePageState extends State<HomePage> {
         final isSuspended = _isSuspended(userStatus);
         final pages = _buildPages(userRole, isSuspended);
         
-        // Force Profile page if suspended and not already on it
         if (isSuspended && _selectedIndex != 4) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -144,19 +141,15 @@ class _HomePageState extends State<HomePage> {
         }
         
         return PopScope(
-          canPop: false, // Prevent default back navigation
+          canPop: false, 
           onPopInvokedWithResult: (didPop, result) {
             if (!didPop) {
-              // Check if we're on the MatchingInteractionPage (index 2) which contains booking page
-              // If so, the booking page's PopScope will handle internal navigation
-              // Only show logout dialog if we're not on a page with internal navigation
+              
               final isOnMatchingPage = _selectedIndex == 2;
               
               if (!isOnMatchingPage) {
-                // Show logout confirmation dialog when trying to go back or swipe
                 _showLogoutDialog(context);
               }
-              // If on matching page, let the booking page handle its own navigation
             }
           },
           child: Scaffold(
@@ -318,12 +311,12 @@ class _HomeTabState extends State<_HomeTab> {
     super.initState();
     _popularCategoriesStream = _categoryService.streamPopularCategories(limit: 4);
     _loadProfile();
-    //GPS fecthing
+    //GPS 
     _resolveDeviceLocation();
-    // Auto-complete expired posts when home page loads
+
     _postService.autoCompleteExpiredPosts().catchError((error) {
       debugPrint('Error auto-completing expired posts: $error');
-      return 0; // Return 0 on error
+      return 0; 
     });
   }
 
@@ -337,7 +330,6 @@ class _HomeTabState extends State<_HomeTab> {
         _role = role;
         _profileLoading = false;
         _profileError = null;
-        // If user is recruiter, show their own posts; otherwise show popular posts
         _popularPostsStream = role == 'recruiter'
             ? _postService.streamMyPosts()
             : _postService.streamPopularPosts(
@@ -395,7 +387,6 @@ class _HomeTabState extends State<_HomeTab> {
           final place = placemarks.first;
           final parts = <String>[];
           
-          // Add street address if available (most precise)
           if ((place.street ?? '').isNotEmpty) {
             parts.add(place.street!);
           } else if ((place.subThoroughfare ?? '').isNotEmpty || 
@@ -412,40 +403,34 @@ class _HomeTabState extends State<_HomeTab> {
             }
           }
           
-          // Add sub-locality (neighborhood/district) if available
           if ((place.subLocality ?? '').isNotEmpty) {
             parts.add(place.subLocality!);
           }
           
-          // Add locality (city)
           if ((place.locality ?? '').isNotEmpty) {
             parts.add(place.locality!);
           }
           
-          // Add postal code if available
           if ((place.postalCode ?? '').isNotEmpty) {
             parts.add(place.postalCode!);
           }
           
-          // Add administrative area (state/province)
           if ((place.administrativeArea ?? '').isNotEmpty) {
             parts.add(place.administrativeArea!);
           }
           
-          // Add country
           if ((place.country ?? '').isNotEmpty) {
             parts.add(place.country!);
           }
           
           locationLabel = parts.where((p) => p.trim().isNotEmpty).join(', ');
           
-          // If we still don't have a good address, use formatted address
           if (locationLabel.isEmpty && (place.name ?? '').isNotEmpty) {
             locationLabel = place.name!;
           }
         }
       } catch (_) {
-        // Ignore geocoding errors; fallback to coordinates
+        
       }
 
       locationLabel ??=
@@ -652,7 +637,6 @@ class _HomeTabState extends State<_HomeTab> {
 
             const SizedBox(height: 24),
 
-            // Featured Jobs Section
             Row(
               children: [
                 Container(
@@ -684,7 +668,7 @@ class _HomeTabState extends State<_HomeTab> {
             ),
             const SizedBox(height: 16),
 
-            // Featured job cards from Firestore
+           
             StreamBuilder<List<Post>>(
               stream: _popularPostsStream,
               builder: (context, snapshot) {
@@ -724,7 +708,7 @@ class _HomeTabState extends State<_HomeTab> {
                     ),
                   );
                 }
-                // Filter out drafts and limit to maximum 3 posts
+                //no draft
                 final List<Post> posts = (snapshot.data ?? <Post>[])
                     .where((p) => !p.isDraft)
                     .take(3)
@@ -988,7 +972,7 @@ class _HomeTabState extends State<_HomeTab> {
 
             const SizedBox(height: 24),
 
-            // Popular Categories Section
+        
             Row(
               children: [
                 Container(
@@ -1091,7 +1075,6 @@ class _HomeTabState extends State<_HomeTab> {
                     final category = categories[index];
                     return InkWell(
                       onTap: () {
-                        // Navigate to search tab with this category selected
                         widget.onNavigateToSearch([category.name]);
                       },
                       borderRadius: BorderRadius.circular(12),

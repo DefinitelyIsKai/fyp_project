@@ -129,8 +129,7 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
     setState(() {
       _isMapView = value;
       if (value) {
-        // Only reset map state if map controller doesn't exist yet
-        // This prevents unnecessary map recreation when switching views
+        //no map recreation 
         if (_mapController == null) {
           _mapReady = false;
           _mapError = null;
@@ -174,12 +173,12 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
 
   BitmapDescriptor? get userLocationIcon => _userLocationIcon;
 
-  /// Handle real-time search text changes with debouncing
+  
   void _onSearchTextChanged() {
-    // Cancel previous timer if it exists
+    
     _searchDebounceTimer?.cancel();
     
-    // Create a new timer that will trigger search after user stops typing
+    // timer trigger search when no type
     _searchDebounceTimer = Timer(_searchDebounceDelay, () {
       if (mounted) {
         _performSearch();
@@ -193,7 +192,6 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
       _searchQuery = _searchController.text.trim().isEmpty
           ? null
           : _searchController.text.trim();
-      // Invalidate cache when search changes
       _cachedPostsStream = null;
     });
     if (_isMapView) {
@@ -201,14 +199,14 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
     }
   }
 
-  /// Get the posts stream with caching to prevent duplicate stream creation
+  
   Stream<List<Post>> getPostsStream() {
     if (_cachedPostsStream != null) {
       return _cachedPostsStream!;
     }
 
-    // Create the stream once and cache it
-    // The stream will be recreated when filters change (cache is cleared)
+   
+    //stream recreated due filter
     _cachedPostsStream = _postService.searchPosts(
       query: _searchQuery,
       location: _locationFilter,
@@ -220,12 +218,12 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
     return _cachedPostsStream!;
   }
 
-  // Calculate distance between two coordinates in kilometers
+  //calculate distance
   double calculateDistance(LatLng point1, LatLng point2) {
     return MapHelper.calculateDistance(point1, point2);
   }
 
-  // Filter posts by distance from user location if search radius is set
+  //filter distance from user location
   List<Post> filterPostsByDistance(List<Post> posts) {
     if (_userLocation == null || _searchRadius == null) {
       return posts;
@@ -237,16 +235,14 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
         final distance = calculateDistance(_userLocation!, postLocation);
         return distance <= _searchRadius!;
       } else if (post.location.isNotEmpty) {
-        // Include posts with location text but no coordinates
-        // They will be filtered during marker creation if needed
         return true;
       } else {
-        return false; // Skip posts without location
+        return false;
       }
     }).toList();
   }
 
-  // Create a simple circular dot marker bitmap
+  //dot marker
   Future<BitmapDescriptor> createDotMarker(
     Color color, {
     int size = 96,
@@ -256,7 +252,7 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
 
   Future<void> _getCurrentLocation() async {
     try {
-      // Check if location services are enabled
+      //check servie
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         if (mounted) {
@@ -269,7 +265,7 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
         return;
       }
 
-      // Check location permissions
+      //permissions
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
@@ -295,12 +291,12 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
         return;
       }
 
-      // Get current position
+      //current position
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      // Prepare custom user icon once
+      //icon once
       _userLocationIcon ??= await MapHelper.createDotMarker(const Color(0xFF00C8A0));
 
       if (!mounted) return;
@@ -318,7 +314,7 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
               strokeWidth: 1,
             ),
           );
-        // Clear cache when user location changes to recalculate distance filters
+        // Clear cache 
         _cachedPostsStream = null;
       });
 
@@ -339,8 +335,7 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
             ),
           );
         }
-        // After centering on user, enable job markers and load them
-        // Only update if markers aren't already shown to prevent duplicate calls
+        //center on user, load job markers
         if (mounted && !_showJobMarkers) {
           setState(() => _showJobMarkers = true);
           WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -361,7 +356,6 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
     }
   }
 
-  /// Safely call camera operations with retry logic
   Future<bool> safeCameraOperation(
     Future<void> Function() operation, {
     int maxRetries = 3,
@@ -385,7 +379,7 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
   Future<void> _updateMapMarkers() async {
     if (!mounted) return;
     if (!_isMapView) return;
-    if (!_showJobMarkers) return; // wait until user location has been shown
+    if (!_showJobMarkers) return;
 
     var posts = await _postService
         .searchPosts(
@@ -397,14 +391,12 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
         )
         .first;
 
-    if (!mounted) return; // Check again after async operation
+    if (!mounted) return; 
 
-    // Filter posts - implemented by subclasses
     posts = filterPostsForUser(posts);
 
     _markers.clear();
 
-    // Filter posts by distance from user location if available
     List<Post> nearbyPosts = posts;
     if (_userLocation != null && _searchRadius != null) {
       nearbyPosts = posts.where((post) {
@@ -413,52 +405,48 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
           final distance = calculateDistance(_userLocation!, postLocation);
           return distance <= _searchRadius!;
         } else if (post.location.isNotEmpty) {
-          // We'll need to geocode this, but for now include it
-          // Will be filtered during marker creation
           return true;
         } else {
-          return false; // Skip posts without location
+          return false;
         }
       }).toList();
     }
 
     for (final post in nearbyPosts) {
-      // Use stored coordinates if available, otherwise try geocoding
       LatLng? position;
 
       if (post.latitude != null && post.longitude != null) {
-        // Use stored coordinates
         position = LatLng(post.latitude!, post.longitude!);
       } else if (post.location.isNotEmpty) {
-        // Fallback to geocoding if coordinates not available
-        if (!mounted) return; // Check before async geocoding
+        //geocoding
+        if (!mounted) return; 
         try {
           final locations = await locationFromAddress(post.location);
-          if (!mounted) return; // Check after async geocoding
+          if (!mounted) return; 
           if (locations.isNotEmpty) {
             position = LatLng(
               locations.first.latitude,
               locations.first.longitude,
             );
 
-            // Check distance if we have user location
+            //distance checking
             if (_userLocation != null && _searchRadius != null) {
               final distance = calculateDistance(_userLocation!, position);
               if (distance > _searchRadius!) {
-                continue; // Skip if too far
+                continue; 
               }
             }
           }
         } catch (e) {
           debugPrint('Error geocoding location ${post.location}: $e');
-          continue; // Skip this post if geocoding fails
+          continue; 
         }
       } else {
-        continue; // Skip posts without location
+        continue; 
       }
 
       if (position != null) {
-        // Calculate distance for info window
+        //distance  info 
         String distanceText = '';
         if (_userLocation != null) {
           final distance = calculateDistance(_userLocation!, position);
@@ -490,10 +478,10 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
     if (mounted) {
       setState(() {});
 
-      // Center map on user location if available, otherwise fit to markers
+      //center map on user location
       if (_userLocation != null && _mapController != null && _mapChannelReady) {
         if (_markers.isEmpty) {
-          // No nearby jobs, show user location with distance range circle if enabled
+          //show user location with distance range 
           double zoomLevel = 12;
           if (_searchRadius != null) {
             zoomLevel = 15 - (_searchRadius! / 10).clamp(0, 7);
@@ -505,13 +493,11 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
             ),
           );
         } else {
-          // Fit map to show user location and all markers with padding
           final allPoints = [
             _userLocation!,
             ..._markers.values.map((m) => m.position),
           ];
           final bounds = calculateBounds(allPoints);
-          // Add padding based on search radius to ensure all markers are visible
           await MapHelper.safeCameraOperation(
             _mapController!,
             () => _mapController!.animateCamera(
@@ -519,7 +505,6 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
             ),
           );
         }
-        // Update user circle to reflect search radius
         if (mounted) {
           setState(() {
             _userCircles.clear();
@@ -528,8 +513,8 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
                 Circle(
                   circleId: const CircleId('user_radius'),
                   center: _userLocation!,
-                  radius: _searchRadius! * 1000, // Convert km to meters
-                  fillColor: const Color(0x3300C8A0), // translucent teal
+                  radius: _searchRadius! * 1000, //km
+                  fillColor: const Color(0x3300C8A0), //
                   strokeColor: const Color(0xFF00C8A0),
                   strokeWidth: 2,
                 ),
@@ -539,7 +524,7 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
                 Circle(
                   circleId: const CircleId('user_accuracy'),
                   center: _userLocation!,
-                  radius: 2000, // default accuracy circle
+                  radius: 2000, 
                   fillColor: const Color(0x3300C8A0),
                   strokeColor: const Color(0xFF00C8A0),
                   strokeWidth: 1,
@@ -551,7 +536,6 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
       } else if (_markers.isNotEmpty &&
           _mapController != null &&
           _mapChannelReady) {
-        // No user location, just fit to markers
         final bounds = calculateBounds(
           _markers.values.map((m) => m.position).toList(),
         );
@@ -590,7 +574,6 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
         _searchRadius = result['distanceRange'] as double?;
         final events = result['events'] as List<String>? ?? const [];
         _selectedEvents = List<String>.from(events);
-        // Invalidate cache when filters change
         _cachedPostsStream = null;
       });
       if (_isMapView) {
@@ -599,13 +582,13 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
     }
   }
 
-  // Abstract methods for subclasses to implement
+  
   List<Post> filterPostsForUser(List<Post> posts);
   Widget onPostTap(Post post);
   String getResultsHeaderText(int count);
   Widget buildPostCard(Post post, double? distance);
 
-  // Helper methods
+  
   void updatePages(List<Post> posts) {
     final postsChanged =
         _lastPosts == null ||
@@ -616,7 +599,7 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
     if (postsChanged) {
       _lastPosts = posts;
       final newPages = PostUtils.computePages(posts, itemsPerPage: _itemsPerPage);
-      // Always defer setState to avoid calling during build
+      //defer setState 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           setState(() {
@@ -630,7 +613,6 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
     }
   }
 
-  // Build methods
   Widget buildSearchBar() {
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -654,14 +636,12 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
             suffixIcon: IconButton(
               icon: Icon(Icons.clear, color: Colors.grey[600]),
               onPressed: () {
-                // Cancel any pending search timer
                 _searchDebounceTimer?.cancel();
                 _searchController.clear();
-                // Immediately update search since user explicitly cleared
+                //real time update
                 if (mounted) {
                   setState(() {
                     _searchQuery = null;
-                    // Invalidate cache when search is cleared
                     _cachedPostsStream = null;
                   });
                 }
@@ -677,7 +657,7 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
             ),
           ),
           onSubmitted: (_) {
-            // Cancel debounce timer and perform search immediately on submit
+            //rmove debounce timer 
             _searchDebounceTimer?.cancel();
             _performSearch();
           },
@@ -708,25 +688,21 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
 
   String getSearchHintText() => 'Search jobs...';
 
-  // Build map view - to be implemented by subclasses or use default
   Widget buildMapView() {
-    // Set initial camera position based on user location or default
     LatLng initialTarget =
         _userLocation ??
         const LatLng(2.7456, 101.7072); // Default to Malaysia center
     double initialZoom = _userLocation != null ? 12 : 5;
 
-    // Combine user location marker and job markers
-    // 只显示 job 标记，用户位置使用系统位置指示器（myLocationEnabled）
     Set<Marker> allMarkers = _showJobMarkers
         ? Set.from(_markers.values)
         : <Marker>{};
-    // 移除自定义用户位置标记，使用系统位置指示器
+
 
     return Stack(
       children: [
         GoogleMap(
-          key: const ValueKey('search_discovery_map'), // Stable key to prevent recreation
+          key: const ValueKey('search_discovery_map'), 
           initialCameraPosition: CameraPosition(
             target: initialTarget,
             zoom: initialZoom,
@@ -734,7 +710,6 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
           markers: allMarkers,
           circles: _userCircles,
           onMapCreated: (GoogleMapController controller) async {
-            // Prevent multiple initializations if map is already created
             if (_mapController != null && _mapController != controller) {
               debugPrint('Map controller already exists, skipping initialization');
               return;
@@ -742,7 +717,6 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
             _mapController = controller;
             debugPrint('GoogleMap created successfully');
 
-            // Wait longer for map to fully initialize before doing operations
             await Future.delayed(const Duration(milliseconds: 1500));
 
             if (!mounted) return;
@@ -815,7 +789,6 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
                     _mapReady = true;
                     _mapError = null;
                   });
-                  // Update markers after state is set, but don't delay unnecessarily
                   WidgetsBinding.instance.addPostFrameCallback((_) async {
                     if (mounted && _mapController != null) {
                       await _updateMapMarkers();
@@ -843,7 +816,6 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
                       );
                       if (mounted && !_showJobMarkers) {
                         setState(() => _showJobMarkers = true);
-                        // Update markers after state is set
                         WidgetsBinding.instance.addPostFrameCallback((_) async {
                           if (mounted && _mapController != null) {
                             await _updateMapMarkers();
@@ -877,10 +849,7 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
             debugPrint('Map tapped at: $position');
           },
           onCameraIdle: () {
-            // Only update markers if map is ready, markers are enabled, and we have no markers
-            // Add a small debounce to prevent multiple rapid calls
             if (_mapReady && _showJobMarkers && _markers.isEmpty && _mapController != null) {
-              // Use a timer to debounce rapid camera idle events
               _delayedMapUpdateTimer?.cancel();
               _delayedMapUpdateTimer = Timer(const Duration(milliseconds: 300), () {
                 if (mounted && _mapReady && _showJobMarkers && _markers.isEmpty) {

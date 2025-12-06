@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 
-/// Utility class for consistent button styles
-/// 
-/// Provides pre-configured button styles matching the app theme
-class ButtonStyles {
-  /// Primary app color
-  static const Color primaryColor = Color(0xFF00C8A0);
 
-  /// Standard primary elevated button style
+
+class ButtonStyles {
+  
+  static const Color primaryColor = Color(0xFF00C8A0);
   static ButtonStyle primaryElevated({
     double? borderRadius,
     EdgeInsetsGeometry? padding,
@@ -25,7 +22,6 @@ class ButtonStyles {
     );
   }
 
-  /// Primary filled button style
   static ButtonStyle primaryFilled({
     double? borderRadius,
     EdgeInsetsGeometry? padding,
@@ -40,7 +36,6 @@ class ButtonStyles {
     );
   }
 
-  /// Primary outlined button style
   static ButtonStyle primaryOutlined({
     double? borderRadius,
     EdgeInsetsGeometry? padding,
@@ -55,7 +50,6 @@ class ButtonStyles {
     );
   }
 
-  /// Secondary (white background) button style
   static ButtonStyle secondaryElevated({
     double? borderRadius,
     EdgeInsetsGeometry? padding,
@@ -72,7 +66,6 @@ class ButtonStyles {
     );
   }
 
-  /// Disabled button style
   static ButtonStyle disabled({
     double? borderRadius,
     EdgeInsetsGeometry? padding,
@@ -88,7 +81,6 @@ class ButtonStyles {
     );
   }
 
-  /// Destructive (red) button style
   static ButtonStyle destructive({
     double? borderRadius,
     EdgeInsetsGeometry? padding,
@@ -104,7 +96,6 @@ class ButtonStyles {
     );
   }
 
-  /// Small button style (for compact spaces)
   static ButtonStyle small({
     Color? backgroundColor,
     Color? foregroundColor,

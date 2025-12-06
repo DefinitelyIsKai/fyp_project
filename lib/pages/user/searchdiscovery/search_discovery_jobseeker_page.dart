@@ -52,7 +52,6 @@ class _SearchDiscoveryJobseekerPageState
 
   @override
   List<Post> filterPostsForUser(List<Post> posts) {
-    // Jobseekers see all posts (no filtering by owner)
     return posts;
   }
 
@@ -99,16 +98,13 @@ class _SearchDiscoveryJobseekerPageState
           buildSearchBar(),
           buildFilterButton(),
           const SizedBox(height: 16),
-          // Results Header and View Toggle
           StreamBuilder<List<Post>>(
             key: ValueKey('${searchQuery}_${locationFilter}_${minBudget}_${maxBudget}_${selectedEvents.join(",")}_${searchRadius}_${userLocation?.latitude}_${userLocation?.longitude}'),
             stream: getPostsStream(),
             builder: (context, snapshot) {
               var posts = snapshot.data ?? [];
               posts = filterPostsForUser(posts);
-              // Apply distance filter to match map markers
               posts = filterPostsByDistance(posts);
-
               return Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16.0,
@@ -150,7 +146,6 @@ class _SearchDiscoveryJobseekerPageState
                               setMapView(true);
                               WidgetsBinding.instance.addPostFrameCallback((_) {
                                 if (mounted && mapController != null) {
-                                  // Update markers will be called by base class
                                 }
                               });
                             },
@@ -176,9 +171,8 @@ class _SearchDiscoveryJobseekerPageState
       color: const Color(0xFF00C8A0),
       child: StreamBuilder<List<Post>>(
       stream: getPostsStream(),
-      initialData: lastPosts, // Use last known posts as initial data
+      initialData: lastPosts,
       builder: (context, snapshot) {
-        // Handle errors first
         if (snapshot.hasError) {
           return SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -210,12 +204,8 @@ class _SearchDiscoveryJobseekerPageState
           );
         }
 
-        // Get posts data - use snapshot data if available
-        // With initialData, snapshot.hasData will be true immediately
         var posts = snapshot.data ?? [];
         
-        // Only show loading if we're truly waiting with no data at all
-        // initialData ensures we have data immediately when switching views
         if (posts.isEmpty && 
             snapshot.connectionState == ConnectionState.waiting &&
             !snapshot.hasData &&
@@ -233,7 +223,6 @@ class _SearchDiscoveryJobseekerPageState
         
         posts = filterPostsForUser(posts);
 
-        // Filter by distance if user location is available
         List<Post> nearbyPosts = List<Post>.from(posts);
         if (userLocation != null && searchRadius != null) {
           nearbyPosts = nearbyPosts.where((post) {
@@ -246,9 +235,6 @@ class _SearchDiscoveryJobseekerPageState
           }).toList();
         }
 
-        // Sort posts
-        // Only sort by distance if both userLocation and searchRadius are available
-        // Otherwise, sort by creation date (newest first)
         if (userLocation != null && searchRadius != null) {
           nearbyPosts.sort((a, b) {
             if (a.latitude == null || a.longitude == null) {
@@ -275,12 +261,11 @@ class _SearchDiscoveryJobseekerPageState
             return distanceComparison;
           });
         } else {
-          // Sort by creation date descending (newest first) when no distance filter is active
+          //sort creation date descending when no distance filter is active
           nearbyPosts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         }
 
         if (nearbyPosts.isEmpty) {
-          // Update pages even if empty to clear previous state
           updatePages(nearbyPosts);
           return SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -319,11 +304,7 @@ class _SearchDiscoveryJobseekerPageState
           );
         }
 
-        // Compute pages directly from nearbyPosts (don't wait for state update)
-        // This ensures immediate display when switching views
         final computedPages = PostUtils.computePages(nearbyPosts, itemsPerPage: 10);
-        
-        // Update pages state in background (for caching, but don't wait for it)
         updatePages(nearbyPosts);
 
         if (computedPages.isEmpty) {
@@ -415,10 +396,8 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
   bool _isApplying = false;
 
   Future<void> _handleApply(BuildContext context) async {
-    // Prevent multiple simultaneous executions
     if (_isApplying || !mounted) return;
     
-    // Check if event starts today or tomorrow (prevent applying on event day or one day before)
     if (widget.post.eventStartDate != null) {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
@@ -429,7 +408,7 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
         eventStartDate.day,
       );
       final tomorrow = DateTime(today.year, today.month, today.day + 1);
-      // Cannot apply if event starts today or tomorrow
+      //no apply if event starts today or tomorrow
       if (eventStartDateOnly.isAtSameMomentAs(today) || 
           eventStartDateOnly.isAtSameMomentAs(tomorrow) ||
           eventStartDateOnly.isBefore(today)) {
@@ -442,7 +421,6 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
       }
     }
     
-    // Show confirmation dialog
     final confirmed = await DialogUtils.showConfirmationDialog(
       context: context,
       title: 'Apply to Job',
@@ -699,7 +677,7 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                   StreamBuilder<List<Application>>(
                     stream: widget.applicationService.streamMyApplications(),
                     builder: (context, applicationsSnapshot) {
-                      // Find application for this post
+                      //application of post
                       final applications = applicationsSnapshot.data ?? [];
                       final application = applications.firstWhere(
                         (app) => app.postId == widget.post.id,
@@ -714,14 +692,13 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                       );
                       final hasApplied = application.postId == widget.post.id;
                       
-                      // Stream post document for real-time quota updates
+                      //real-time quota updates
                       return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                         stream: FirebaseFirestore.instance
                             .collection('posts')
                             .doc(widget.post.id)
                             .snapshots(),
                         builder: (context, postSnapshot) {
-                          // Helper to safely parse int from Firestore (handles int, double, num)
                           int? _parseInt(dynamic value) {
                             if (value == null) return null;
                             if (value is int) return value;
@@ -741,10 +718,7 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                           }
                           
                           final applicantQuota = widget.post.applicantQuota;
-                          final isQuotaReached = applicantQuota != null && 
-                                                approvedCount >= applicantQuota;
-                          
-                          // Check if event starts today or tomorrow (cannot apply on event day or one day before)
+                          final isQuotaReached = applicantQuota != null && approvedCount >= applicantQuota;
                           bool isEventStartingSoon = false;
                           if (widget.post.eventStartDate != null) {
                             final now = DateTime.now();
@@ -756,26 +730,16 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                               eventStartDate.day,
                             );
                             final tomorrow = DateTime(today.year, today.month, today.day + 1);
-                            // Cannot apply if event starts today or tomorrow
-                            isEventStartingSoon = eventStartDateOnly.isAtSameMomentAs(today) || 
-                                                 eventStartDateOnly.isAtSameMomentAs(tomorrow) ||
-                                                 eventStartDateOnly.isBefore(today);
+                            isEventStartingSoon = eventStartDateOnly.isAtSameMomentAs(today) || eventStartDateOnly.isAtSameMomentAs(tomorrow) ||eventStartDateOnly.isBefore(today);
                           }
                           
-                          final bool isDisabled = hasApplied ||
-                                                _isApplying ||
-                                                widget.post.status == PostStatus.completed ||
-                                                widget.post.status == PostStatus.pending ||
-                                                isOwnPost ||
-                                                isQuotaReached ||
-                                                isEventStartingSoon;
+                          final bool isDisabled = hasApplied ||_isApplying ||widget.post.status == PostStatus.completed ||widget.post.status == PostStatus.pending ||isOwnPost ||isQuotaReached ||isEventStartingSoon;
                           
-                          // Determine button text based on application status
-                          String buttonText = 'Apply (100 pts)'; // Default
+                          
+                          String buttonText = 'Apply (100 pts)'; 
                           if (isOwnPost) {
                             buttonText = 'Your Post';
                           } else if (hasApplied) {
-                            // Show actual application status
                             switch (application.status) {
                               case ApplicationStatus.pending:
                                 buttonText = 'Pending';

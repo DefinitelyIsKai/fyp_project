@@ -3,11 +3,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../../models/user/post.dart';
-import '../../models/user/app_notification.dart';
 import 'wallet_service.dart';
 import 'notification_service.dart';
 import 'category_service.dart';
-import 'application_service.dart';
+import 'cloud_functions_service.dart';
 
 enum PopularPostMetric { views, applicants }
 
@@ -18,20 +17,17 @@ class PostService {
     WalletService? walletService,
     NotificationService? notificationService,
     CategoryService? categoryService,
-    ApplicationService? applicationService,
   }) : _firestore = firestore ?? FirebaseFirestore.instance,
        _auth = auth ?? FirebaseAuth.instance,
        _walletService = walletService ?? WalletService(),
        _notificationService = notificationService ?? NotificationService(),
-       _categoryService = categoryService ?? CategoryService(),
-       _applicationService = applicationService ?? ApplicationService();
+       _categoryService = categoryService ?? CategoryService();
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
   final WalletService _walletService;
   final NotificationService _notificationService;
   final CategoryService _categoryService;
-  final ApplicationService _applicationService;
 
   CollectionReference<Map<String, dynamic>> get _col =>
       _firestore.collection('posts');
@@ -49,7 +45,7 @@ class PostService {
               .map((d) => _fromDoc(d))
               .where((post) {
                 if (post.status == PostStatus.deleted) return false;
-                // Exclude rejected posts by default, unless includeRejected is true
+                //exclude rejected posts 
                 if (!includeRejected && post.status == PostStatus.rejected) return false;
                 return true;
               })
@@ -58,7 +54,6 @@ class PostService {
           return posts;
         })
         .handleError((error) {
-          // Ignore permission errors during logout - return empty list instead
           debugPrint('Error in streamMyPosts (likely during logout): $error');
           return <Post>[];
         });
@@ -157,7 +152,7 @@ class PostService {
       final data = doc.data();
       if (data == null) return null;
       final post = _fromDoc(doc);
-      // Return null if post is deleted or rejected (makes it unavailable)
+      //null post deleted or rejected 
       if (post.status == PostStatus.deleted || post.status == PostStatus.rejected) return null;
       return post;
     } catch (e) {
@@ -166,7 +161,6 @@ class PostService {
     }
   }
 
-  // Get post by ID including deleted posts (useful for showing deleted status in applications)
   Future<Post?> getByIdIncludingDeleted(String postId) async {
     try {
       final doc = await _col.doc(postId).get();
@@ -180,31 +174,7 @@ class PostService {
     }
   }
 
-  // Stream a single post by ID for real-time updates (e.g., quota changes)
-  // Returns both the Post object and raw document data for fields not in Post model
-  Stream<Map<String, dynamic>> streamPostByIdWithData(String postId) {
-    return _col.doc(postId).snapshots().map((doc) {
-      if (!doc.exists) {
-        return {'post': null, 'data': null};
-      }
-      final data = doc.data();
-      if (data == null) {
-        return {'post': null, 'data': null};
-      }
-      try {
-        final post = _fromDoc(doc);
-        return {'post': post, 'data': data};
-      } catch (e) {
-        debugPrint('Error parsing post from stream: $e');
-        return {'post': null, 'data': data};
-      }
-    }).handleError((error) {
-      debugPrint('Error streaming post $postId: $error');
-      return {'post': null, 'data': null};
-    });
-  }
-
-  // Stream a single post by ID for real-time updates (e.g., quota changes)
+  //stream a single post by ID for real-time updates 
   Stream<Post?> streamPostById(String postId) {
     return _col.doc(postId).snapshots().map((doc) {
       if (!doc.exists) return null;
@@ -223,21 +193,17 @@ class PostService {
   }
 
   Future<Post> create(Post post) async {
-    // Check if user is authenticated
     final currentUser = _auth.currentUser;
     if (currentUser == null) {
       throw Exception('User must be logged in to create a post. Please sign in and try again.');
     }
     
-    // Use provided post ID if available (for new posts with images), otherwise generate new one
+    //post id if available or new one
     final postId = post.id.isNotEmpty ? post.id : _col.doc().id;
     final doc = _col.doc(postId);
     
-    // For new posts, status should be pending (not draft) or keep original status (draft)
-    // When publishing (not draft), status should be pending for admin review
-    // When saving as draft, keep the original status as-is
     final PostStatus initialStatus = post.isDraft 
-        ? post.status  // Keep original status for drafts
+        ? post.status  
         : PostStatus.pending;
     
     final Post toSave = Post(
@@ -272,12 +238,10 @@ class PostService {
     );
     final data = toSave.toMap();
     data['createdAt'] = FieldValue.serverTimestamp();
-    // Initialize approvedApplicants to 0 for new posts
+
     data['approvedApplicants'] = 0;
 
-    // Hold 200 credits if publishing (not draft) - credits are held, not deducted yet
-    // Credits will be deducted when post is approved (status changes to active)
-    // Credits will be released when post is rejected
+    //200 credits need publishing nodrat
     if (!post.isDraft) {
       try {
         await _walletService.holdPostCreationCredits(postId: doc.id, feeCredits: 200);
@@ -299,18 +263,11 @@ class PostService {
       }
       throw Exception('Failed to save post to Firestore: $e');
     }
-    
-    // Increment jobCount for the category/event when post is not a draft
-    // Note: Only increment when post is approved (status = active), not when pending
-    // This will be handled when status changes to active
-    
-    // Notification will be sent when post status changes to 'active' (when admin approves)
-    // This is handled in the admin PostService.approvePost() method
+  
     return toSave;
   }
 
   Future<Post> update(Post post) async {
-    // Check if post is being published (was draft, now not draft)
     final existingDoc = await _col.doc(post.id).get();
     final existingData = existingDoc.data();
     if (existingData == null) {
@@ -328,9 +285,8 @@ class PostService {
     final PostStatus newStatus = post.status;
     final String ownerId = existingData['ownerId'] as String? ?? '';
 
-    // Hold 200 credits if publishing a previously draft post
+    //200 publishing when draft post 
     if (wasDraft && !post.isDraft) {
-      // When publishing draft, set status to pending for admin review
       post = Post(
         id: post.id,
         ownerId: post.ownerId,
@@ -350,9 +306,9 @@ class PostService {
         applicantQuota: post.applicantQuota,
         attachments: post.attachments,
         isDraft: post.isDraft,
-        status: PostStatus.pending, // Set to pending when publishing
+        status: PostStatus.pending, 
         completedAt: post.completedAt,
-        createdAt: post.createdAt,
+        createdAt: DateTime.now(), 
         eventStartDate: post.eventStartDate,
         eventEndDate: post.eventEndDate,
         workTimeStart: post.workTimeStart,
@@ -364,10 +320,9 @@ class PostService {
       await _walletService.holdPostCreationCredits(postId: post.id, feeCredits: 200);
     }
 
-    // Handle status changes for credits processing
-    // Only process if status actually changed and post is not a draft
+ 
     if (!post.isDraft && oldStatus != newStatus) {
-      // Status changed from pending to active (approved) - deduct credits
+      //educt credits
       if (oldStatus == PostStatus.pending && newStatus == PostStatus.active) {
         try {
           final success = await WalletService.deductPostCreationCreditsForUser(
@@ -377,11 +332,10 @@ class PostService {
             feeCredits: 200,
           );
           if (success) {
-            // Increment jobCount when post is approved
             if (post.event.isNotEmpty) {
               await _categoryService.incrementJobCount(post.event);
             }
-            // Send notification to recruiter about approval
+            //noti recruiter 
             if (ownerId.isNotEmpty) {
               try {
                 await _notificationService.notifyWalletDebit(
@@ -410,7 +364,7 @@ class PostService {
             feeCredits: 200,
           );
           if (success && ownerId.isNotEmpty) {
-            // Send notification to recruiter about refund
+            //noti refund
             try {
               await _notificationService.notifyWalletCredit(
                 userId: ownerId,
@@ -424,13 +378,19 @@ class PostService {
           }
         } catch (e) {
           debugPrint('Error releasing post creation credits: $e');
-          // Don't fail the update if credit processing fails
         }
       }
     }
 
     final data = post.toMap();
-    data.remove('createdAt');
+    
+    //publish from draft, update createdAt
+    if (wasDraft && !post.isDraft) {
+      data['createdAt'] = FieldValue.serverTimestamp();
+    } else {
+      //nochange createdAt
+      data.remove('createdAt');
+    }
     
     try {
       await _col.doc(post.id).set(data, SetOptions(merge: true));
@@ -438,14 +398,11 @@ class PostService {
       throw Exception('Failed to update post in Firestore: $e');
     }
 
-    // Notification will be sent when post status changes to 'active' (when admin approves)
-    // This is handled in the admin PostService.approvePost() method
     return post;
   }
 
   Future<void> delete(String id) async {
-    // Get post details before marking as deleted (for notifications)
-    // Fetch directly from Firestore to get post even if already deleted
+    //get post details before marking as deleted 
     Post? post;
     String postTitle = 'your post';
     String? ownerId;
@@ -464,36 +421,7 @@ class PostService {
       debugPrint('Error fetching post $id for deletion: $e');
     }
 
-    // Get all applications for this post to notify jobseekers
-    List<String> jobseekerIds = [];
-    if (ownerId != null && ownerId.isNotEmpty) {
-      try {
-        final applications = await _applicationService.getApplicationsByPostId(
-          postId: id,
-          recruiterId: ownerId,
-        );
-        jobseekerIds = applications.map((app) => app.jobseekerId).toSet().toList();
-      } catch (e) {
-        debugPrint('Error getting applications for post $id: $e');
-      }
-    }
-
-    // Send notifications to jobseekers who applied (using batch method for efficiency)
-    if (jobseekerIds.isNotEmpty) {
-      try {
-        await _notificationService.notifyMultipleUsers(
-          userIds: jobseekerIds,
-          category: NotificationCategory.post,
-          title: 'Post removed',
-          body: 'The post "$postTitle" that you applied to has been removed by the recruiter.',
-          metadata: {'postTitle': postTitle},
-        );
-      } catch (e) {
-        debugPrint('Error notifying jobseekers about post deletion: $e');
-      }
-    }
-
-    // Send notification to recruiter
+    // Notify recruiter about deletion
     if (ownerId != null && ownerId.isNotEmpty) {
       try {
         await _notificationService.notifyPostDeletedToRecruiter(
@@ -504,24 +432,8 @@ class PostService {
         debugPrint('Error notifying recruiter $ownerId about post deletion: $e');
       }
     }
-
-    // Clean up associated applications before marking post as deleted
-    if (ownerId != null && ownerId.isNotEmpty) {
-      try {
-        await _applicationService.deleteApplicationsByPostId(
-          postId: id,
-          recruiterId: ownerId,
-        );
-      } catch (e) {
-        // Log error but continue with post deletion
-        // This ensures post deletion isn't blocked by application cleanup failures
-        debugPrint('Warning: Failed to cleanup applications for post $id: $e');
-      }
-    }
     
-    // Release held credits if post is still pending (not yet approved) and not a draft
-    // Draft posts don't hold credits, so no need to release
-    // If post is active, credits have already been deducted, so no refund
+    //rrelease held credits  post  pending 
     if (ownerId != null && 
         ownerId.isNotEmpty && 
         post != null && 
@@ -535,7 +447,7 @@ class PostService {
           feeCredits: 200,
         );
         if (success) {
-          // Send notification to recruiter about refund
+          //noti refund
           try {
             await _notificationService.notifyWalletCredit(
               userId: ownerId,
@@ -549,17 +461,17 @@ class PostService {
         }
       } catch (e) {
         debugPrint('Error releasing post creation credits for deleted post $id: $e');
-        // Don't fail the deletion if credit release fails
+        
       }
     }
     
-    // Mark the post as deleted instead of actually deleting it
+   
     await _col.doc(id).update({
       'status': PostStatus.deleted.name,
     });
   }
 
-  // Search posts with filters
+ 
   Stream<List<Post>> searchPosts({
     String? query,
     String? location,
@@ -572,9 +484,6 @@ class PostService {
       isEqualTo: false,
     );
 
-    // Apply budget filters if provided
-    // Note: Even with composite index, Firestore doesn't allow two range queries 
-    // on different fields, so we use one in Firestore query and filter the other in memory
     if (minBudget != null) {
       queryRef = queryRef.where('budgetMax', isGreaterThanOrEqualTo: minBudget);
     } else if (maxBudget != null) {
@@ -586,27 +495,22 @@ class PostService {
         .map((snap) {
           var posts = snap.docs.map((d) => _fromDoc(d)).toList();
 
-          // Apply the other budget filter in memory if both are provided
+          //budget filter in memory 
           if (minBudget != null && maxBudget != null) {
-            // minBudget was used in Firestore query (budgetMax >= minBudget),
-            // now filter by maxBudget in memory to ensure post's budget range 
-            // is completely within user's search range
-            // Post matches if: post.budgetMin >= minBudget AND post.budgetMax <= maxBudget
             posts = posts.where((post) {
               if (post.budgetMin == null && post.budgetMax == null) return false;
               
               final postMin = post.budgetMin;
               final postMax = post.budgetMax;
               
-              // If post has both min and max, both must be within user's range
               if (postMin != null && postMax != null) {
                 return postMin >= minBudget && postMax <= maxBudget;
               }
-              // If post only has min, it must be >= user's min and we assume it's acceptable
+            
               if (postMin != null && postMax == null) {
                 return postMin >= minBudget;
               }
-              // If post only has max, it must be <= user's max
+             
               if (postMin == null && postMax != null) {
                 return postMax <= maxBudget;
               }
@@ -615,7 +519,7 @@ class PostService {
             }).toList();
           }
 
-          // Filter by location if provided
+         
           if (location != null && location.isNotEmpty) {
             posts = posts.where((post) {
               return post.location.toLowerCase().contains(
@@ -624,7 +528,7 @@ class PostService {
             }).toList();
           }
 
-          // Filter by industry if provided
+        
           if (industries != null && industries.isNotEmpty) {
             final industrySet = industries.map((i) => i.toLowerCase()).toSet();
             posts = posts.where((post) {
@@ -633,7 +537,7 @@ class PostService {
             }).toList();
           }
 
-          // Filter by search query if provided
+          
           if (query != null && query.isNotEmpty) {
             final queryLower = query.toLowerCase();
             posts = posts.where((post) {
@@ -646,7 +550,7 @@ class PostService {
             }).toList();
           }
 
-          // Filter out pending, completed, deleted, and rejected posts (only show active posts)
+        
           posts = posts.where((post) => 
             post.status != PostStatus.pending && 
             post.status != PostStatus.completed &&
@@ -654,12 +558,12 @@ class PostService {
             post.status != PostStatus.rejected
           ).toList();
 
-          // Sort by createdAt descending (newest first)
+       
           posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           return posts;
         })
         .handleError((error) {
-          // Ignore permission errors during logout - return empty list instead
+         
           debugPrint('Error searching posts (likely during logout): $error');
           return <Post>[];
         });
@@ -670,8 +574,7 @@ class PostService {
     int limit = 5,
   }) {
     final safeLimit = limit <= 0 ? 5 : limit;
-    // Fetch without orderBy to avoid index requirement, sort in memory instead
-    final fetchLimit = safeLimit * 5; // Fetch more to ensure we have enough after filtering
+    final fetchLimit = safeLimit * 5; 
 
     return _col
         .where('isDraft', isEqualTo: false)
@@ -689,7 +592,7 @@ class PostService {
           )
           .toList();
 
-      // Sort in memory by the requested metric
+     
       posts.sort((a, b) {
         final metricComparison = metric == PopularPostMetric.views
             ? b.views.compareTo(a.views)
@@ -698,13 +601,12 @@ class PostService {
         return b.createdAt.compareTo(a.createdAt);
       });
 
-      // Return top N after sorting
       if (posts.length > safeLimit) {
         return posts.sublist(0, safeLimit);
       }
       return posts;
     }).handleError((error) {
-      // Ignore permission errors during logout - return empty list instead
+    
       debugPrint('Error loading popular posts (likely during logout): $error');
       return <Post>[];
     });
@@ -735,70 +637,23 @@ class PostService {
     }, SetOptions(merge: true));
   }
 
-  /// Automatically mark posts as completed when they reach their event end date and time
-  /// This method checks all active posts and marks them as completed if the current time
-  /// has passed the eventEndDate + workTimeEnd
   Future<int> autoCompleteExpiredPosts() async {
     try {
-      final now = DateTime.now();
-      int completedCount = 0;
-
-      // Query all active posts that are not drafts
-      final snapshot = await _col
-          .where('status', isEqualTo: PostStatus.active.name)
-          .where('isDraft', isEqualTo: false)
-          .get();
-
-      for (final doc in snapshot.docs) {
-        if (!doc.exists) continue;
-        final data = doc.data();
-        // ignore: unnecessary_null_comparison
-        if (data == null) continue; // Safety check
-
-        // Get eventEndDate
-        final eventEndDate = data['eventEndDate'];
-
-        // Skip if eventEndDate is missing
-        if (eventEndDate == null) continue;
-
-        // Parse eventEndDate (could be Timestamp or DateTime)
-        DateTime endDate;
-        if (eventEndDate is Timestamp) {
-          endDate = eventEndDate.toDate();
-        } else if (eventEndDate is DateTime) {
-          endDate = eventEndDate;
-        } else {
-          continue; // Skip if we can't parse the date
-        }
-
-        // Check if current time has passed the event end date
-        // Compare only the date part (ignore time)
-        final nowDate = DateTime(now.year, now.month, now.day);
-        final endDateOnly = DateTime(endDate.year, endDate.month, endDate.day);
-        
-        if (nowDate.isAfter(endDateOnly) || nowDate.isAtSameMomentAs(endDateOnly)) {
-          // Mark post as completed
-          try {
-            await _col.doc(doc.id).update({
-              'status': PostStatus.completed.name,
-              'completedAt': FieldValue.serverTimestamp(),
-            });
-            completedCount++;
-            debugPrint('Auto-completed post: ${doc.id} (${data['title'] ?? 'Unknown'})');
-          } catch (e) {
-            debugPrint('Error auto-completing post ${doc.id}: $e');
-            // Continue with other posts even if one fails
-          }
-        }
+      final cloudFunctionsService = CloudFunctionsService();
+      final result = await cloudFunctionsService.autoCompleteExpiredPosts();
+      
+      final completedCount = result['completedCount'] as int? ?? 0;
+      final success = result['success'] as bool? ?? false;
+      
+      if (success) {
+        debugPrint('Cloud Function completed $completedCount expired post(s)');
+      } else {
+        debugPrint('Cloud Function error: ${result['message']}');
       }
-
-      if (completedCount > 0) {
-        debugPrint('Auto-completed $completedCount expired post(s)');
-      }
-
+      
       return completedCount;
     } catch (e) {
-      debugPrint('Error in autoCompleteExpiredPosts: $e');
+      debugPrint('Error calling Cloud Function for auto-complete: $e');
       return 0;
     }
   }

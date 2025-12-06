@@ -1,28 +1,20 @@
 import 'package:flutter/material.dart';
 
-/// Message types for the message box
+//message types 
 enum MessageBoxType {
   success,
   warning,
   info,
 }
 
-/// A reusable message box widget that displays a pop-out notification
-/// Similar to a snackbar but with custom styling matching the app design
+
 class MessageBox extends StatelessWidget {
-  /// The message to display
+
   final String message;
-
-  /// The type of message (success, warning, info)
   final MessageBoxType type;
-
-  /// Duration to show the message (default: 3 seconds)
+  //3 second
   final Duration duration;
-
-  /// Custom background color (optional, will use default based on type if not provided)
   final Color? backgroundColor;
-
-  /// Custom text color (optional, defaults to white)
   final Color? textColor;
 
   const MessageBox({
@@ -34,13 +26,12 @@ class MessageBox extends StatelessWidget {
     this.textColor,
   });
 
-  /// Get the background color based on message type
   Color get _getBackgroundColor {
     if (backgroundColor != null) return backgroundColor!;
     
     switch (type) {
       case MessageBoxType.success:
-        return const Color(0xFF00C8A0); // Teal/turquoise green
+        return const Color(0xFF00C8A0);
       case MessageBoxType.warning:
         return Colors.red;
       case MessageBoxType.info:
@@ -48,7 +39,6 @@ class MessageBox extends StatelessWidget {
     }
   }
 
-  /// Get the text color
   Color get _getTextColor {
     return textColor ?? Colors.white;
   }
@@ -69,18 +59,19 @@ class MessageBox extends StatelessWidget {
           ),
         ],
       ),
-      child: Text(
-        message,
-        style: TextStyle(
-          color: _getTextColor,
-          fontSize: 15,
-          fontWeight: FontWeight.w500,
+      child: RichText(
+        text: TextSpan(
+          text: message,
+          style: TextStyle(
+            color: _getTextColor,
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ),
     );
   }
 
-  /// Show the message box as an overlay
   static void show({
     required BuildContext context,
     required String message,
@@ -104,12 +95,11 @@ class MessageBox extends StatelessWidget {
         },
       ),
     );
-
     overlay.insert(overlayEntry);
   }
 }
 
-/// Overlay widget that positions the message box at the top
+//position top
 class _MessageBoxOverlay extends StatefulWidget {
   final String message;
   final MessageBoxType type;
@@ -163,12 +153,11 @@ class _MessageBoxOverlayState extends State<_MessageBoxOverlay>
 
     _controller.forward();
 
-    // Auto-dismiss after duration
+    //autodismiss overlay
     Future.delayed(widget.duration, () {
       if (mounted) {
         _controller.reverse().then((_) {
           if (mounted) {
-            // Remove overlay after animation completes
             widget.onDismiss();
           }
         });

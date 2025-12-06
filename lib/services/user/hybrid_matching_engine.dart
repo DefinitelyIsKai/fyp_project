@@ -13,13 +13,7 @@ import 'tag_service.dart';
 import 'application_service.dart';
 import '../../utils/user/tag_definitions.dart';
 
-/// Matching strategy enum
-enum MatchingStrategy {
-  embeddingsAnn,      // Strategy A: Quick recommendation (many-to-many)
-  stableOptimal,      // Strategy B: Precise matching (one-to-one)
-}
-
-/// Matching weights configuration class
+//matching weights 
 class _MatchingWeights {
   const _MatchingWeights({
     required this.textSimilarity,
@@ -40,7 +34,7 @@ class _MatchingWeights {
   final double decayFactor;
 }
 
-// Default weights (fallback if rules not found or disabled)
+//default weights 
 const _defaultWeights = _MatchingWeights(
   textSimilarity: 0.35,
   tagMatching: 0.35,
@@ -51,9 +45,7 @@ const _defaultWeights = _MatchingWeights(
   decayFactor: 3.0,
 );
 
-/// A hybrid matching engine that supports Content-Based Filtering:
-/// - Embeddings + ANN: Fast similarity search
-/// - Weighted Sorting: Optimal ranking based on bidirectional preferences
+
 class HybridMatchingEngine {
   HybridMatchingEngine({
     FirebaseFirestore? firestore,
@@ -67,23 +59,19 @@ class HybridMatchingEngine {
   final AuthService _authService;
   final TagService _tagService;
 
-  // Cache for tag categories and tags
+  //cache tag
   Map<TagCategory, List<Tag>>? _cachedTagData;
   DateTime? _cacheTimestamp;
   static const _cacheExpiryDuration = Duration(minutes: 30);
   static const int _maxJobsPerRecruiter = 25;
   static const int _maxCandidatesPerRecruiter = 60;
 
-  // Cache for matching rule weights (static to share across all instances)
+  //cache matching rule weights
   static _MatchingWeights? _cachedWeights;
   static DateTime? _weightsCacheTimestamp;
   static const _weightsCacheExpiryDuration = Duration(minutes: 15);
 
-  // Cache for candidate reliability scores
-  final Map<String, _CachedReliability> _reliabilityCache = {};
-  static const _reliabilityCacheExpiryDuration = Duration(minutes: 30);
-
-  /// Fetch tag categories and tags from Firestore with caching
+  //fetch tag irestore with caching
   Future<Map<TagCategory, List<Tag>>> _getTagData() async {
     final now = DateTime.now();
     if (_cachedTagData != null &&
@@ -98,7 +86,6 @@ class HybridMatchingEngine {
       _cacheTimestamp = now;
       return tagData;
     } catch (e) {
-      // Return cached data if available, otherwise empty map
       return _cachedTagData ?? {};
     }
   }
@@ -132,15 +119,12 @@ class HybridMatchingEngine {
 
     try {
       debugPrint('=== Fetching weights from Firestore ===');
-      // Get ALL rules (both enabled and disabled) to check their status
       final snapshot = await _firestore
           .collection('matching_rules')
           .get();
 
       debugPrint('Found ${snapshot.docs.length} total rules in Firestore');
-
-      // Initialize all weights to 0 (disabled by default)
-      // Only enabled rules will have their weights applied
+      //enabled rule weight applied
       double textSimilarity = 0.0;
       double tagMatching = 0.0;
       double requiredSkills = 0.0;
@@ -156,7 +140,7 @@ class HybridMatchingEngine {
         final weight = (data['weight'] as num?)?.toDouble() ?? 0.0;
         final parameters = Map<String, dynamic>.from(data['parameters'] ?? {});
 
-        // Only apply weight if rule is enabled
+        //apply weight rule is enabled
         if (!isEnabled) {
           debugPrint('Rule $ruleId: DISABLED (weight=0.0)');
           continue;
@@ -195,8 +179,7 @@ class HybridMatchingEngine {
         decayFactor: decayFactor,
       );
 
-      // Debug: Log loaded weights
-      debugPrint('=== Matching Weights Loaded ===');
+      //log loaded weights
       debugPrint('textSimilarity: ${weights.textSimilarity}');
       debugPrint('tagMatching: ${weights.tagMatching}');
       debugPrint('requiredSkills: ${weights.requiredSkills}');
@@ -204,7 +187,6 @@ class HybridMatchingEngine {
       debugPrint('jobTypePreference: ${weights.jobTypePreference}');
       debugPrint('maxDistanceKm: ${weights.maxDistanceKm}');
       debugPrint('decayFactor: ${weights.decayFactor}');
-      debugPrint('================================');
 
       _cachedWeights = weights;
       _weightsCacheTimestamp = now;
@@ -215,28 +197,18 @@ class HybridMatchingEngine {
     }
   }
 
-  /// Clear the cached matching weights to force refresh from Firestore
-  /// This is useful when matching rules are updated and you want immediate effect
-  /// Static method to clear cache across ALL instances
+  //clear cached matching weights force refresh 
   static void clearWeightsCache() {
-    final hadCache = _cachedWeights != null;
     _cachedWeights = null;
     _weightsCacheTimestamp = null;
-    debugPrint('=== Matching Weights Cache Cleared ===');
-    debugPrint('Had cached weights: $hadCache');
-    debugPrint('Cache cleared at: ${DateTime.now()}');
-    debugPrint('Next _getMatchingWeights() call will fetch from Firestore');
-    debugPrint('======================================');
   }
   
-  /// Reset all static caches (for debugging/recovery)
+  //reset all static caches 
   static void resetAllCaches() {
     _cachedWeights = null;
     _weightsCacheTimestamp = null;
-    debugPrint('All matching caches reset');
   }
 
-  /// Get category IDs that represent skill-related tags
   Future<Set<String>> _getSkillCategoryIds() async {
     final tagData = await _getTagData();
     final skillKeywords = ['skill', 'technical', 'soft skill'];
@@ -247,7 +219,6 @@ class HybridMatchingEngine {
         .toSet();
   }
 
-  /// Get category IDs that represent job preference tags
   Future<Set<String>> _getJobPreferenceCategoryIds() async {
     final tagData = await _getTagData();
     final prefKeywords = ['preference', 'job type', 'work type'];
@@ -258,7 +229,6 @@ class HybridMatchingEngine {
         .toSet();
   }
 
-  /// Get category IDs that represent location tags
   Future<Set<String>> _getLocationCategoryIds() async {
     final tagData = await _getTagData();
     final locationKeywords = ['location', 'place'];
@@ -271,7 +241,6 @@ class HybridMatchingEngine {
 
   Future<void> recomputeMatches({
     String? explicitRole,
-    MatchingStrategy strategy = MatchingStrategy.embeddingsAnn,
   }) async {
     final userDoc = await _authService.getUserDoc();
     final userId = userDoc.id;
@@ -279,7 +248,7 @@ class HybridMatchingEngine {
     final role = explicitRole ?? (data['role'] as String? ?? 'jobseeker');
 
     if (role == 'recruiter') {
-      await _runRecruiterPipeline(userId, strategy);
+      await _runRecruiterPipeline(userId);
     } else {
       await _runJobseekerPipeline(userId, data);
     }
@@ -289,10 +258,10 @@ class HybridMatchingEngine {
     String userId,
     Map<String, dynamic> data,
   ) async {
-    // Fetch matching weights from Firestore
+    //fetch matching weight
     final weights = await _getMatchingWeights();
     
-    // Fetch tag data for matching
+    //fetch tag data
     final tagData = await _getTagData();
     final skillCategoryIds = await _getSkillCategoryIds();
     final jobPreferenceCategoryIds = await _getJobPreferenceCategoryIds();
@@ -311,14 +280,12 @@ class HybridMatchingEngine {
     final jobs = await _loadActiveJobs();
     if (jobs.isEmpty) return;
 
-    // filter ages
+    //clean age
     final ageFilteredJobs = jobs.where((job) {
       if (candidate.age == null) {
-        // If candidate age is not set, only include jobs without age requirements
         return job.minAgeRequirement == null && job.maxAgeRequirement == null;
       }
       final candidateAge = candidate.age!;
-      // Job must not have age requirements, or candidate age must be within range
       if (job.minAgeRequirement != null && candidateAge < job.minAgeRequirement!) {
         return false;
       }
@@ -330,7 +297,7 @@ class HybridMatchingEngine {
 
     if (ageFilteredJobs.isEmpty) return;
 
-    //filter genderss
+    //clean gender
     final genderFilteredJobs = ageFilteredJobs.where((job) {
       return _meetsGenderRequirement(candidate, job);
     }).toList();
@@ -350,7 +317,7 @@ class HybridMatchingEngine {
         )
         .toList();
 
-    // Step 2: Use Embeddings + ANN for initial filtering based on tags/skills similarity
+    //embeddings ANN 
     final annMatcher = _EmbeddingAnnMatcher<_JobVector>();
     final annNeighbors = annMatcher.findNearest(
       query: candidate.featureVector,
@@ -382,18 +349,13 @@ class HybridMatchingEngine {
         ),
       );
     }
-
-    // No longer persisting to job_matches - using real-time computation instead
-    // The matches are computed on-demand via computeMatchesForJobseeker()
   }
 
-  /// Compute matches in real-time without persisting to Firestore.
-  /// Returns list of ComputedMatch objects for display.
   Future<List<ComputedMatch>> computeMatchesForJobseeker({
     required String userId,
     Map<String, dynamic>? userData,
   }) async {
-    // Fetch user data if not provided
+    //fetch user data 
     Map<String, dynamic> data;
     if (userData != null) {
       data = userData;
@@ -402,10 +364,10 @@ class HybridMatchingEngine {
       data = userDoc.data() ?? <String, dynamic>{};
     }
 
-    // Fetch matching weights from Firestore
+    //fetch matching weight
     final weights = await _getMatchingWeights();
     
-    // Fetch tag data for matching
+    //fetch tag data 
     final tagData = await _getTagData();
     final skillCategoryIds = await _getSkillCategoryIds();
     final jobPreferenceCategoryIds = await _getJobPreferenceCategoryIds();
@@ -424,11 +386,9 @@ class HybridMatchingEngine {
     final jobs = await _loadActiveJobs();
     if (jobs.isEmpty) return [];
 
-    // Filter out jobs created by the jobseeker themselves
     final filteredJobs = jobs.where((job) => job.ownerId != userId).toList();
     if (filteredJobs.isEmpty) return [];
 
-    // Get all pending applications for this jobseeker
     final allApplications = await FirebaseFirestore.instance
         .collection('applications')
         .where('jobseekerId', isEqualTo: userId)
@@ -440,11 +400,10 @@ class HybridMatchingEngine {
         .where((id) => id.isNotEmpty)
         .toSet();
 
-    // Filter out jobs that the jobseeker has already applied to (pending status)
     final availableJobs = filteredJobs.where((job) => !appliedPostIds.contains(job.id)).toList();
     if (availableJobs.isEmpty) return [];
 
-    // Filter out quota-full posts (batch fetch quota data)
+    //no quota full
     final postIdsWithQuota = availableJobs
         .where((job) => job.applicantQuota != null)
         .map((job) => job.id)
@@ -467,16 +426,12 @@ class HybridMatchingEngine {
       }
     }
 
-    // Filter out quota-full posts
     final validJobs = availableJobs.where((job) {
-      // Double-check status (should already be filtered by _loadActiveJobs)
       if (job.status != PostStatus.active) return false;
-      
-      // Check quota if applicable
       if (job.applicantQuota != null) {
         final approvedCount = quotaData[job.id] ?? 0;
         if (approvedCount >= job.applicantQuota!) {
-          return false; // Quota is full
+          return false; //full
         }
       }
       
@@ -485,7 +440,6 @@ class HybridMatchingEngine {
     
     if (validJobs.isEmpty) return [];
 
-    // Step 1: Filter jobs by age requirement (hard filter - must pass)
     final ageFilteredJobs = validJobs.where((job) {
       if (candidate.age == null) {
         return job.minAgeRequirement == null && job.maxAgeRequirement == null;
@@ -502,7 +456,6 @@ class HybridMatchingEngine {
 
     if (ageFilteredJobs.isEmpty) return [];
 
-    // Step 1.5: Filter jobs by gender requirement (hard filter - must pass)
     final genderFilteredJobs = ageFilteredJobs.where((job) {
       return _meetsGenderRequirement(candidate, job);
     }).toList();
@@ -522,14 +475,14 @@ class HybridMatchingEngine {
         )
         .toList();
 
-    // Step 2: Use weighted sorting for optimal matching (Jobseeker perspective)
+    //use weighted sort optimal matching jobseeker
     final optimalMatches = await _runJobseekerOptimalMatching(
       candidate,
       jobVectors,
       weights,
     );
 
-    // Convert to ComputedMatch list
+    //convert to computedmatch list
     final computedMatches = <ComputedMatch>[];
     for (final match in optimalMatches) {
       final matchedSkills = _matchedSkills(
@@ -549,19 +502,15 @@ class HybridMatchingEngine {
       );
     }
 
-    // Sort by match percentage (descending)
+    //sort by match percentage
     computedMatches.sort((a, b) => b.matchPercentage.compareTo(a.matchPercentage));
     return computedMatches;
   }
 
-  /// Compute matches for a specific job post and its applicants.
-  /// Returns list of RecruiterMatch objects showing which applicants match the post.
   Future<List<RecruiterMatch>> computeMatchesForRecruiterPost({
     required String postId,
     required String recruiterId,
-    MatchingStrategy strategy = MatchingStrategy.embeddingsAnn,
   }) async {
-    // Load the post
     final postDoc = await FirebaseFirestore.instance.collection('posts').doc(postId).get();
     if (!postDoc.exists) return [];
     
@@ -594,7 +543,7 @@ class HybridMatchingEngine {
       applicants: postData['applicants'] as int? ?? 0,
     );
 
-    // Get all applications for this post
+    //all applications 
     final applicationService = ApplicationService();
     final allApplications = await applicationService.getApplicationsByPostId(
       postId: postId,
@@ -604,7 +553,6 @@ class HybridMatchingEngine {
     debugPrint('Total applications found: ${allApplications.length}');
     debugPrint('Application statuses: ${allApplications.map((a) => a.status.toString()).join(", ")}');
     
-    // Filter to show pending and approved applications (exclude rejected and deleted)
     final applications = allApplications.where((app) => 
       app.status == ApplicationStatus.pending || 
       app.status == ApplicationStatus.approved
@@ -617,23 +565,18 @@ class HybridMatchingEngine {
       return [];
     }
 
-    // Fetch matching weights
     final weights = await _getMatchingWeights();
     
-    // Fetch tag data for matching
     final tagData = await _getTagData();
     final skillCategoryIds = await _getSkillCategoryIds();
     final jobPreferenceCategoryIds = await _getJobPreferenceCategoryIds();
     final locationCategoryIds = await _getLocationCategoryIds();
-
-    // Load recruiter label
     final recruiterLabels = await _fetchUserLabels({recruiterId});
     final recruiterLabel = recruiterLabels[recruiterId] ?? 'Hiring Company';
 
-    // Create job vector
+    //job vector
     final jobVector = _JobVector.fromPost(post, recruiterLabel);
 
-    // Load candidate profiles for all applicants
     final candidateProfiles = <_CandidateProfile>[];
     final jobseekerDataMap = <String, Map<String, dynamic>>{};
     
@@ -670,7 +613,7 @@ class HybridMatchingEngine {
       return [];
     }
 
-    // Filter candidates by age requirement
+    //filter candidates by age requirement
     final ageFilteredCandidates = candidateProfiles.where((candidate) {
       if (candidate.age == null) {
         return post.minAgeRequirement == null && post.maxAgeRequirement == null;
@@ -691,7 +634,6 @@ class HybridMatchingEngine {
       return [];
     }
 
-    // Filter candidates by gender requirement
     final genderFilteredCandidates = ageFilteredCandidates.where((candidate) {
       return _meetsGenderRequirement(candidate, post);
     }).toList();
@@ -714,15 +656,15 @@ class HybridMatchingEngine {
     final annNeighbors = annMatcher.findNearest(
       query: jobVector.featureVector,
       items: genderFilteredCandidates,
-      topK: genderFilteredCandidates.length, // Match all candidates
+      topK: genderFilteredCandidates.length, 
     );
 
     debugPrint('ANN neighbors found: ${annNeighbors.length}');
     
-    // If ANN returns no results, fallback to direct matching
+    //ANN no results then direct matching
     if (annNeighbors.isEmpty && genderFilteredCandidates.isNotEmpty) {
       debugPrint('ANN returned no results, using fallback direct matching');
-      // Direct cosine similarity calculation as fallback
+      //directcosine similarity calculation as fallback
       for (final candidate in genderFilteredCandidates) {
         final similarity = jobVector.featureVector.cosine(candidate.featureVector);
         debugPrint('Direct similarity for candidate ${candidate.id}: $similarity');
@@ -732,24 +674,16 @@ class HybridMatchingEngine {
       }
       debugPrint('Fallback neighbors found: ${annNeighbors.length}');
     }
-    // Calculate scores for all candidates
     final candidateScores = <_CandidateProfile, double>{};
     for (final neighbor in annNeighbors) {
       final candidate = neighbor.payload;
       final similarity = neighbor.similarity;
-      var score = await _scoreRecruiterMatch(jobVector, candidate, similarity, weights);
+      final score = await _scoreRecruiterMatch(jobVector, candidate, similarity, weights);
       
-      // Apply reliability coefficient for stableOptimal strategy
-      if (strategy == MatchingStrategy.stableOptimal) {
-        final reliabilityScore = await _getReliabilityScore(candidate.id);
-        score = score * reliabilityScore;
-        debugPrint('Candidate ${candidate.id} - Base Score: ${score / reliabilityScore}, Reliability: $reliabilityScore, Final Score: $score');
-      } else {
-        debugPrint('Candidate ${candidate.id} - Score: $score, Similarity: $similarity');
-      }
+      debugPrint('Candidate ${candidate.id} - Score: $score, Similarity: $similarity');
       
-      // Use different thresholds based on strategy
-      final minScore = strategy == MatchingStrategy.stableOptimal ? 0.20 : 0.05;
+      // Use minimum score threshold
+      const minScore = 0.05;
       if (score > minScore) {
         candidateScores[candidate] = score;
       } else {
@@ -757,33 +691,18 @@ class HybridMatchingEngine {
       }
     }
 
-    // Apply strategy-based filtering
-    List<_CandidateProfile> selectedCandidates;
-    if (strategy == MatchingStrategy.stableOptimal) {
-      // One candidate per job: select the highest scoring candidate
-      if (candidateScores.isEmpty) {
-        debugPrint('No candidates with valid scores for stable optimal matching');
-        return [];
-      }
-      final sortedCandidates = candidateScores.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-      selectedCandidates = [sortedCandidates.first.key];
-      debugPrint('Stable optimal: Selected 1 candidate (score: ${sortedCandidates.first.value})');
-    } else {
-      // Multiple candidates per job: include all candidates with valid scores
-      selectedCandidates = candidateScores.keys.toList();
-      debugPrint('Embeddings ANN: Selected ${selectedCandidates.length} candidates');
-    }
+    //include  candidates  valid scores
+    final selectedCandidates = candidateScores.keys.toList();
+    debugPrint('Embeddings ANN: Selected ${selectedCandidates.length} candidates');
 
-    // Build RecruiterMatch list
     final recruiterMatches = <RecruiterMatch>[];
     for (final candidate in selectedCandidates) {
       final score = candidateScores[candidate]!;
 
-      // Find the application for this candidate
+      //find the application
       final application = applications.firstWhere(
         (app) => app.jobseekerId == candidate.id,
-        orElse: () => applications.first, // Fallback (shouldn't happen)
+        orElse: () => applications.first, 
       );
 
       final matchedSkills = _matchedSkills(
@@ -804,31 +723,23 @@ class HybridMatchingEngine {
           jobseekerId: candidate.id,
           matchPercentage: (score * 100).clamp(1, 100).round(),
           matchedSkills: matchedSkills,
-          matchingStrategy: strategy == MatchingStrategy.stableOptimal
-              ? 'stable_optimal'
-              : 'embedding_ann',
+          matchingStrategy: 'embedding_ann',
         ),
       );
     }
 
-    // Sort by match percentage (descending)
     recruiterMatches.sort((a, b) => b.matchPercentage.compareTo(a.matchPercentage));
     return recruiterMatches;
   }
 
-  /// Get count of matched applicants for a specific post (lightweight version).
-  /// This is faster than computeMatchesForRecruiterPost as it only returns the count.
-  /// Uses the same filtering logic (age, gender, score thresholds).
+
   Future<int> getMatchedApplicantCount({
     required String postId,
     required String recruiterId,
-    MatchingStrategy strategy = MatchingStrategy.embeddingsAnn,
   }) async {
-    // Reuse the same logic but only return count
     final matches = await computeMatchesForRecruiterPost(
       postId: postId,
       recruiterId: recruiterId,
-      strategy: strategy,
     );
     return matches.length;
   }
@@ -853,9 +764,8 @@ class HybridMatchingEngine {
 
   Future<void> _runRecruiterPipeline(
     String userId,
-    MatchingStrategy strategy,
   ) async {
-    // Fetch matching weights from Firestore
+    //matching weights from Firestore
     final weights = await _getMatchingWeights();
     
     final jobs = await _loadRecruiterJobs(userId);
@@ -878,7 +788,6 @@ class HybridMatchingEngine {
     final compatibility = <String, Map<String, double>>{};
 
     for (final job in jobVectors) {
-      // Step 1: Filter candidates by age requirement (hard filter)
       final ageFilteredCandidates = candidateProfiles.where((candidate) {
         if (candidate.age == null) {
           return job.post.minAgeRequirement == null && job.post.maxAgeRequirement == null;
@@ -895,14 +804,12 @@ class HybridMatchingEngine {
 
       if (ageFilteredCandidates.isEmpty) continue;
 
-      // Step 1.5: Filter candidates by gender requirement (hard filter)
       final genderFilteredCandidates = ageFilteredCandidates.where((candidate) {
         return _meetsGenderRequirement(candidate, job.post);
       }).toList();
 
       if (genderFilteredCandidates.isEmpty) continue;
 
-      // Step 2: Use Embeddings + ANN for initial filtering
       final annResults = annMatcher.findNearest(
         query: job.featureVector,
         items: genderFilteredCandidates,
@@ -927,7 +834,6 @@ class HybridMatchingEngine {
 
     final resolvedPairs = <String, String>{};
 
-    // Simple score-based selection (all strategies use the same approach)
     for (final jobId in compatibility.keys) {
       final scores = compatibility[jobId]!;
       final sortedCandidates = scores.entries.toList()
@@ -961,48 +867,37 @@ class HybridMatchingEngine {
           candidateName: candidate.displayName,
           matchedSkills: _matchedSkills(candidate.skillSet, job.requiredSkills),
           score: score,
-          strategy: strategy == MatchingStrategy.stableOptimal
-              ? 'stable_optimal'
-              : 'embedding_ann',
+          strategy: 'embedding_ann',
         ),
       );
     });
-
-    // No longer persisting to job_matches - using real-time computation instead
-    // await _persistMatches(pendingMatches);
   }
 
-  /// Run optimal matching for a single jobseeker using weighted sorting
-  /// This function uses Content-Based Filtering with bidirectional preferences
+
   Future<List<_JobseekerOptimalMatch>> _runJobseekerOptimalMatching(
     _CandidateProfile candidate,
     List<_JobVector> jobVectors,
     _MatchingWeights weights,
   ) async {
     if (jobVectors.isEmpty) return [];
-
-    // Step 1: Use ANN for initial filtering (performance optimization)
     final annMatcher = _EmbeddingAnnMatcher<_JobVector>();
     final annResults = annMatcher.findNearest(
       query: candidate.featureVector,
       items: jobVectors,
-      topK: min(50, jobVectors.length), // Limit to top 50 for performance
+      topK: min(50, jobVectors.length), //top 50
     );
 
     if (annResults.isEmpty) return [];
 
-    // Step 2: Calculate bidirectional preferences and weighted compatibility
     final weightedCompatibility = <String, double>{};
 
     for (final neighbor in annResults) {
       final job = neighbor.payload;
       
-      // Hard filters
       if (!_meetsAgeRequirement(candidate, job.post)) continue;
       if (!_meetsGenderRequirement(candidate, job.post)) continue;
       
-      // Calculate score from jobseeker's perspective
-      // Debug: Log weights before scoring
+      //calculate score from jobseeker's perspective
       debugPrint('Before _scoreJobseekerMatch: weights.tagMatching=${weights.tagMatching}, weights.textSimilarity=${weights.textSimilarity}');
       final jobseekerScore = await _scoreJobseekerMatch(
         candidate,
@@ -1011,7 +906,7 @@ class HybridMatchingEngine {
         weights,
       );
       
-      // Calculate score from job's perspective (recruiter's perspective)
+      //calculate score from recruiter perspective
       final jobScore = await _scoreRecruiterMatch(
         job,
         candidate,
@@ -1019,11 +914,9 @@ class HybridMatchingEngine {
         weights,
       );
       
-      // Weighted compatibility: 60% jobseeker preference, 40% job preference
-      // This ensures jobseeker gets what they want, while considering mutual fit
+      //weighted compatibility: 60% jobseeker preference, 40% job preference
       final weightedScore = (jobseekerScore * 0.6) + (jobScore * 0.4);
       
-      // Debug: Log scoring details for first few jobs
       if (weightedCompatibility.length < 3) {
         debugPrint('Job ${job.post.id}: jobseekerScore=$jobseekerScore, jobScore=$jobScore, weightedScore=$weightedScore');
       }
@@ -1037,7 +930,7 @@ class HybridMatchingEngine {
 
     if (weightedCompatibility.isEmpty) return [];
 
-    // Step 3: Use TopK algorithm to get top 20 (more efficient than full sort)
+    //TopK algorithm to get top 20 
     const k = 20;
     final topKEntries = _getTopK(
       weightedCompatibility.entries.toList(),
@@ -1045,7 +938,7 @@ class HybridMatchingEngine {
       (entry) => entry.value,
     );
     
-    // Step 4: Build result list (top 20)
+    //
     final results = <_JobseekerOptimalMatch>[];
     final jobById = {for (final job in jobVectors) job.post.id: job};
     
@@ -1104,13 +997,13 @@ class HybridMatchingEngine {
       }
     }
     
-    // Sort the heap to get descending order (largest first)
+    // Sort the heap to get descending order
     heap.sort((a, b) => getValue(b).compareTo(getValue(a)));
     
     return heap;
   }
 
-  /// Helper: Heapify up (bubble up) for min-heap
+  //heapify up bubble up for min-heap
   void _heapifyUp<T>(List<T> heap, int index, double Function(T) getValue, {required bool ascending}) {
     while (index > 0) {
       final parentIndex = (index - 1) ~/ 2;
@@ -1132,7 +1025,7 @@ class HybridMatchingEngine {
     }
   }
 
-  /// Helper: Heapify down (bubble down) for min-heap
+  //heapify down (bubble down) for min-heap
   void _heapifyDown<T>(List<T> heap, int index, double Function(T) getValue, {required bool ascending}) {
     while (true) {
       int smallest = index;
@@ -1166,10 +1059,7 @@ class HybridMatchingEngine {
     }
   }
 
-  /// Removed _runStableOptimalMatching - no longer needed
-  /// Recruiter matching now uses simple score-based sorting
-
-  /// Check if candidate meets age requirement for a job
+  //check if candidate meets age requirement for a job
   bool _meetsAgeRequirement(_CandidateProfile candidate, Post job) {
     if (candidate.age == null) {
       return job.minAgeRequirement == null && job.maxAgeRequirement == null;
@@ -1184,30 +1074,19 @@ class HybridMatchingEngine {
     return true;
   }
 
-  /// Check if candidate meets gender requirement for a job
-  /// Returns true if:
-  /// - Job has no gender requirement (null or "any")
-  /// - Candidate gender matches job requirement
-  /// - Candidate has no gender but job requirement is "any"
   bool _meetsGenderRequirement(_CandidateProfile candidate, Post job) {
     final jobGenderRequirement = job.genderRequirement?.toLowerCase().trim();
     
-    // If job has no gender requirement or "any", all candidates pass
+    // If job has any all candidates pass
     if (jobGenderRequirement == null || 
         jobGenderRequirement.isEmpty || 
         jobGenderRequirement == 'any') {
       return true;
     }
-
-    // If candidate has no gender set, only match jobs with "any" requirement
-    // (Already handled above, so if we reach here, job has specific requirement)
     final candidateGender = candidate.gender?.toLowerCase().trim();
     if (candidateGender == null || candidateGender.isEmpty) {
-      // Conservative approach: candidate without gender can't match specific requirements
       return false;
     }
-
-    // Check if candidate gender matches job requirement
     return candidateGender == jobGenderRequirement;
   }
 
@@ -1233,7 +1112,7 @@ class HybridMatchingEngine {
   }
 
   Future<List<_CandidateProfile>> _loadCandidateProfiles() async {
-    // Fetch tag data once for all candidates
+    //fetch tag data once for all candidates
     final tagData = await _getTagData();
     final skillCategoryIds = await _getSkillCategoryIds();
     final jobPreferenceCategoryIds = await _getJobPreferenceCategoryIds();
@@ -1286,136 +1165,7 @@ class HybridMatchingEngine {
     }
     return result;
   }
-
-  // Removed _persistMatches and _persistMatchesForJobseeker methods
-  // No longer writing to job_matches collection - using real-time computation instead
-
-  /// Get reliability score for a candidate (with caching)
-  /// Returns a coefficient between 0.8 and 1.2 that adjusts the match score
-  Future<double> _getReliabilityScore(String candidateId) async {
-    // Check cache first
-    final cached = _reliabilityCache[candidateId];
-    if (cached != null &&
-        DateTime.now().difference(cached.timestamp) < _reliabilityCacheExpiryDuration) {
-      return cached.score;
-    }
-
-    // Calculate reliability score
-    final score = await _calculateReliabilityScore(candidateId);
-    
-    // Cache the result
-    _reliabilityCache[candidateId] = _CachedReliability(score, DateTime.now());
-    
-    return score;
-  }
-
-  /// Calculate reliability score based on candidate's history
-  /// Considers: application approval rate, average rating, completion rate
-  /// Returns a coefficient between 0.8 and 1.2
-  Future<double> _calculateReliabilityScore(String candidateId) async {
-    try {
-      // 1. Query application history
-      final applicationsSnapshot = await _firestore
-          .collection('applications')
-          .where('jobseekerId', isEqualTo: candidateId)
-          .get();
-
-      final totalApplications = applicationsSnapshot.docs.length;
-      final approvedApplications = applicationsSnapshot.docs
-          .where((doc) => (doc.data()['status'] as String?) == 'approved')
-          .length;
-      
-      // Calculate approval rate (default to 0.5 if no applications)
-      final approvalRate = totalApplications > 0 
-          ? approvedApplications / totalApplications 
-          : 0.5;
-
-      // 2. Query average rating from reviews collection
-      double ratingScore = 0.8; // Default to 0.8 (neutral)
-      try {
-        final ratingsSnapshot = await _firestore
-            .collection('reviews')
-            .where('employeeId', isEqualTo: candidateId)
-            .where('status', isEqualTo: 'active')
-            .get();
-
-        if (ratingsSnapshot.docs.isNotEmpty) {
-          final ratings = ratingsSnapshot.docs
-              .map((doc) => (doc.data()['rating'] as num?)?.toDouble() ?? 0.0)
-              .where((r) => r > 0)
-              .toList();
-          
-          if (ratings.isNotEmpty) {
-            final avgRating = ratings.reduce((a, b) => a + b) / ratings.length;
-            // Normalize rating (1-5 scale) to 0-1 scale, then map to 0.8-1.2
-            ratingScore = 0.8 + (avgRating / 5.0) * 0.4; // Maps 1.0→0.8, 5.0→1.2
-          }
-        }
-      } catch (e) {
-        debugPrint('Error fetching ratings for candidate $candidateId: $e');
-        // Use default ratingScore
-      }
-
-      // 3. Calculate completion rate (if we have completed posts)
-      double completionRate = 0.8; // Default
-      try {
-        // Get approved applications
-        final approvedAppIds = applicationsSnapshot.docs
-            .where((doc) => (doc.data()['status'] as String?) == 'approved')
-            .map((doc) => doc.data()['postId'] as String?)
-            .where((id) => id != null && id.isNotEmpty)
-            .toList();
-
-        if (approvedAppIds.isNotEmpty) {
-          // Check how many of these posts were completed
-          // Limit to 10 to avoid Firestore 'whereIn' limit
-          final limitedIds = approvedAppIds.take(10).toList();
-          final postsSnapshot = await _firestore
-              .collection('posts')
-              .where(FieldPath.documentId, whereIn: limitedIds)
-              .get();
-
-          final totalApproved = postsSnapshot.docs.length;
-          final completed = postsSnapshot.docs
-              .where((doc) => doc.data()['completedAt'] != null)
-              .length;
-
-          if (totalApproved > 0) {
-            final completionRatio = completed / totalApproved;
-            // Map to 0.8-1.2 range
-            completionRate = 0.8 + completionRatio * 0.4;
-          }
-        }
-      } catch (e) {
-        debugPrint('Error calculating completion rate for candidate $candidateId: $e');
-        // Use default completionRate
-      }
-
-      // 4. Combine factors with weights
-      // Approval rate: 40%, Rating: 40%, Completion rate: 20%
-      final approvalComponent = 0.8 + approvalRate * 0.4; // Maps 0→0.8, 1→1.2
-      final reliabilityScore = (approvalComponent * 0.4) + 
-                                (ratingScore * 0.4) + 
-                                (completionRate * 0.2);
-
-      // Clamp to 0.8-1.2 range
-      return reliabilityScore.clamp(0.8, 1.2);
-    } catch (e) {
-      debugPrint('Error calculating reliability score for candidate $candidateId: $e');
-      // Return neutral score on error
-      return 1.0;
-    }
-  }
 }
-
-/// Cached reliability data structure
-class _CachedReliability {
-  final double score;
-  final DateTime timestamp;
-  _CachedReliability(this.score, this.timestamp);
-}
-
-/// Internal class to store optimal match result for a jobseeker
 class _JobseekerOptimalMatch {
   _JobseekerOptimalMatch({
     required this.job,
@@ -1444,20 +1194,6 @@ class _PendingMatch {
   final List<String> matchedSkills;
   final double score;
   final String strategy;
-
-  Map<String, dynamic> toFirestorePayload() {
-    return {
-      'jobId': job.id,
-      'jobTitle': job.title,
-      'fullName': recruiterLabel,
-      'recruiterId': job.ownerId,
-      'jobseekerId': candidateId,
-      'candidateName': candidateName,
-      'matchedSkills': matchedSkills,
-      'matchPercentage': (score * 100).clamp(1, 100).round(),
-      'matchingStrategy': strategy,
-    };
-  }
 }
 
 class _JobVector implements _VectorCarrier<_JobVector> {
@@ -1474,7 +1210,6 @@ class _JobVector implements _VectorCarrier<_JobVector> {
   final String recruiterLabel;
 
   factory _JobVector.fromPost(Post post, String recruiterLabel) {
-    // Include tags and requiredSkills in feature vector for similarity matching
     final tokens = <String>[
       post.title,
       post.description,
@@ -1482,8 +1217,8 @@ class _JobVector implements _VectorCarrier<_JobVector> {
       post.jobType.name,
       post.jobType.label,
       post.location,
-      ...post.tags, // Include tags for matching
-      ...post.requiredSkills, // Include required skills for matching
+      ...post.tags, 
+      ...post.requiredSkills, 
     ];
 
     return _JobVector(
@@ -1523,10 +1258,10 @@ class _CandidateProfile implements _VectorCarrier<_CandidateProfile> {
   final Set<String> jobPreferences;
   final _FeatureVector featureVector;
   final Set<String> tagUniverse;
-  final int? age; // User's age from profile
-  final String? gender; // User's gender from profile
-  final double? latitude; // User's location latitude
-  final double? longitude; // User's location longitude
+  final int? age; 
+  final String? gender; 
+  final double? latitude; 
+  final double? longitude; 
 
   bool get isMatchable => featureVector.tokens.isNotEmpty;
 
@@ -1540,16 +1275,13 @@ class _CandidateProfile implements _VectorCarrier<_CandidateProfile> {
   ) async {
     final tags = parseTagSelection(data['tags']);
 
-    // Extract skill-related tags from all skill categories
+    //skill
     final skillTokens = <String>[];
     for (final categoryId in skillCategoryIds) {
       skillTokens.addAll(tags[categoryId] ?? const <String>[]);
     }
-    // Backward compatibility: also check old hardcoded category IDs
-    skillTokens.addAll(tags['skillTags'] ?? const <String>[]);
-    skillTokens.addAll(tags['softSkillTags'] ?? const <String>[]);
 
-    // Extract job preference tags
+    //job preference tags
     final jobPrefTokens = <String>{};
     for (final categoryId in jobPreferenceCategoryIds) {
       jobPrefTokens.addAll(
@@ -1558,14 +1290,8 @@ class _CandidateProfile implements _VectorCarrier<_CandidateProfile> {
             .where((value) => value.isNotEmpty),
       );
     }
-    // Backward compatibility
-    jobPrefTokens.addAll(
-      (tags['jobPreferenceTags'] ?? const <String>[])
-          .map(_normalizeToken)
-          .where((value) => value.isNotEmpty),
-    );
 
-    // Extract location tags
+    //extract location tagsfallback
     final locationTokens = <String>{
       if (data['location'] is String) _normalizeToken(data['location'] as String),
     };
@@ -1576,12 +1302,6 @@ class _CandidateProfile implements _VectorCarrier<_CandidateProfile> {
             .where((value) => value.isNotEmpty),
       );
     }
-    // Backward compatibility
-    locationTokens.addAll(
-      (tags['locationTags'] ?? const <String>[])
-          .map(_normalizeToken)
-          .where((value) => value.isNotEmpty),
-    );
     locationTokens.removeWhere((element) => element.isEmpty);
 
     final narrativeTokens = <String>[
@@ -1670,7 +1390,7 @@ class _EmbeddingAnnMatcher<T extends _VectorCarrier<T>> {
     final neighbors = <_AnnNeighbor<T>>[];
     for (final item in candidates) {
       final similarity = query.cosine(item.vector);
-      // Allow similarity > 0 (even if very small) to ensure we get results
+      //similarity more 0 
       if (similarity.isNaN || similarity < 0) continue;
       neighbors.add(_AnnNeighbor(payload: item, similarity: similarity));
     }
@@ -1732,7 +1452,7 @@ class _FeatureVector {
   }
 }
 
-/// Calculate distance between two coordinates in kilometers
+//calculate distance between two coordinates 
 double _calculateDistance(
   double lat1,
   double lon1,
@@ -1742,18 +1462,16 @@ double _calculateDistance(
   return Geolocator.distanceBetween(lat1, lon1, lat2, lon2) / 1000; // Convert to km
 }
 
-/// Calculate distance score (0-1, where 1 is closest and 0 is farthest)
-/// Uses exponential decay: closer = higher score
+//calculate distance score (0-1, where 1 is closest and 0 is farthest)
 double _calculateDistanceScore(
   double distanceKm, {
   double maxDistanceKm = 50.0,
   double decayFactor = 3.0,
 }) {
-  if (distanceKm <= 0) return 1.0; // Same location
-  if (distanceKm >= maxDistanceKm) return 0.0; // Beyond max distance
+  if (distanceKm <= 0) return 1.0; //same location
+  if (distanceKm >= maxDistanceKm) return 0.0; //beyond max distance
   
-  // Exponential decay: score = e^(-distance/maxDistance * decayFactor)
-  // Adjust decayFactor to control how quickly score decreases with distance
+  //exponential decay: score = e^(-distance/maxDistance * decayFactor)
   final normalizedDistance = distanceKm / maxDistanceKm;
   return exp(-normalizedDistance * decayFactor);
 }
@@ -1764,29 +1482,25 @@ Future<double> _scoreJobseekerMatch(
   double similarity,
   _MatchingWeights weights,
 ) async {
-  // Debug: Verify weights object at function entry
   debugPrint('_scoreJobseekerMatch entry: weights.tagMatching=${weights.tagMatching}, weights.textSimilarity=${weights.textSimilarity}, weights.hashCode=${weights.hashCode}');
   
-  // Base score from embedding similarity (tags, skills, description similarity)
+  //base score embedding similarity (tags, skills, description similarity)
   var score = similarity * weights.textSimilarity;
 
-  // Step 3: Direct tags matching (post.tags vs jobseeker.tags)
-  // This is the core matching logic you requested
+  //direct tags matching post.tags betw jobseeker.tags
   final postTags = job.post.tags.map(_normalizeToken).toSet();
   final candidateTags = candidate.tagUniverse;
   final matchedTags = candidateTags.intersection(postTags);
   
   if (postTags.isNotEmpty) {
-    // Calculate tag overlap percentage
+    //calculate tag overlap percentage
     final tagOverlap = matchedTags.length / postTags.length;
     final tagContribution = weights.tagMatching * tagOverlap;
     score += tagContribution;
-    
-    // Debug: Log tag matching details for ALL jobs (to diagnose weight issues)
     debugPrint('Job ${job.post.id}: tagOverlap=$tagOverlap, tagMatchingWeight=${weights.tagMatching}, tagContribution=$tagContribution, score=$score');
   }
 
-  // Step 4: Required skills matching (post.requiredSkills vs jobseeker skill tags)
+  //required skills matching post.requiredSkills betw jobseeker skill tags
   final requiredSkills = job.requiredSkills;
   if (requiredSkills.isNotEmpty) {
     final skillOverlap =
@@ -1795,8 +1509,7 @@ Future<double> _scoreJobseekerMatch(
     score += weights.requiredSkills * skillOverlap;
   }
 
-  // Step 5: Distance factor (NEW)
-  // Calculate distance score if both candidate and job have coordinates
+  //calculate distance score both candidate and job have coordinates
   if (candidate.latitude != null &&
       candidate.longitude != null &&
       job.post.latitude != null &&
@@ -1808,7 +1521,7 @@ Future<double> _scoreJobseekerMatch(
       job.post.longitude!,
     );
     
-    // Distance score: closer = higher score (exponential decay)
+    //distance score: closer equal higher score 
     final distanceScore = _calculateDistanceScore(
       distanceKm,
       maxDistanceKm: weights.maxDistanceKm,
@@ -1816,15 +1529,14 @@ Future<double> _scoreJobseekerMatch(
     );
     score += weights.distance * distanceScore;
   } else {
-    // Fallback: location string matching (if coordinates not available)
     if (candidate.locationPreferences.contains(
       _normalizeToken(job.post.location),
     )) {
-      score += weights.distance * 0.3; // 30% of distance weight for string match
+      score += weights.distance * 0.3; // 30%distance weight 
     }
   }
 
-  // Additional bonuses (smaller weights)
+  //bonuses weight
   final jobTypeToken = _normalizeToken(job.post.jobType.label);
   if (candidate.jobPreferences.contains(jobTypeToken)) {
     score += weights.jobTypePreference;
@@ -1839,13 +1551,11 @@ Future<double> _scoreRecruiterMatch(
   double similarity,
   _MatchingWeights weights,
 ) async {
-  // Debug: Log weights being used in recruiter scoring
   debugPrint('Recruiter scoring - weights: textSimilarity=${weights.textSimilarity}, tagMatching=${weights.tagMatching}, requiredSkills=${weights.requiredSkills}, distance=${weights.distance}');
   
-  // Base score from embedding similarity
+  //base score embedding similarity
   var score = similarity * weights.textSimilarity;
 
-  // Direct tags matching (post.tags vs jobseeker.tags)
   final postTags = job.post.tags.map(_normalizeToken).toSet();
   final candidateTags = candidate.tagUniverse;
   final matchedTags = candidateTags.intersection(postTags);
@@ -1855,7 +1565,7 @@ Future<double> _scoreRecruiterMatch(
     score += weights.tagMatching * tagOverlap;
   }
 
-  // Required skills matching
+  //skills matching
   final requiredSkills = job.requiredSkills;
   if (requiredSkills.isNotEmpty) {
     final skillOverlap =
@@ -1864,7 +1574,7 @@ Future<double> _scoreRecruiterMatch(
     score += weights.requiredSkills * skillOverlap;
   }
 
-  // Distance factor (NEW)
+  //distance factor 
   if (candidate.latitude != null &&
       candidate.longitude != null &&
       job.post.latitude != null &&
@@ -1883,15 +1593,13 @@ Future<double> _scoreRecruiterMatch(
     );
     score += weights.distance * distanceScore;
   } else {
-    // Fallback: location string matching
     if (candidate.locationPreferences.contains(
       _normalizeToken(job.post.location),
     )) {
-      score += weights.distance * 0.3; // 30% of distance weight for string match
+      score += weights.distance * 0.3;
     }
   }
 
-  // Additional bonuses
   final jobTypeToken = _normalizeToken(job.post.jobType.label);
   if (candidate.jobPreferences.contains(jobTypeToken)) {
     score += weights.jobTypePreference;
@@ -1911,7 +1619,6 @@ List<String> _matchedSkills(
   }
   return jobSkills.map(_displayLabel).take(3).toList();
 }
-
 
 String _displayLabel(String value) {
   if (value.isEmpty) return value;
@@ -1944,7 +1651,5 @@ Post _postFromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
   return Post.fromMap({...data, 'id': doc.id, 'createdAt': data['createdAt']});
 }
 
-/// Removed Gale-Shapley and Hungarian algorithms - not suitable for one-to-many recommendation scenario
-/// Current implementation uses weighted sorting which is more appropriate for the use case
 
 
