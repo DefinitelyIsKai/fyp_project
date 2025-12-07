@@ -271,7 +271,7 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                         final applicantQuota = currentPost.applicantQuota;
                         final isQuotaReached = applicantQuota != null && approvedCount >= applicantQuota;
                         
-                        // Check if event starts today and tomorrw
+                        // Check if event starts today or has already passed
                         bool isEventStartingSoon = false;
                         if (currentPost.eventStartDate != null) {
                           final now = DateTime.now();
@@ -282,9 +282,8 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                             eventStartDate.month,
                             eventStartDate.day,
                           );
-                          final tomorrow = DateTime(today.year, today.month, today.day + 1);
-                          //prevent
-                          isEventStartingSoon = eventStartDateOnly.isAtSameMomentAs(today) || eventStartDateOnly.isAtSameMomentAs(tomorrow) ||eventStartDateOnly.isBefore(today);
+                          // Only block if event starts today or has already passed
+                          isEventStartingSoon = eventStartDateOnly.isAtSameMomentAs(today) || eventStartDateOnly.isBefore(today);
                         }
                         
                         final bool isDisabled = hasApplied || 
@@ -1469,10 +1468,8 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
         eventStartDate.month,
         eventStartDate.day,
       );
-      final tomorrow = DateTime(today.year, today.month, today.day + 1);
-      // tomorrow start no aply
+      // Only block if event starts today or has already passed
       if (eventStartDateOnly.isAtSameMomentAs(today) || 
-          eventStartDateOnly.isAtSameMomentAs(tomorrow) ||
           eventStartDateOnly.isBefore(today)) {
         if (!mounted) return;
         DialogUtils.showWarningMessage(

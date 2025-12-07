@@ -407,10 +407,8 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
         eventStartDate.month,
         eventStartDate.day,
       );
-      final tomorrow = DateTime(today.year, today.month, today.day + 1);
-      //no apply if event starts today or tomorrow
+      // Only block if event starts today or has already passed
       if (eventStartDateOnly.isAtSameMomentAs(today) || 
-          eventStartDateOnly.isAtSameMomentAs(tomorrow) ||
           eventStartDateOnly.isBefore(today)) {
         if (!mounted) return;
         DialogUtils.showWarningMessage(
@@ -729,8 +727,8 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                               eventStartDate.month,
                               eventStartDate.day,
                             );
-                            final tomorrow = DateTime(today.year, today.month, today.day + 1);
-                            isEventStartingSoon = eventStartDateOnly.isAtSameMomentAs(today) || eventStartDateOnly.isAtSameMomentAs(tomorrow) ||eventStartDateOnly.isBefore(today);
+                            // Only block if event starts today or has already passed
+                            isEventStartingSoon = eventStartDateOnly.isAtSameMomentAs(today) || eventStartDateOnly.isBefore(today);
                           }
                           
                           final bool isDisabled = hasApplied ||_isApplying ||widget.post.status == PostStatus.completed ||widget.post.status == PostStatus.pending ||isOwnPost ||isQuotaReached ||isEventStartingSoon;

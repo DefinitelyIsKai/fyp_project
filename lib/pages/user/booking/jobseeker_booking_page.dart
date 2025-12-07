@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
 import '../../../services/user/availability_service.dart';
 import '../../../services/user/auth_service.dart';
 import '../../../services/user/application_service.dart';
@@ -35,18 +36,10 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
   int _refreshKey = 0;
   bool _isLoadingSlots = false;
 
-  Future<Post?>? _cachedPostFuture;
-  String? _cachedPostId;
-  Future<Set<DateTime>>? _cachedBookedDatesFuture;
-  String? _cachedBookedDatesKey;
-  Future<Set<String>>? _cachedPendingSlotsFuture;
-  String? _cachedPendingSlotsKey;
 
   void _onMonthChanged(DateTime newMonth) {
     setState(() {
       _currentMonth = newMonth;
-      _cachedBookedDatesFuture = null;
-      _cachedBookedDatesKey = null;
     });
   }
 
@@ -69,12 +62,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
   Future<void> _refreshData() async {
     setState(() {
       _refreshKey++;
-      _cachedPostFuture = null;
-      _cachedPostId = null;
-      _cachedBookedDatesFuture = null;
-      _cachedBookedDatesKey = null;
-      _cachedPendingSlotsFuture = null;
-      _cachedPendingSlotsKey = null;
     });
     await Future.delayed(const Duration(milliseconds: 100));
   }
@@ -93,6 +80,37 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     return DateTime(date.year, date.month, date.day);
   }
 
+  // Check if post's event end date has passed
+  bool _isEventEndDatePassed(Post? post) {
+    if (post == null || post.eventEndDate == null) {
+      return false; // No event end date means it's still valid
+    }
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    final eventEndDateOnly = DateTime(
+      post.eventEndDate!.year,
+      post.eventEndDate!.month,
+      post.eventEndDate!.day,
+    );
+    return todayOnly.isAfter(eventEndDateOnly);
+  }
+
+  // Check if post is valid for booking (not completed and event end date not passed)
+  bool _isPostValidForBooking(Post? post) {
+    if (post == null) {
+      return false; // No post means invalid
+    }
+    // Don't show if status is completed
+    if (post.status == PostStatus.completed) {
+      return false;
+    }
+    // Don't show if event end date has passed
+    if (_isEventEndDatePassed(post)) {
+      return false;
+    }
+    return true;
+  }
+
   // normalized date from slot
   static DateTime _slotDate(AvailabilitySlot slot) {
     return _normalizeDate(slot.date);
@@ -103,59 +121,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     return (start: DateTime(month.year, month.month, 1), end: DateTime(month.year, month.month + 1, 0));
   }
 
-  //cached or create post future
-  Future<Post?> _getPostFuture(String? postId) {
-    if (postId == null) {
-      _cachedPostFuture = null;
-      _cachedPostId = null;
-      return Future<Post?>.value(null);
-    }
-
-    if (_cachedPostFuture != null && _cachedPostId == postId) {
-      return _cachedPostFuture!;
-    }
-
-    _cachedPostId = postId;
-    _cachedPostFuture = _postService.getById(postId);
-    return _cachedPostFuture!;
-  }
-
-  //cached or create booked dates future
-  Future<Set<DateTime>> _getBookedDatesFuture(
-    String userId,
-    DateTime startDate,
-    DateTime endDate,
-    String? applicationId,
-  ) {
-    final key =
-        '${userId}_${startDate.toIso8601String()}_${endDate.toIso8601String()}_${applicationId ?? 'all'}_$_refreshKey';
-
-    if (_cachedBookedDatesFuture != null && _cachedBookedDatesKey == key) {
-      return _cachedBookedDatesFuture!;
-    }
-
-    _cachedBookedDatesKey = key;
-    _cachedBookedDatesFuture = _availabilityService.getBookedDatesForJobseeker(
-      userId,
-      startDate: startDate,
-      endDate: endDate,
-      matchId: applicationId,
-    );
-    return _cachedBookedDatesFuture!;
-  }
-
-  //cached or create pending slots future
-  Future<Set<String>> _getPendingSlotsFuture(String userId, String? applicationId) {
-    final key = '${userId}_${applicationId ?? 'all'}';
-
-    if (_cachedPendingSlotsFuture != null && _cachedPendingSlotsKey == key) {
-      return _cachedPendingSlotsFuture!;
-    }
-
-    _cachedPendingSlotsKey = key;
-    _cachedPendingSlotsFuture = _availabilityService.getRequestedSlotIdsForJobseeker(userId, matchId: applicationId);
-    return _cachedPendingSlotsFuture!;
-  }
 
   //process slots and prepare calendar data
   ({Set<DateTime> allDates, Set<DateTime> availableDates, Set<DateTime> bookedDates}) _processSlots(
@@ -197,12 +162,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
         onPopInvoked: (didPop) {
           if (!didPop) {
             // Clear cached futures
-            _cachedPostFuture = null;
-            _cachedPostId = null;
-            _cachedBookedDatesFuture = null;
-            _cachedBookedDatesKey = null;
-            _cachedPendingSlotsFuture = null;
-            _cachedPendingSlotsKey = null;
             setState(() {
               _selectedRecruiterId = null;
             });
@@ -215,19 +174,13 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     //show calendar
     return PopScope(
       canPop: false,
-      onPopInvoked: (didPop) {
-        if (!didPop) {
-          _cachedPostFuture = null;
-          _cachedPostId = null;
-          _cachedBookedDatesFuture = null;
-          _cachedBookedDatesKey = null;
-          _cachedPendingSlotsFuture = null;
-          _cachedPendingSlotsKey = null;
-          setState(() {
-            _selectedApplication = null;
-          });
-        }
-      },
+        onPopInvoked: (didPop) {
+          if (!didPop) {
+            setState(() {
+              _selectedApplication = null;
+            });
+          }
+        },
       child: Column(
         children: [
           Container(
@@ -375,7 +328,11 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                         ),
                         builder: (context, snapshot) {
                           if (snapshot.connectionState == ConnectionState.waiting) {
-                            return const Center(child: CircularProgressIndicator());
+                            return const Center(
+                              child: CircularProgressIndicator(
+                                color: Color(0xFF00C8A0),
+                              ),
+                            );
                           }
 
                           final userId = _authService.currentUserId;
@@ -396,12 +353,65 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                                 }).toList()
                               : slots;
 
-                          //filter slots of post event date range
-                          final postFuture = _getPostFuture(_selectedApplication?.postId);
-                          return FutureBuilder<Post?>(
-                            future: postFuture,
+                          //filter slots of post event date range - use stream for real-time updates
+                          final postId = _selectedApplication?.postId;
+                          if (postId == null) {
+                            // No post, show all slots
+                            final processed = _processSlots(filteredSlots);
+                            final monthRange = _getMonthRange(_currentMonth);
+                            return StreamBuilder<Set<DateTime>>(
+                              stream: _availabilityService.streamBookedDatesForJobseeker(
+                                userId,
+                                startDate: monthRange.start,
+                                endDate: monthRange.end,
+                                matchId: applicationId,
+                              ),
+                              builder: (context, bookedSnapshot) {
+                                return StreamBuilder<Set<String>>(
+                                  stream: _availabilityService.streamRequestedSlotIdsForJobseeker(
+                                    userId,
+                                    matchId: applicationId,
+                                  ),
+                                  builder: (context, pendingSnapshot) {
+                                    final pendingData = _preparePendingDates(
+                                      filteredSlots,
+                                      pendingSnapshot.data ?? {},
+                                      processed.availableDates,
+                                    );
+                                    return MonthlyCalendar(
+                                      currentMonth: _currentMonth,
+                                      selectedDate: _selectedDate,
+                                      availableDates: pendingData.availableDatesExcludingPending,
+                                      bookedDates: bookedSnapshot.data ?? {},
+                                      addedSlotDates: const {},
+                                      pendingDates: pendingData.pendingDates,
+                                      onDateSelected: _onDateSelected,
+                                      onDateTapped: _onDateTapped,
+                                    );
+                                  },
+                                );
+                              },
+                            );
+                          }
+
+                          return StreamBuilder<Post?>(
+                            stream: _postService.streamPostById(postId),
                             builder: (context, postSnapshot) {
+                              // Show loading while post data is being fetched to prevent showing all slots
+                              if (postSnapshot.connectionState == ConnectionState.waiting) {
+                                return const Center(
+                                  child: CircularProgressIndicator(
+                                    color: Color(0xFF00C8A0),
+                                  ),
+                                );
+                              }
+                              
                               final post = postSnapshot.data;
+                              
+                              // Update cache when post data arrives
+                              if (post != null) {
+                                _postCache[postId] = post;
+                              }
 
                               //filter slots by post event end date (allow booking before event starts)
                               final dateFilteredSlots = filteredSlots.where((slot) {
@@ -424,24 +434,23 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
 
                               final processed = _processSlots(dateFilteredSlots);
 
-                              //get booked dates jobseeker application cahched
+                              //get booked dates jobseeker application - use stream for real-time updates
                               final monthRange = _getMonthRange(_currentMonth);
-                              final bookedDatesFuture = _getBookedDatesFuture(
-                                userId,
-                                monthRange.start,
-                                monthRange.end,
-                                applicationId,
-                              );
 
-                              return FutureBuilder<Set<DateTime>>(
-                                key: ValueKey('booked_dates_jobseeker_${applicationId ?? 'all'}_$_refreshKey'),
-                                future: bookedDatesFuture,
+                              return StreamBuilder<Set<DateTime>>(
+                                stream: _availabilityService.streamBookedDatesForJobseeker(
+                                  userId,
+                                  startDate: monthRange.start,
+                                  endDate: monthRange.end,
+                                  matchId: applicationId,
+                                ),
                                 builder: (context, bookedSnapshot) {
-                                  // Get pending dates for jobseeker for this specific application (cached)
-                                  final pendingSlotsFuture = _getPendingSlotsFuture(userId, applicationId);
-
-                                  return FutureBuilder<Set<String>>(
-                                    future: pendingSlotsFuture,
+                                  // Get pending dates for jobseeker for this specific application - use stream for real-time updates
+                                  return StreamBuilder<Set<String>>(
+                                    stream: _availabilityService.streamRequestedSlotIdsForJobseeker(
+                                      userId,
+                                      matchId: applicationId,
+                                    ),
                                     builder: (context, pendingSnapshot) {
                                       final pendingData = _preparePendingDates(
                                         dateFilteredSlots,
@@ -496,10 +505,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                               onBooked: () {
                                 setState(() {
                                   _refreshKey++;
-                                  _cachedBookedDatesFuture = null;
-                                  _cachedBookedDatesKey = null;
-                                  _cachedPendingSlotsFuture = null;
-                                  _cachedPendingSlotsKey = null;
                                 });
                               },
                               onSlotsLoaded: _onSlotsLoaded,
@@ -554,7 +559,11 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
             stream: _applicationService.streamMyApplications(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
+                return const Center(
+                  child: CircularProgressIndicator(
+                    color: Color(0xFF00C8A0),
+                  ),
+                );
               }
 
               if (snapshot.hasError) {
@@ -602,17 +611,65 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                 recruiterApplications.putIfAbsent(app.recruiterId, () => []).add(app);
               }
 
-              return FutureBuilder<Map<String, dynamic>>(
-                future: _loadPostsAndRecruitersForApplications(approvedApplications),
+              return StreamBuilder<Map<String, dynamic>>(
+                stream: _streamPostsAndRecruitersForApplications(approvedApplications),
                 builder: (context, dataSnapshot) {
                   if (dataSnapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF00C8A0),
+                      ),
+                    );
                   }
 
                   final data = dataSnapshot.data ?? {};
+                  final postsMap = data['posts'] as Map<String, Post>? ?? {};
                   final recruitersMap = data['recruiters'] as Map<String, Map<String, dynamic>>? ?? {};
 
-                  final uniqueRecruiters = recruiterApplications.keys.toList();
+                  // Filter out recruiters whose all applications have expired event end dates or completed status
+                  // Also calculate valid application counts for each recruiter
+                  final validRecruiters = <String>[];
+                  final validApplicationCounts = <String, int>{};
+                  for (final recruiterId in recruiterApplications.keys) {
+                    final recruiterApps = recruiterApplications[recruiterId]!;
+                    // Count valid applications (non-expired, non-completed)
+                    int validCount = 0;
+                    for (final app in recruiterApps) {
+                      final post = postsMap[app.postId];
+                      if (_isPostValidForBooking(post)) {
+                        validCount++;
+                      }
+                    }
+                    // Only add recruiter if they have at least one valid application
+                    if (validCount > 0) {
+                      validRecruiters.add(recruiterId);
+                      validApplicationCounts[recruiterId] = validCount;
+                    }
+                  }
+
+                  if (validRecruiters.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.info_outline, size: 64, color: Colors.grey[300]),
+                          const SizedBox(height: 16),
+                          Text('No available recruiters', style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 32),
+                            child: Text(
+                              'All job posts have expired event dates or are completed',
+                              style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  final uniqueRecruiters = validRecruiters;
 
                   return ListView.separated(
                     padding: const EdgeInsets.all(16),
@@ -620,8 +677,8 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                     separatorBuilder: (context, index) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final recruiterId = uniqueRecruiters[index];
-                      final recruiterApps = recruiterApplications[recruiterId]!;
-                      final count = recruiterApps.length;
+                      // Use valid application count instead of all applications
+                      final count = validApplicationCounts[recruiterId] ?? 0;
 
                       final recruiterData = recruitersMap[recruiterId] ?? {};
                       final fullName =
@@ -757,7 +814,11 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
             stream: _applicationService.streamMyApplications(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
+                return const Center(
+                  child: CircularProgressIndicator(
+                    color: Color(0xFF00C8A0),
+                  ),
+                );
               }
 
               if (snapshot.hasError) {
@@ -791,23 +852,55 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                 );
               }
 
-              return FutureBuilder<Map<String, dynamic>>(
-                future: _loadPostsAndRecruitersForApplications(approvedApplicationsForRecruiter),
+              return StreamBuilder<Map<String, dynamic>>(
+                stream: _streamPostsAndRecruitersForApplications(approvedApplicationsForRecruiter),
                 builder: (context, dataSnapshot) {
                   if (dataSnapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF00C8A0),
+                      ),
+                    );
                   }
 
                   final data = dataSnapshot.data ?? {};
                   final postsMap = data['posts'] as Map<String, Post>? ?? {};
                   final recruitersMap = data['recruiters'] as Map<String, Map<String, dynamic>>? ?? {};
 
+                  // Filter out applications with expired event end dates or completed status
+                  final validApplications = approvedApplicationsForRecruiter.where((application) {
+                    final post = postsMap[application.postId];
+                    return _isPostValidForBooking(post);
+                  }).toList();
+
+                  if (validApplications.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.info_outline, size: 64, color: Colors.grey[300]),
+                          const SizedBox(height: 16),
+                          Text('No available applications', style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 32),
+                            child: Text(
+                              'All job posts have expired event dates or are completed',
+                              style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
                   return ListView.separated(
                     padding: const EdgeInsets.all(16),
-                    itemCount: approvedApplicationsForRecruiter.length,
+                    itemCount: validApplications.length,
                     separatorBuilder: (context, index) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
-                      final application = approvedApplicationsForRecruiter[index];
+                      final application = validApplications[index];
                       final post = postsMap[application.postId];
                       final recruiterData = recruitersMap[application.recruiterId] ?? {};
                       final fullName =
@@ -962,6 +1055,95 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     }
 
     return {'posts': postsMap, 'recruiters': recruitersMap};
+  }
+
+  // Stream posts and recruiters for real-time updates
+  Stream<Map<String, dynamic>> _streamPostsAndRecruitersForApplications(List<Application> applications) {
+    if (applications.isEmpty) {
+      return Stream.value({'posts': <String, Post>{}, 'recruiters': <String, Map<String, dynamic>>{}});
+    }
+
+    final Set<String> postIds = applications.map((app) => app.postId).toSet();
+    final Set<String> recruiterIds = applications.map((app) => app.recruiterId).toSet();
+
+    // Create maps to store current values
+    final Map<String, Post> postsMap = {};
+    final Map<String, Map<String, dynamic>> recruitersMap = {};
+    
+    // Track which streams have emitted at least once
+    final Set<String> postsReceived = {};
+    final Set<String> recruitersReceived = {};
+
+    // Create a stream controller to combine all streams
+    final controller = StreamController<Map<String, dynamic>>();
+    final List<StreamSubscription> subscriptions = [];
+
+    void emitIfReady() {
+      // Emit when we have at least initial data from all streams
+      if ((postIds.isEmpty || postsReceived.length == postIds.length) &&
+          (recruiterIds.isEmpty || recruitersReceived.length == recruiterIds.length)) {
+        if (!controller.isClosed) {
+          controller.add({
+            'posts': Map<String, Post>.from(postsMap),
+            'recruiters': Map<String, Map<String, dynamic>>.from(recruitersMap),
+          });
+        }
+      }
+    }
+
+    // Stream all posts
+    for (final postId in postIds) {
+      final subscription = _postService.streamPostById(postId).listen((post) {
+        if (post != null) {
+          postsMap[postId] = post;
+          _postCache[postId] = post; // Update cache
+        }
+        postsReceived.add(postId);
+        emitIfReady();
+      }, onError: (error) {
+        debugPrint('Error streaming post $postId: $error');
+        postsReceived.add(postId);
+        emitIfReady();
+      });
+      subscriptions.add(subscription);
+    }
+
+    // Stream recruiters (users collection)
+    final firestore = FirebaseFirestore.instance;
+    for (final recruiterId in recruiterIds) {
+      final subscription = firestore.collection('users').doc(recruiterId).snapshots().listen((doc) {
+        if (doc.exists) {
+          final data = doc.data() ?? {};
+          recruitersMap[recruiterId] = {
+            'fullName': data['fullName'] as String?,
+            'professionalProfile': data['professionalProfile'] as String?,
+          };
+        } else {
+          recruitersMap[recruiterId] = {};
+        }
+        recruitersReceived.add(recruiterId);
+        emitIfReady();
+      }, onError: (error) {
+        debugPrint('Error streaming recruiter $recruiterId: $error');
+        recruitersReceived.add(recruiterId);
+        emitIfReady();
+      });
+      subscriptions.add(subscription);
+    }
+
+    // If no posts or recruiters, emit immediately
+    if (postIds.isEmpty && recruiterIds.isEmpty) {
+      emitIfReady();
+    }
+
+    // Clean up subscriptions when stream is cancelled
+    controller.onCancel = () {
+      for (final subscription in subscriptions) {
+        subscription.cancel();
+      }
+    };
+
+    return controller.stream;
   }
 
   //load selected application of recruiter name and job title
