@@ -51,9 +51,16 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
   }
 
   void _onDateSelected(DateTime date) {
+    // Only set loading if date actually changed
+    final dateOnly = DateTime(date.year, date.month, date.day);
+    final selectedDateOnly = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+    
     setState(() {
       _selectedDate = date;
-      _isLoadingSlots = true;
+      // Only show loading if date actually changed
+      if (dateOnly != selectedDateOnly) {
+        _isLoadingSlots = true;
+      }
     });
   }
 

@@ -43,6 +43,18 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
   DateTime? _lastNotifiedDate; //track last notified 
 
   @override
+  void didUpdateWidget(JobseekerSlotsList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Reset notification state if date changed
+    final oldDate = DateTime(oldWidget.selectedDate.year, oldWidget.selectedDate.month, oldWidget.selectedDate.day);
+    final newDate = DateTime(widget.selectedDate.year, widget.selectedDate.month, widget.selectedDate.day);
+    if (oldDate != newDate) {
+      _hasNotifiedLoaded = false;
+      _lastNotifiedDate = null;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     //approved applications
     return FutureBuilder<List<Application>>(
@@ -126,13 +138,14 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
           ),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.active) {
-              if ((snapshot.hasData || snapshot.hasError) && !_hasNotifiedLoaded) {
+              if (snapshot.hasData || snapshot.hasError) {
                 final currentDate = DateTime(
                   widget.selectedDate.year,
                   widget.selectedDate.month,
                   widget.selectedDate.day,
                 );
                 
+                // Always notify if date changed, or if we haven't notified yet
                 if (_lastNotifiedDate == null || 
                     _lastNotifiedDate!.year != currentDate.year ||
                     _lastNotifiedDate!.month != currentDate.month ||
@@ -140,6 +153,12 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                   _hasNotifiedLoaded = true;
                   _lastNotifiedDate = currentDate;
                   
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    widget.onSlotsLoaded?.call();
+                  });
+                } else if (!_hasNotifiedLoaded) {
+                  // If same date but haven't notified yet, notify now
+                  _hasNotifiedLoaded = true;
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     widget.onSlotsLoaded?.call();
                   });

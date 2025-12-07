@@ -212,7 +212,7 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
       location: _locationFilter,
       minBudget: _minBudget,
       maxBudget: _maxBudget,
-      industries: _selectedEvents.isEmpty ? null : _selectedEvents,
+      events: _selectedEvents.isEmpty ? null : _selectedEvents,
     );
 
     return _cachedPostsStream!;
@@ -387,7 +387,7 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
           location: _locationFilter,
           minBudget: _minBudget,
           maxBudget: _maxBudget,
-          industries: _selectedEvents.isEmpty ? null : _selectedEvents,
+          events: _selectedEvents.isEmpty ? null : _selectedEvents,
         )
         .first;
 

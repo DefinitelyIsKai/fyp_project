@@ -110,24 +110,6 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
 
     if (!mounted) return;
     
-    //validate field
-    if (_workExperienceCtrl.text.trim().isEmpty) {
-      if (_index != 2) {
-        setState(() => _index = 2);
-        await _controller.animateToPage(
-          2,
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeInOut,
-        );
-      }
-      if (!mounted) return;
-      DialogUtils.showWarningMessage(
-        context: context,
-        message: 'Work Experience is required. Please fill it in.',
-      );
-      return;
-    }
-    
     setState(() => _saving = true);
     try {
       final String role = _seekingChoice == 'hiring' ? 'recruiter' : 'jobseeker';
@@ -142,7 +124,7 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
         'longitude': _longitude,
         'professionalProfile': _profProfileCtrl.text.trim().isEmpty ? null : _profProfileCtrl.text.trim(),
         'professionalSummary': _summaryCtrl.text.trim().isEmpty ? null : _summaryCtrl.text.trim(),
-        'workExperience': _workExperienceCtrl.text.trim(),
+        'workExperience': _workExperienceCtrl.text.trim().isEmpty ? null : _workExperienceCtrl.text.trim(),
         'age': ageValue,
         'gender': _selectedGender,
         if (_resumeAttachment != null) 'resume': _resumeAttachment!.toMap() else 'resume': FieldValue.delete(),
@@ -150,6 +132,7 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
         'acceptedTerms': _acceptedTerms,
         if (tagsToSave.isNotEmpty) 'tags': tagsToSave else 'tags': FieldValue.delete(),
         'profileCompleted': true,
+        'login': true, 
       });
 
       if (!mounted) return;
@@ -223,11 +206,45 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
           hintStyle: TextStyle(color: Colors.grey[500]),
         );
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
+    return PopScope(
+      canPop: false, 
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+        
+  
+        if (_index == 0) {
+          final confirmed = await DialogUtils.showConfirmationDialog(
+            context: context,
+            title: 'Exit Profile Setup?',
+            message: 'You have not completed your profile. Do you want to quit?',
+            icon: Icons.warning_amber_rounded,
+            iconColor: Colors.orange,
+            confirmText: 'Quit',
+            cancelText: 'Continue',
+            isDestructive: true,
+          );
+          
+          if (!mounted) return;
+          
+          if (confirmed == true) {
+            await _authService.signOut();
+            if (!mounted) return;
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const HomePage()),
+              (route) => false,
+            );
+          }
+        } else {
+          _onBack();
+        }
+      },
+      child: Scaffold(
         backgroundColor: Colors.white,
-        elevation: 0,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          automaticallyImplyLeading: false, 
         title: Row(
           children: [
             Container(
@@ -371,7 +388,7 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        TextField(controller: _profProfileCtrl, decoration: inputDecoration('e.g. Mobile Developer')),
+                        TextField(controller: _profProfileCtrl, decoration: inputDecoration('e.g. event crew')),
                         const SizedBox(height: 20),
                         Text(
                           'Professional Summary',
@@ -389,7 +406,7 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
                         ),
                         const SizedBox(height: 20),
                         Text(
-                          'Work Experience*',
+                          'Work Experience',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -524,6 +541,7 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
             )
           ],
         ),
+      ),
       ),
     );
   }

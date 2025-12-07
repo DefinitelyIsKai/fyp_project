@@ -64,21 +64,27 @@ class _LoginPageState extends State<LoginPage> {
           return;
         }
         bool goToSetup = false;
+        bool profileCompleted = false;
         try {
           final completed = await _authService.isProfileCompleted();
+          profileCompleted = completed;
           goToSetup = completed == false;
         } catch (_) {
       
         }
         
-        //bool logintrue 
+        //bool logintrue - only set to true if profileCompleted is true
         try {
           final userId = credential.user?.uid;
           if (userId != null && userId.isNotEmpty) {
-            await FirebaseFirestore.instance.collection('users').doc(userId).update({
-              'login': true,
-            });
-            debugPrint('Login status set to true for user: $userId');
+            if (profileCompleted) {
+              await FirebaseFirestore.instance.collection('users').doc(userId).update({
+                'login': true,
+              });
+              debugPrint('Login status set to true for user: $userId (profileCompleted=true)');
+            } else {
+              debugPrint('Login status NOT set to true for user: $userId (profileCompleted=false)');
+            }
           } else {
             debugPrint('ERROR: Cannot set login status - user ID is null or empty');
           }
