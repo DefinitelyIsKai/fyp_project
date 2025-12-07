@@ -884,7 +884,7 @@ class WalletService {
     final res = await _http.post(
       Uri.parse(endpoint),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'uid': _uid, 'credits': credits, 'amount': amountInCents, 'currency': 'usd'}),
+      body: jsonEncode({'uid': _uid, 'credits': credits, 'amount': amountInCents, 'currency': 'myr'}),
     );
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw StateError(

@@ -512,6 +512,29 @@ class AuthService extends ChangeNotifier {
         isActive: true,
       );
 
+// Check profileCompleted before setting login to true
+      final profileCompleted = data['profileCompleted'];
+      bool isProfileCompleted = false;
+      if (profileCompleted is bool) {
+        isProfileCompleted = profileCompleted;
+      } else if (profileCompleted is String) {
+        isProfileCompleted = profileCompleted.toLowerCase() == 'true';
+      }
+
+      final updateData = <String, dynamic>{
+        'lastLoginAt': FieldValue.serverTimestamp(),
+      };
+      if (isProfileCompleted) {
+        updateData['login'] = true; 
+      }
+
+      await _firestore.collection('users').doc(uid).update(updateData);
+      if (isProfileCompleted) {
+        debugPrint('Admin login: Successfully set login=true for userId=$uid (profileCompleted=true)');
+      } else {
+        debugPrint('Admin login: NOT set login=true for userId=$uid (profileCompleted=$profileCompleted)');
+      }
+
       _isAuthenticated = true;
       notifyListeners();
       return LoginResult(success: true);

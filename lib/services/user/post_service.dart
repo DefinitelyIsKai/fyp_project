@@ -477,7 +477,7 @@ class PostService {
     String? location,
     double? minBudget,
     double? maxBudget,
-    List<String>? industries,
+    List<String>? events,
   }) {
     Query<Map<String, dynamic>> queryRef = _col.where(
       'isDraft',
@@ -529,11 +529,11 @@ class PostService {
           }
 
         
-          if (industries != null && industries.isNotEmpty) {
-            final industrySet = industries.map((i) => i.toLowerCase()).toSet();
+          if (events != null && events.isNotEmpty) {
+            final eventSet = events.map((e) => e.toLowerCase()).toSet();
             posts = posts.where((post) {
               if (post.event.isEmpty) return false;
-              return industrySet.contains(post.event.toLowerCase());
+              return eventSet.contains(post.event.toLowerCase());
             }).toList();
           }
 
@@ -543,7 +543,6 @@ class PostService {
             posts = posts.where((post) {
               return post.title.toLowerCase().contains(queryLower) ||
                   post.description.toLowerCase().contains(queryLower) ||
-                  post.event.toLowerCase().contains(queryLower) ||
                   post.tags.any(
                     (tag) => tag.toLowerCase().contains(queryLower),
                   );
