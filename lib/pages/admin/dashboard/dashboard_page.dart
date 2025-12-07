@@ -52,7 +52,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'staff': [
       'Post Moderation',
       'User Management',
-      'Analytics & Reporting',
+      'Message Oversight',
     ],
   };
 

@@ -1,4 +1,5 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:flutter/foundation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/models/admin/role_model.dart';
 
 class RoleService {
@@ -158,14 +159,14 @@ class RoleService {
       },
       {
         'name': 'hr',
-        'description': 'Human Resources with access to user, post, analytics, and monitoring modules',
-        'permissions': ['post_moderation', 'user_management', 'analytics', 'monitoring', 'message_oversight'],
+        'description': 'Human Resources with access to user, post, analytics, monitoring, and report management modules',
+        'permissions': ['post_moderation', 'user_management', 'analytics', 'monitoring', 'message_oversight', 'report_management'],
         'isSystemRole': true,
       },
       {
         'name': 'staff',
-        'description': 'Staff member with limited access to posts and users',
-        'permissions': ['post_moderation', 'user_management'],
+        'description': 'Staff member with limited access to posts, users, and message oversight',
+        'permissions': ['post_moderation', 'user_management', 'message_oversight'],
         'isSystemRole': true,
       },
     ];
@@ -189,15 +190,73 @@ class RoleService {
           'updatedAt': FieldValue.serverTimestamp(),
         });
       } else {
+        final existingPermissions = List<String>.from(existingRole.permissions);
+        final newPermissions = List<String>.from((roleData['permissions'] as List?) ?? []);
         
-        await _rolesCollection.doc(existingRole.id).update({
-          'permissions': roleData['permissions'],
-          'isSystemRole': true,
-          'description': roleData['description'],
-          'name': roleName, 
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+        if (existingRole.isSystemRole && !_listsEqual(existingPermissions, newPermissions)) {
+          debugPrint('Updating system role "$roleName" permissions from $existingPermissions to $newPermissions');
+          await _rolesCollection.doc(existingRole.id).update({
+            'permissions': newPermissions,
+            'description': roleData['description'],
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+          
+          await _updateUsersPermissionsForRole(roleName, newPermissions);
+        } else if (!existingRole.isSystemRole) {
+          await _rolesCollection.doc(existingRole.id).update({
+            'permissions': roleData['permissions'],
+            'isSystemRole': true,
+            'description': roleData['description'],
+            'name': roleName, 
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
       }
+    }
+  }
+  
+  bool _listsEqual(List<String> list1, List<String> list2) {
+    if (list1.length != list2.length) return false;
+    final sorted1 = List<String>.from(list1)..sort();
+    final sorted2 = List<String>.from(list2)..sort();
+    return sorted1.toString() == sorted2.toString();
+  }
+  
+  Future<void> _updateUsersPermissionsForRole(String roleName, List<String> newPermissions) async {
+    try {
+      final normalizedRole = roleName.toLowerCase();
+      final snapshot = await _usersCollection.where('role', isEqualTo: normalizedRole).get();
+      
+      if (snapshot.docs.isEmpty) {
+        debugPrint('No users found with role "$normalizedRole"');
+        return;
+      }
+      
+      final batch = _firestore.batch();
+      int updateCount = 0;
+      
+      for (final doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data == null) continue;
+        
+        final currentPermissions = List<String>.from(data['permissions'] ?? []);
+        if (!_listsEqual(currentPermissions, newPermissions)) {
+          batch.update(doc.reference, {
+            'permissions': newPermissions,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+          updateCount++;
+        }
+      }
+      
+      if (updateCount > 0) {
+        await batch.commit();
+        debugPrint('Updated permissions for $updateCount user(s) with role "$normalizedRole"');
+      } else {
+        debugPrint('All users with role "$normalizedRole" already have correct permissions');
+      }
+    } catch (e) {
+      debugPrint('Error updating user permissions for role "$roleName": $e');
     }
   }
 

@@ -77,11 +77,19 @@ class AuthService extends ChangeNotifier {
       final newUserUid = userCredential.user!.uid;
 
       final normalizedRole = role.toLowerCase();
-      final permissions = await _getPermissionsByRole(normalizedRole);
+      
+      List<String> permissions;
+      final systemRoles = ['manager', 'hr', 'staff'];
+      if (systemRoles.contains(normalizedRole)) {
+        permissions = _getSystemRolePermissions(normalizedRole);
+        debugPrint('Using system role permissions for "$normalizedRole": $permissions');
+      } else {
+        permissions = await _getPermissionsByRole(normalizedRole);
+      }
       
       if (permissions.isEmpty) {
         
-        final systemRoles = ['manager', 'hr', 'staff', 'admin'];
+        final systemRoles = ['manager', 'hr', 'staff'];
         if (systemRoles.contains(normalizedRole)) {
           debugPrint('WARNING: System role "$normalizedRole" not found in roles collection. This should not happen.');
           debugPrint('Please ensure system roles are initialized in the roles collection.');
@@ -103,7 +111,7 @@ class AuthService extends ChangeNotifier {
           'createdAt': FieldValue.serverTimestamp(),
           'isActive': true,
           'status': 'Active',
-          'login': false, // New admin user starts with login: false
+          'isLogin': false, // New admin user starts with isLogin: false
         };
         
         if (location != null && location.isNotEmpty) {
@@ -195,7 +203,7 @@ class AuthService extends ChangeNotifier {
       if (originalUserEmail != null && originalUserPassword != null && originalUserPassword.isNotEmpty) {
         
         try {
-          final loginResult = await login(originalUserEmail, originalUserPassword).timeout(
+          final loginResult = await login(originalUserEmail, originalUserPassword, skipIsLoginCheck: true).timeout(
             const Duration(seconds: 10),
             onTimeout: () {
               debugPrint('Login timeout during session restoration');
@@ -205,6 +213,9 @@ class AuthService extends ChangeNotifier {
           
           if (loginResult.success) {
             debugPrint('Original user session restored: $originalUserEmail');
+            
+            await setLoginStatus(true);
+            
             await Future.delayed(const Duration(milliseconds: 300));
             
             final restoredUser = _auth.currentUser;
@@ -325,7 +336,7 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<LoginResult> login(String email, String password) async {
+  Future<LoginResult> login(String email, String password, {bool skipIsLoginCheck = false}) async {
     try {
       
       UserCredential userCredential = await _auth.signInWithEmailAndPassword(
@@ -349,28 +360,31 @@ class AuthService extends ChangeNotifier {
 
       final data = doc.data()!;
       
-      // Check if user is already logged in on another device
-      final loginValue = data['login'];
-      bool isLoggedIn = false;
-      if (loginValue is bool) {
-        isLoggedIn = loginValue;
-      } else if (loginValue == null) {
-        isLoggedIn = false;
-        debugPrint('Admin login check: login field is null, treating as false');
-      } else if (loginValue is String) {
-        isLoggedIn = loginValue.toLowerCase() == 'true';
-        debugPrint('Admin login check: login field is string "$loginValue", converted to $isLoggedIn');
-      }
-      
-      debugPrint('Admin login check: userId=$uid, login field=$loginValue (type: ${loginValue.runtimeType}), isLoggedIn=$isLoggedIn');
-      
-      if (isLoggedIn == true) {
-        debugPrint('BLOCKING ADMIN LOGIN: User is already logged in on another device (login=$loginValue)');
-        await _auth.signOut();
-        return LoginResult(
-          success: false,
-          error: 'This account is already logged in on another device. Please logout from the other device first.',
-        );
+      if (!skipIsLoginCheck) {
+        final isLoginValue = data['isLogin'];
+        bool isLoggedIn = false;
+        if (isLoginValue is bool) {
+          isLoggedIn = isLoginValue;
+        } else if (isLoginValue == null) {
+          isLoggedIn = false;
+          debugPrint('Admin login check: isLogin field is null, treating as false');
+        } else if (isLoginValue is String) {
+          isLoggedIn = isLoginValue.toLowerCase() == 'true';
+          debugPrint('Admin login check: isLogin field is string "$isLoginValue", converted to $isLoggedIn');
+        }
+        
+        debugPrint('Admin login check: userId=$uid, isLogin field=$isLoginValue (type: ${isLoginValue.runtimeType}), isLoggedIn=$isLoggedIn');
+        
+        if (isLoggedIn == true) {
+          debugPrint('BLOCKING ADMIN LOGIN: User is already logged in on another device (isLogin=$isLoginValue)');
+          await _auth.signOut();
+          return LoginResult(
+            success: false,
+            error: 'This account is already logged in on another device. Please logout from the other device first.',
+          );
+        }
+      } else {
+        debugPrint('Admin login: Skipping isLogin check (session restoration)');
       }
 
       if (data['isActive'] == false) {
@@ -382,7 +396,7 @@ class AuthService extends ChangeNotifier {
       }
 
       final role = (data['role'] ?? '').toLowerCase();
-      final allowedRoles = ['manager', 'hr', 'staff', 'admin'];
+      final allowedRoles = ['manager', 'hr', 'staff'];
       
       debugPrint('Login validation - Role: "$role", Stored permissions: ${data['permissions']}');
       
@@ -393,7 +407,7 @@ class AuthService extends ChangeNotifier {
         debugPrint('Not a system role. Checking stored permissions: $storedPermissions');
         
         isAdminRole = storedPermissions.contains('all') || 
-                     storedPermissions.any((p) => ['user_management', 'post_moderation', 'analytics', 'monitoring', 'role_management'].contains(p));
+                     storedPermissions.any((p) => ['user_management', 'post_moderation', 'analytics', 'monitoring'].contains(p));
         
         debugPrint('Admin role check from stored permissions: $isAdminRole');
         
@@ -430,7 +444,7 @@ class AuthService extends ChangeNotifier {
               debugPrint('Role permissions from Firestore: $rolePermissions');
               
               isAdminRole = rolePermissions.contains('all') || 
-                           rolePermissions.any((p) => ['user_management', 'post_moderation', 'analytics', 'monitoring', 'role_management'].contains(p));
+                           rolePermissions.any((p) => ['user_management', 'post_moderation', 'analytics', 'monitoring'].contains(p));
               
               debugPrint('Admin role check from role definition: $isAdminRole');
               
@@ -469,13 +483,22 @@ class AuthService extends ChangeNotifier {
         );
       }
 
-      final permissions = await _getPermissionsByRole(role.toLowerCase());
+      List<String> permissions;
+      final normalizedRole = role.toLowerCase();
+      final systemRoles = ['manager', 'hr', 'staff'];
+      if (systemRoles.contains(normalizedRole)) {
+        permissions = _getSystemRolePermissions(normalizedRole);
+        debugPrint('Login: Using system role permissions for "$normalizedRole": $permissions');
+      } else {
+        permissions = await _getPermissionsByRole(normalizedRole);
+      }
       
       final currentPermissions = List<String>.from(data['permissions'] ?? []);
       if (!_listsEqual(permissions, currentPermissions)) {
         await _firestore.collection('users').doc(uid).update({
           'permissions': permissions,
         });
+        debugPrint('Login: Updated permissions from $currentPermissions to $permissions');
       }
 
       _currentAdmin = AdminModel(
@@ -488,12 +511,6 @@ class AuthService extends ChangeNotifier {
         lastLoginAt: DateTime.now(),
         isActive: true,
       );
-
-      await _firestore.collection('users').doc(uid).update({
-        'lastLoginAt': FieldValue.serverTimestamp(),
-        'login': true, // Set login status to true on successful login
-      });
-      debugPrint('Admin login: Successfully set login=true for userId=$uid');
 
       _isAuthenticated = true;
       notifyListeners();
@@ -533,22 +550,20 @@ class AuthService extends ChangeNotifier {
 
   Future<void> logout() async {
     try {
-      // Get user ID before clearing state
       final userId = _auth.currentUser?.uid;
       debugPrint('Admin logout: userId=$userId');
       
-      // Set login=false before signing out
       if (userId != null && userId.isNotEmpty) {
         try {
           await _firestore.collection('users').doc(userId).update({
-            'login': false, // Set login status to false on logout
+            'isLogin': false, // Set isLogin status to false on logout
           });
-          debugPrint('Admin logout: Successfully set login=false for userId=$userId');
+          debugPrint('Admin logout: Successfully set isLogin=false for userId=$userId');
         } catch (e) {
-          debugPrint('Error updating login status during admin logout: $e');
+          debugPrint('Error updating isLogin status during admin logout: $e');
         }
       } else {
-        debugPrint('Admin logout: No userId found, skipping login status update');
+        debugPrint('Admin logout: No userId found, skipping isLogin status update');
       }
       
       _currentAdmin = null;
@@ -592,7 +607,7 @@ class AuthService extends ChangeNotifier {
         if (querySnapshot.docs.isNotEmpty) {
           final userData = querySnapshot.docs.first.data();
           final role = (userData['role'] ?? '').toString().toLowerCase();
-          final allowedRoles = ['manager', 'hr', 'staff', 'admin'];
+          final allowedRoles = ['manager', 'hr', 'staff'];
 
           if (!allowedRoles.contains(role)) {
             return PasswordResetResult(
@@ -650,6 +665,20 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  List<String> _getSystemRolePermissions(String role) {
+    final normalizedRole = role.toLowerCase();
+    switch (normalizedRole) {
+      case 'manager':
+        return ['all'];
+      case 'hr':
+        return ['post_moderation', 'user_management', 'analytics', 'monitoring', 'message_oversight', 'report_management'];
+      case 'staff':
+        return ['post_moderation', 'user_management', 'message_oversight'];
+      default:
+        return [];
+    }
+  }
+
   Future<List<String>> _getPermissionsByRole(String? role) async {
     if (role == null || role.isEmpty) {
       debugPrint('_getPermissionsByRole: Role is null or empty');
@@ -694,6 +723,69 @@ class AuthService extends ChangeNotifier {
     return _currentAdmin!.permissions.contains(feature);
   }
 
+  Future<void> setLoginStatus(bool isLoggedIn) async {
+    final userId = _auth.currentUser?.uid;
+    if (userId != null && userId.isNotEmpty) {
+      try {
+        await _firestore.collection('users').doc(userId).update({
+          'isLogin': isLoggedIn,
+          if (isLoggedIn) 'lastLoginAt': FieldValue.serverTimestamp(),
+        });
+        debugPrint('Admin setLoginStatus: Successfully set isLogin=$isLoggedIn for userId=$userId');
+      } catch (e) {
+        debugPrint('Error updating isLogin status: $e');
+      }
+    } else {
+      debugPrint('Admin setLoginStatus: No userId found, skipping isLogin status update');
+    }
+  }
+
+  Future<void> refreshPermissions() async {
+    final user = _auth.currentUser;
+    if (user != null && _currentAdmin != null) {
+      try {
+        final doc = await _firestore.collection('users').doc(user.uid).get();
+        if (doc.exists) {
+          final data = doc.data()!;
+          final role = data['role'] ?? 'staff';
+          final normalizedRole = role.toLowerCase();
+          
+          List<String> permissions;
+          final systemRoles = ['manager', 'hr', 'staff'];
+          if (systemRoles.contains(normalizedRole)) {
+            permissions = _getSystemRolePermissions(normalizedRole);
+            debugPrint('refreshPermissions: Using system role permissions for "$normalizedRole": $permissions');
+          } else {
+            permissions = await _getPermissionsByRole(normalizedRole);
+          }
+          
+          final currentPermissions = List<String>.from(data['permissions'] ?? []);
+          if (!_listsEqual(permissions, currentPermissions)) {
+            await _firestore.collection('users').doc(user.uid).update({
+              'permissions': permissions,
+            });
+            debugPrint('refreshPermissions: Updated permissions from $currentPermissions to $permissions');
+          }
+          
+          _currentAdmin = AdminModel(
+            id: doc.id,
+            email: data['email'] ?? '',
+            name: data['fullName'] ?? '',
+            role: role,
+            permissions: permissions,
+            createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+            lastLoginAt: (data['lastLoginAt'] as Timestamp?)?.toDate(),
+            isActive: true,
+          );
+          notifyListeners();
+          debugPrint('refreshPermissions: Permissions refreshed - Role: $role, Permissions: $permissions');
+        }
+      } catch (e) {
+        debugPrint('Error refreshing permissions: $e');
+      }
+    }
+  }
+
   Future<void> checkAuthState() async {
     final user = _auth.currentUser;
     if (user != null) {
@@ -703,14 +795,23 @@ class AuthService extends ChangeNotifier {
           final data = doc.data()!;
           if (data['isActive'] == true) {
             final role = data['role'] ?? 'staff';
+            final normalizedRole = role.toLowerCase();
             
-            final permissions = await _getPermissionsByRole(role.toLowerCase());
+            List<String> permissions;
+            final systemRoles = ['manager', 'hr', 'staff'];
+            if (systemRoles.contains(normalizedRole)) {
+              permissions = _getSystemRolePermissions(normalizedRole);
+              debugPrint('checkAuthState: Using system role permissions for "$normalizedRole": $permissions');
+            } else {
+              permissions = await _getPermissionsByRole(normalizedRole);
+            }
             
             final currentPermissions = List<String>.from(data['permissions'] ?? []);
             if (!_listsEqual(permissions, currentPermissions)) {
               await _firestore.collection('users').doc(user.uid).update({
                 'permissions': permissions,
               });
+              debugPrint('checkAuthState: Updated permissions from $currentPermissions to $permissions');
             }
             
             _currentAdmin = AdminModel(
@@ -725,6 +826,7 @@ class AuthService extends ChangeNotifier {
             );
             _isAuthenticated = true;
             notifyListeners();
+            debugPrint('checkAuthState: Admin loaded - Role: $role, Permissions: $permissions');
           } else {
             await logout();
           }

@@ -302,6 +302,10 @@ class _LoginPageState extends State<LoginPage> {
       if (similarity >= threshold) {
         
         print('Verification SUCCESS - Navigating to dashboard');
+        
+        // Set isLogin to true only after successful face verification
+        await authService.setLoginStatus(true);
+        
         _logLoginSuccess(
           email: email,
           userId: currentUser?.id,
@@ -411,6 +415,10 @@ class _LoginPageState extends State<LoginPage> {
             );
           } else {
             
+            // If no current user but login succeeded, set isLogin to true
+            // This handles edge case where verification is skipped
+            await authService.setLoginStatus(true);
+            
             if (mounted) {
               Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
             }
@@ -494,6 +502,10 @@ class _LoginPageState extends State<LoginPage> {
             }
           }
         } else {
+          // If no current user but login succeeded, set isLogin to true
+          // This handles edge case where verification is skipped
+          await authService.setLoginStatus(true);
+          
           if (mounted) {
             Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
           }
@@ -779,6 +791,9 @@ class _LoginPageState extends State<LoginPage> {
         
         final authService = Provider.of<AuthService>(context, listen: false);
         final currentUser = authService.currentAdmin;
+        
+        // Set isLogin to true only after successful OTP verification
+        await authService.setLoginStatus(true);
         
         _logLoginSuccess(
           email: _pendingEmail!,

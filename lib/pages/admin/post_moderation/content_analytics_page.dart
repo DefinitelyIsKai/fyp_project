@@ -1,7 +1,9 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:fyp_project/services/admin/post_analytics_service.dart';
+import 'package:fyp_project/services/admin/auth_service.dart';
 import 'package:fyp_project/widgets/admin/cards/content_analytics_budget_card.dart';
 import 'package:fyp_project/widgets/admin/dialogs/date_range_picker_dialog.dart' as custom;
 import 'package:fyp_project/widgets/admin/common/content_analytics_quick_stats.dart';
@@ -950,6 +952,52 @@ class _ContentAnalyticsPageState extends State<ContentAnalyticsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentAdmin = authService.currentAdmin;
+    
+    final canAccessAnalytics = currentAdmin != null && 
+        (currentAdmin.permissions.contains('all') || 
+         currentAdmin.permissions.contains('analytics'));
+    
+    if (!canAccessAnalytics) {
+      return Scaffold(
+        appBar: AppBar(
+          backgroundColor: AppColors.primaryDark,
+          foregroundColor: Colors.white,
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.lock_outline,
+                size: 64,
+                color: Colors.grey[400],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Access Denied',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[700],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'You do not have permission to access this page.',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey[600],
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
     return Scaffold(
       appBar: AppBar(
         backgroundColor: AppColors.primaryDark,

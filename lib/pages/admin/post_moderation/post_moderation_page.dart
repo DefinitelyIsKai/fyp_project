@@ -1,8 +1,10 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/pages/admin/post_moderation/approve_reject_posts_page.dart';
 import 'package:fyp_project/pages/admin/post_moderation/manage_tags_categories_page.dart';
 import 'package:fyp_project/pages/admin/post_moderation/content_analytics_page.dart';
+import 'package:fyp_project/services/admin/auth_service.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 
 class PostModerationPage extends StatelessWidget {
@@ -217,22 +219,36 @@ class PostModerationPage extends StatelessWidget {
             stats: 'Manage categories',
             badgeCount: 0,
           ),
-          _ManagementCard(
-            title: 'Content Analytics',
-            description: 'View post performance and engagement statistics',
-            icon: Icons.analytics,
-            iconColor: Colors.teal[700]!,
-            backgroundColor: Colors.teal[50]!,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const ContentAnalyticsPage(),
-                ),
+          Builder(
+            builder: (context) {
+              final authService = Provider.of<AuthService>(context, listen: false);
+              final currentAdmin = authService.currentAdmin;
+              final canAccessAnalytics = currentAdmin != null && 
+                  (currentAdmin.permissions.contains('all') || 
+                   currentAdmin.permissions.contains('analytics'));
+              
+              if (!canAccessAnalytics) {
+                return const SizedBox.shrink();
+              }
+              
+              return _ManagementCard(
+                title: 'Content Analytics',
+                description: 'View post performance and engagement statistics',
+                icon: Icons.analytics,
+                iconColor: Colors.teal[700]!,
+                backgroundColor: Colors.teal[50]!,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ContentAnalyticsPage(),
+                    ),
+                  );
+                },
+                stats: 'View analytics',
+                badgeCount: 0,
               );
             },
-            stats: 'View analytics',
-            badgeCount: 0,
           ),
         ],
       ),

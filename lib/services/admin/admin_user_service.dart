@@ -106,7 +106,10 @@ class AdminUserService {
           final isPasswordError = errorMessage.toLowerCase().contains('password') || 
                                   errorMessage.toLowerCase().contains('incorrect');
           
-          if (isPasswordError && form.currentPassword != null && form.currentPassword!.isNotEmpty) {
+          final currentPassword = form.currentPassword;
+          final hasCurrentPassword = currentPassword != null && currentPassword.isNotEmpty;
+          
+          if (isPasswordError && hasCurrentPassword) {
             try {
               await authService.logout();
               debugPrint('Signed out user due to incorrect password');
@@ -118,7 +121,7 @@ class AdminUserService {
           return CreateAdminResult(
             success: false,
             error: errorMessage,
-            requiresReauth: isPasswordError && form.currentPassword != null && form.currentPassword!.isNotEmpty,
+            requiresReauth: isPasswordError && hasCurrentPassword,
           );
         }
       } catch (e) {
