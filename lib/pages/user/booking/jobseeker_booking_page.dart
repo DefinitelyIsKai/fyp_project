@@ -305,7 +305,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                         children: [
                           LegendItem(color: Colors.green, label: 'Available'),
                           const SizedBox(width: 24),
-                          LegendItem(color: const Color(0xFFFF0000), label: 'Unavailable'),
+                          LegendItem(color: const Color(0xFFFF0000), label: 'Booked'),
                           const SizedBox(width: 24),
                           LegendItem(color: Colors.amber[700]!, label: 'Pending'),
                         ],
@@ -977,26 +977,18 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                                         const SizedBox(height: 8),
 
                                         Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                           decoration: BoxDecoration(
-                                            color: const Color(0xFFE8F5E9),
-                                            borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(color: const Color(0xFFC8E6C9)),
+                                            color: const Color(0xFF00C8A0).withOpacity(0.15),
+                                            borderRadius: BorderRadius.circular(12),
                                           ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const Icon(Icons.check_circle, size: 12, color: Color(0xFF2E7D32)),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                'Approved',
-                                                style: TextStyle(
-                                                  color: Colors.green[800],
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ],
+                                          child: Text(
+                                            'Approved',
+                                            style: TextStyle(
+                                              color: const Color(0xFF00C8A0),
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                           ),
                                         ),
                                       ],

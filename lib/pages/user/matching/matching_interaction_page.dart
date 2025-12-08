@@ -347,7 +347,32 @@ class _MatchesTabState extends State<_MatchesTab> {
 
         final posts = snapshot.data ?? [];
         // Filter to only show active posts
-        final activePosts = posts.where((post) => post.status == PostStatus.active).toList();
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        
+        final activePosts = posts.where((post) {
+          // Must be active
+          if (post.status != PostStatus.active) return false;
+          
+          // Exclude drafts
+          if (post.isDraft == true) return false;
+          
+          // Only show posts where event hasn't started yet (eventStartDate is null or in the future)
+          // Exclude posts where event has already started (eventStartDate is today or in the past)
+          if (post.eventStartDate != null) {
+            final eventStartDate = DateTime(
+              post.eventStartDate!.year,
+              post.eventStartDate!.month,
+              post.eventStartDate!.day,
+            );
+            // Exclude if event has already started (today or past)
+            if (eventStartDate.compareTo(today) <= 0) {
+              return false;
+            }
+          }
+          
+          return true;
+        }).toList();
 
         if (activePosts.isEmpty) {
           return EmptyState.noMatches(

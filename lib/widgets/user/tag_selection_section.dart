@@ -43,7 +43,13 @@ class TagSelectionSection extends StatelessWidget {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: tagCategoriesWithTags.entries.map((entry) {
+      children: tagCategoriesWithTags.entries
+          .where((entry) {
+            // Only show categories that have at least one active tag
+            final activeTags = entry.value.where((tag) => tag.isActive).toList();
+            return activeTags.isNotEmpty;
+          })
+          .map((entry) {
         final category = entry.key;
         final tags = entry.value;
         final selected = selections[category.id] ?? const <String>[];
@@ -151,7 +157,7 @@ class _TagCategoryCard extends StatelessWidget {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: tags.map((tag) {
+              children: tags.where((tag) => tag.isActive).map((tag) {
                 final isSelected = selectedValues.contains(tag.name);
                 return FilterChip(
                   label: Text(tag.name),

@@ -440,7 +440,29 @@ class HybridMatchingEngine {
     
     if (validJobs.isEmpty) return [];
 
-    final ageFilteredJobs = validJobs.where((job) {
+    // Filter out posts where event has already started
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final eventFilteredJobs = validJobs.where((job) {
+      // Only show posts where event hasn't started yet (eventStartDate is null or in the future)
+      // Exclude posts where event has already started (eventStartDate is today or in the past)
+      if (job.eventStartDate != null) {
+        final eventStartDate = DateTime(
+          job.eventStartDate!.year,
+          job.eventStartDate!.month,
+          job.eventStartDate!.day,
+        );
+        // Exclude if event has already started (today or past)
+        if (eventStartDate.compareTo(today) <= 0) {
+          return false;
+        }
+      }
+      return true;
+    }).toList();
+
+    if (eventFilteredJobs.isEmpty) return [];
+
+    final ageFilteredJobs = eventFilteredJobs.where((job) {
       if (candidate.age == null) {
         return job.minAgeRequirement == null && job.maxAgeRequirement == null;
       }
