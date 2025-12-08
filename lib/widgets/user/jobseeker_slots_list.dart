@@ -61,7 +61,11 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
       future: widget.applicationService.streamMyApplications().first,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(
+            child: CircularProgressIndicator(
+              color: Color(0xFF00C8A0),
+            ),
+          );
         }
 
         final applications = snapshot.data ?? [];
@@ -167,28 +171,14 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
             }
             
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            final slots = snapshot.data ?? [];
-
-            if (slots.isEmpty) {
-              return Padding(
-                padding: const EdgeInsets.all(32.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.event_busy, size: 64, color: Colors.grey[300]),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No available slots for this date',
-                      style: TextStyle(color: Colors.grey[600]),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+              return const Center(
+                child: CircularProgressIndicator(
+                  color: Color(0xFF00C8A0),
                 ),
               );
             }
+
+            final slots = snapshot.data ?? [];
 
             //show owneed slots
             if (widget.selectedRecruiterId != null) {
@@ -209,85 +199,100 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
               }
               
               if (applicationToUse != null) {
-
-              if (recruiterSlots.isEmpty) {
-                return Padding(
-                  padding: const EdgeInsets.all(32.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.event_busy, size: 64, color: Colors.grey[300]),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No available slots for this date',
-                        style: TextStyle(color: Colors.grey[600]),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              //check  requested slots and post status
-              final jobseekerId = widget.authService.currentUserId;
-              final application = applicationToUse!;
-              final applicationId = application.id; 
-
-              //check slot  unavailable 
-              final unavailableSlots = <String>{};
-              for (int i = 0; i < recruiterSlots.length; i++) {
-                final slot = recruiterSlots[i];
-                //mark subsequent slots as unavailable when slot is booked oter
-                if (slot.bookedBy != null && 
-                    !(slot.bookedBy == jobseekerId && slot.matchId == applicationId)) {
-                  for (int j = i + 1; j < recruiterSlots.length; j++) {
-                    unavailableSlots.add(recruiterSlots[j].id);
-                  }
-                  break; 
-                }
-              }
-              return FutureBuilder<Map<String, dynamic>>(
-                future: Future.wait([
-                  widget.availabilityService.getRequestedSlotIdsForJobseeker(
-                    jobseekerId,
-                    matchId: applicationId, 
-                  ),
-                  _checkPostStatus(applicationId, widget.postService), 
-                  widget.postService.getById(application.postId), 
-                ]).then((results) => {
-                  'requestedSlotIds': results[0] as Set<String>,
-                  'isPostCompleted': results[1] as bool,
-                  'post': results[2] as Post?,
-                }),
-                builder: (context, dataSnapshot) {
-                  final requestedSlotIds = (dataSnapshot.data?['requestedSlotIds'] as Set<String>?) ?? {};
-                  final isPostCompleted = (dataSnapshot.data?['isPostCompleted'] as bool?) ?? false;
-                  final post = dataSnapshot.data?['post'] as Post?;
-
-                  final filteredSlots = recruiterSlots.where((slot) {
-                  
-                    if (post != null && post.eventEndDate != null) {
-                      final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
-                      final eventEndDateOnly = DateTime(
-                        post.eventEndDate!.year,
-                        post.eventEndDate!.month,
-                        post.eventEndDate!.day,
+                //check  requested slots and post status
+                final jobseekerId = widget.authService.currentUserId;
+                final application = applicationToUse!;
+                final applicationId = application.id;
+                
+                // First, check post data to filter by eventEndDate BEFORE displaying slots
+                return FutureBuilder<Post?>(
+                  future: widget.postService.getById(application.postId),
+                  builder: (context, postSnapshot) {
+                    // Show loading while post data is being fetched
+                    if (postSnapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF00C8A0),
+                        ),
                       );
-                      
-                      if (slotDateOnly.isAfter(eventEndDateOnly)) {
-                        return false; 
-                      }
                     }
                     
-                 
-                    if (slot.bookedBy != null && slot.matchId == applicationId) {
-                      return true; 
+                    final post = postSnapshot.data;
+                    
+                    // Filter slots by eventEndDate BEFORE any other processing
+                    final dateFilteredSlots = recruiterSlots.where((slot) {
+                      if (post != null && post.eventEndDate != null) {
+                        final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
+                        final eventEndDateOnly = DateTime(
+                          post.eventEndDate!.year,
+                          post.eventEndDate!.month,
+                          post.eventEndDate!.day,
+                        );
+                        
+                        if (slotDateOnly.isAfter(eventEndDateOnly)) {
+                          return false; // Don't show slots after event end date
+                        }
+                      }
+                      return true;
+                    }).toList();
+
+                    if (dateFilteredSlots.isEmpty) {
+                      return Padding(
+                        padding: const EdgeInsets.all(32.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.event_busy, size: 64, color: Colors.grey[300]),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No available slots for this date',
+                              style: TextStyle(color: Colors.grey[600]),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      );
+                    } 
+
+                    //check slot  unavailable 
+                    final unavailableSlots = <String>{};
+                    for (int i = 0; i < dateFilteredSlots.length; i++) {
+                      final slot = dateFilteredSlots[i];
+                      //mark subsequent slots as unavailable when slot is booked oter
+                      if (slot.bookedBy != null && 
+                          !(slot.bookedBy == jobseekerId && slot.matchId == applicationId)) {
+                        for (int j = i + 1; j < dateFilteredSlots.length; j++) {
+                          unavailableSlots.add(dateFilteredSlots[j].id);
+                        }
+                        break; 
+                      }
                     }
-                    if (slot.isAvailable && slot.bookedBy == null) {
-                      return true; 
-                    }
-                    return true;
-                  }).toList();
+                    return FutureBuilder<Map<String, dynamic>>(
+                      future: Future.wait([
+                        widget.availabilityService.getRequestedSlotIdsForJobseeker(
+                          jobseekerId,
+                          matchId: applicationId, 
+                        ),
+                        _checkPostStatus(applicationId, widget.postService), 
+                      ]).then((results) => {
+                        'requestedSlotIds': results[0] as Set<String>,
+                        'isPostCompleted': results[1] as bool,
+                      }),
+                      builder: (context, dataSnapshot) {
+                        final requestedSlotIds = (dataSnapshot.data?['requestedSlotIds'] as Set<String>?) ?? {};
+                        final isPostCompleted = (dataSnapshot.data?['isPostCompleted'] as bool?) ?? false;
+
+                        final filteredSlots = dateFilteredSlots.where((slot) {
+                          // Post eventEndDate filtering already done above
+                          // Now filter by booking status
+                          if (slot.bookedBy != null && slot.matchId == applicationId) {
+                            return true; 
+                          }
+                          if (slot.isAvailable && slot.bookedBy == null) {
+                            return true; 
+                          }
+                          return true;
+                        }).toList();
 
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -471,10 +476,30 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                         );
                       }).toList(),
                     ),
-                  );
-                },
-              );
+                        );
+                      },
+                    );
+                  },
+                );
               } else {
+                // No application selected
+                if (recruiterSlots.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.all(32.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.event_busy, size: 64, color: Colors.grey[300]),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No available slots for this date',
+                          style: TextStyle(color: Colors.grey[600]),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  );
+                }
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
@@ -527,280 +552,301 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
               }
             }
 
-            //group slots by recruiter 
-            final slotsByRecruiter = <String, List<AvailabilitySlot>>{};
-            for (final slot in slots) {
-              slotsByRecruiter.putIfAbsent(slot.recruiterId, () => []).add(slot);
-            }
-
-             final jobseekerId = widget.authService.currentUserId;
-             final applicationId = widget.selectedApplication?.id;
-             return FutureBuilder<Map<String, dynamic>>(
-               future: Future.wait([
-                 widget.availabilityService.getRequestedSlotIdsForJobseeker(
-                   jobseekerId,
-                   matchId: applicationId, 
-                 ),
-                 applicationId != null ? _checkPostStatus(applicationId, widget.postService) : Future.value(false),
-                 widget.selectedApplication != null ? widget.postService.getById(widget.selectedApplication!.postId) : Future<Post?>.value(null),
-               ]).then((results) => {
-                 'requestedSlotIds': results[0] as Set<String>,
-                 'isPostCompleted': results[1] as bool,
-                 'post': results[2] as Post?,
-               }),
-               builder: (context, dataSnapshot) {
-                 final requestedSlotIds = (dataSnapshot.data?['requestedSlotIds'] as Set<String>?) ?? {};
-                 final isPostCompleted = (dataSnapshot.data?['isPostCompleted'] as bool?) ?? false;
-                 final post = dataSnapshot.data?['post'] as Post?;
-
-                 return Column(
-                   children: List.generate(slotsByRecruiter.length, (index) {
-                     final recruiterId = slotsByRecruiter.keys.elementAt(index);
-                     var recruiterSlots = slotsByRecruiter[recruiterId]!;
-
-                     recruiterSlots.sort((a, b) => a.startTime.compareTo(b.startTime));
-                     Application? application;
-                     if (widget.selectedApplication != null && widget.selectedApplication!.recruiterId == recruiterId) {
-                       application = widget.selectedApplication;
-                     } else {
-                       return const SizedBox.shrink();
-                     }
-
-
-                     final currentApplication = application!;
-                     final matchApplicationId = currentApplication.id;
-
-                     final dateFilteredSlots = recruiterSlots.where((slot) {
+            //group slots by recruiter (when no specific recruiter selected)
+            final jobseekerId = widget.authService.currentUserId;
+            final applicationId = widget.selectedApplication?.id;
             
-                       if (post != null && post.eventEndDate != null) {
-                         final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
-                         final eventEndDateOnly = DateTime(
-                           post.eventEndDate!.year,
-                           post.eventEndDate!.month,
-                           post.eventEndDate!.day,
-                         );
-                         
-                         //slotis after event end date
-                         if (slotDateOnly.isAfter(eventEndDateOnly)) {
-                           return false; 
-                         }
-                       }
-                       return true; 
-                     }).toList();
-
-                     final unavailableSlots = <String>{};
-                     for (int i = 0; i < dateFilteredSlots.length; i++) {
-                       if (dateFilteredSlots[i].bookedBy != null) {
-                         // Mark all subsequent slots as unavailable
-                         for (int j = i + 1; j < dateFilteredSlots.length; j++) {
-                           unavailableSlots.add(dateFilteredSlots[j].id);
-                         }
-                         break;
-                       }
-                     }
-
-                     return Padding(
-                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                       child: Column(
-                         children: dateFilteredSlots
-                             .where((slot) {
-                               if (slot.bookedBy != null && slot.matchId == matchApplicationId) {
-                                 return true; 
-                               }
-                               if (slot.isAvailable && slot.bookedBy == null) {
-                                 return true; 
-                               }
-                               //requested slot
-                               return true;
-                             })
-                             .map((slot) {
-                          final isUnavailable = unavailableSlots.contains(slot.id);
-                          final isBooked = slot.bookedBy != null && slot.matchId == matchApplicationId;
-                          final isRequested = requestedSlotIds.contains(slot.id);
-
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: Colors.grey[300]!,
-                                width: 1,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  FutureBuilder<String>(
-                                    future: _loadRecruiterName(currentApplication.recruiterId),
-                                    builder: (context, snapshot) {
-                                      return Text(
-                                        snapshot.data ?? 'Recruiter',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                          color: Colors.grey[600],
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Divider(
-                                    height: 1,
-                                    thickness: 1,
-                                    color: Colors.grey[200],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    children: [
-                                      Container(
-                                        width: 40,
-                                        height: 40,
-                                        decoration: BoxDecoration(
-                                          color: isBooked
-                                              ? Colors.green
-                                              : isRequested
-                                              ? Colors.amber[700]
-                                              : isUnavailable
-                                              ? Colors.grey
-                                              : const Color(0xFF00C8A0),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Icon(
-                                          isBooked
-                                              ? Icons.check_circle
-                                              : isRequested
-                                              ? Icons.pending
-                                              : isUnavailable
-                                              ? Icons.block
-                                              : Icons.access_time,
-                                          color: Colors.white,
-                                          size: 20,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      // Time range text
-                                      Expanded(
-                                        child: Text(
-                                          slot.timeDisplay,
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.black87,
-                                          ),
-                                        ),
-                                      ),
-                                      // Request button or status
-                                      if (isBooked)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 16,
-                                            vertical: 8,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.green[50],
-                                            borderRadius: BorderRadius.circular(8),
-                                            border: Border.all(
-                                              color: Colors.green[300]!,
-                                              width: 1.5,
-                                            ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Icons.check_circle,
-                                                size: 16,
-                                                color: Colors.green[700],
-                                              ),
-                                              const SizedBox(width: 6),
-                                              Text(
-                                                'Booked',
-                                                style: TextStyle(
-                                                  color: Colors.green[800],
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        )
-                                      else if (isRequested)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 16,
-                                            vertical: 8,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.grey[300],
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                          child: Text(
-                                            'Requested',
-                                            style: TextStyle(
-                                              color: Colors.grey[700],
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        )
-                                      else
-                                        ElevatedButton(
-                                          onPressed: (!isBooked &&
-                                              !isUnavailable &&
-                                              !isRequested &&
-                                              !isPostCompleted)
-                                              ? () => _bookSlot(context, slot, currentApplication)
-                                              : null,
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: const Color(0xFF00C8A0),
-                                            foregroundColor: Colors.white,
-                                            disabledBackgroundColor: Colors.grey[300],
-                                            disabledForegroundColor: Colors.grey[600],
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 20,
-                                              vertical: 10,
-                                            ),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            elevation: 0,
-                                          ),
-                                          child: const Text(
-                                            'Request',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
+            // First check if we have a selected application and get post data
+            if (widget.selectedApplication == null) {
+              return const SizedBox.shrink();
+            }
+            
+            return FutureBuilder<Post?>(
+              future: widget.postService.getById(widget.selectedApplication!.postId),
+              builder: (context, postSnapshot) {
+                // Show loading while post data is being fetched
+                if (postSnapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF00C8A0),
+                    ),
+                  );
+                }
+                
+                final post = postSnapshot.data;
+                
+                // Filter slots by eventEndDate BEFORE grouping by recruiter
+                final allDateFilteredSlots = slots.where((slot) {
+                  if (post != null && post.eventEndDate != null) {
+                    final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
+                    final eventEndDateOnly = DateTime(
+                      post.eventEndDate!.year,
+                      post.eventEndDate!.month,
+                      post.eventEndDate!.day,
                     );
-                  }),
-                );
-              },
-            );
-          },
-        );
-      },
-    );
-  }
+                    
+                    if (slotDateOnly.isAfter(eventEndDateOnly)) {
+                      return false; // Don't show slots after event end date
+                    }
+                  }
+                  return true;
+                }).toList();
+                
+                // Now group filtered slots by recruiter
+                final slotsByRecruiter = <String, List<AvailabilitySlot>>{};
+                for (final slot in allDateFilteredSlots) {
+                  slotsByRecruiter.putIfAbsent(slot.recruiterId, () => []).add(slot);
+                }
+                 
+                 return FutureBuilder<Map<String, dynamic>>(
+                   future: Future.wait([
+                     widget.availabilityService.getRequestedSlotIdsForJobseeker(
+                       jobseekerId,
+                       matchId: applicationId, 
+                     ),
+                     applicationId != null ? _checkPostStatus(applicationId, widget.postService) : Future.value(false),
+                   ]).then((results) => {
+                     'requestedSlotIds': results[0] as Set<String>,
+                     'isPostCompleted': results[1] as bool,
+                   }),
+                   builder: (context, dataSnapshot) {
+                     final requestedSlotIds = (dataSnapshot.data?['requestedSlotIds'] as Set<String>?) ?? {};
+                     final isPostCompleted = (dataSnapshot.data?['isPostCompleted'] as bool?) ?? false;
+
+                     return Column(
+                       children: List.generate(slotsByRecruiter.length, (index) {
+                         final recruiterId = slotsByRecruiter.keys.elementAt(index);
+                         var recruiterSlots = slotsByRecruiter[recruiterId]!;
+
+                         recruiterSlots.sort((a, b) => a.startTime.compareTo(b.startTime));
+                         Application? application;
+                         if (widget.selectedApplication != null && widget.selectedApplication!.recruiterId == recruiterId) {
+                           application = widget.selectedApplication;
+                         } else {
+                           return const SizedBox.shrink();
+                         }
+
+                         final currentApplication = application!;
+                         final matchApplicationId = currentApplication.id;
+
+                         // Slots are already filtered by eventEndDate above
+                         final dateFilteredSlots = recruiterSlots;
+
+                         final unavailableSlots = <String>{};
+                         for (int i = 0; i < dateFilteredSlots.length; i++) {
+                           if (dateFilteredSlots[i].bookedBy != null) {
+                             // Mark all subsequent slots as unavailable
+                             for (int j = i + 1; j < dateFilteredSlots.length; j++) {
+                               unavailableSlots.add(dateFilteredSlots[j].id);
+                             }
+                             break;
+                           }
+                         }
+
+                         return Padding(
+                           padding: const EdgeInsets.symmetric(horizontal: 16),
+                           child: Column(
+                             children: dateFilteredSlots
+                                 .where((slot) {
+                                   if (slot.bookedBy != null && slot.matchId == matchApplicationId) {
+                                     return true; 
+                                   }
+                                   if (slot.isAvailable && slot.bookedBy == null) {
+                                     return true; 
+                                   }
+                                   //requested slot
+                                   return true;
+                                 })
+                                 .map((slot) {
+                                   final isUnavailable = unavailableSlots.contains(slot.id);
+                                   final isBooked = slot.bookedBy != null && slot.matchId == matchApplicationId;
+                                   final isRequested = requestedSlotIds.contains(slot.id);
+
+                                   return Container(
+                                     margin: const EdgeInsets.only(bottom: 12),
+                                     decoration: BoxDecoration(
+                                       color: Colors.white,
+                                       borderRadius: BorderRadius.circular(16),
+                                       border: Border.all(
+                                         color: Colors.grey[300]!,
+                                         width: 1,
+                                       ),
+                                       boxShadow: [
+                                         BoxShadow(
+                                           color: Colors.black.withOpacity(0.05),
+                                           blurRadius: 8,
+                                           offset: const Offset(0, 2),
+                                         ),
+                                       ],
+                                     ),
+                                     child: Padding(
+                                       padding: const EdgeInsets.all(16),
+                                       child: Column(
+                                         crossAxisAlignment: CrossAxisAlignment.start,
+                                         children: [
+                                           FutureBuilder<String>(
+                                             future: _loadRecruiterName(currentApplication.recruiterId),
+                                             builder: (context, snapshot) {
+                                               return Text(
+                                                 snapshot.data ?? 'Recruiter',
+                                                 style: TextStyle(
+                                                   fontSize: 14,
+                                                   fontWeight: FontWeight.w500,
+                                                   color: Colors.grey[600],
+                                                 ),
+                                               );
+                                             },
+                                           ),
+                                           const SizedBox(height: 12),
+                                           Divider(
+                                             height: 1,
+                                             thickness: 1,
+                                             color: Colors.grey[200],
+                                           ),
+                                           const SizedBox(height: 12),
+                                           Row(
+                                             children: [
+                                               Container(
+                                                 width: 40,
+                                                 height: 40,
+                                                 decoration: BoxDecoration(
+                                                   color: isBooked
+                                                       ? Colors.green
+                                                       : isRequested
+                                                       ? Colors.amber[700]
+                                                       : isUnavailable
+                                                       ? Colors.grey
+                                                       : const Color(0xFF00C8A0),
+                                                   shape: BoxShape.circle,
+                                                 ),
+                                                 child: Icon(
+                                                   isBooked
+                                                       ? Icons.check_circle
+                                                       : isRequested
+                                                       ? Icons.pending
+                                                       : isUnavailable
+                                                       ? Icons.block
+                                                       : Icons.access_time,
+                                                   color: Colors.white,
+                                                   size: 20,
+                                                 ),
+                                               ),
+                                               const SizedBox(width: 12),
+                                               // Time range text
+                                               Expanded(
+                                                 child: Text(
+                                                   slot.timeDisplay,
+                                                   style: const TextStyle(
+                                                     fontSize: 16,
+                                                     fontWeight: FontWeight.w600,
+                                                     color: Colors.black87,
+                                                   ),
+                                                 ),
+                                               ),
+                                               // Request button or status
+                                               if (isBooked)
+                                                 Container(
+                                                   padding: const EdgeInsets.symmetric(
+                                                     horizontal: 16,
+                                                     vertical: 8,
+                                                   ),
+                                                   decoration: BoxDecoration(
+                                                     color: Colors.green[50],
+                                                     borderRadius: BorderRadius.circular(8),
+                                                     border: Border.all(
+                                                       color: Colors.green[300]!,
+                                                       width: 1.5,
+                                                     ),
+                                                   ),
+                                                   child: Row(
+                                                     mainAxisSize: MainAxisSize.min,
+                                                     children: [
+                                                       Icon(
+                                                         Icons.check_circle,
+                                                         size: 16,
+                                                         color: Colors.green[700],
+                                                       ),
+                                                       const SizedBox(width: 6),
+                                                       Text(
+                                                         'Booked',
+                                                         style: TextStyle(
+                                                           color: Colors.green[800],
+                                                           fontSize: 14,
+                                                           fontWeight: FontWeight.w600,
+                                                         ),
+                                                       ),
+                                                     ],
+                                                   ),
+                                                 )
+                                               else if (isRequested)
+                                                 Container(
+                                                   padding: const EdgeInsets.symmetric(
+                                                     horizontal: 16,
+                                                     vertical: 8,
+                                                   ),
+                                                   decoration: BoxDecoration(
+                                                     color: Colors.grey[300],
+                                                     borderRadius: BorderRadius.circular(8),
+                                                   ),
+                                                   child: Text(
+                                                     'Requested',
+                                                     style: TextStyle(
+                                                       color: Colors.grey[700],
+                                                       fontSize: 14,
+                                                       fontWeight: FontWeight.w600,
+                                                     ),
+                                                   ),
+                                                 )
+                                               else
+                                                 ElevatedButton(
+                                                   onPressed: (!isBooked &&
+                                                       !isUnavailable &&
+                                                       !isRequested &&
+                                                       !isPostCompleted)
+                                                       ? () => _bookSlot(context, slot, currentApplication)
+                                                       : null,
+                                                   style: ElevatedButton.styleFrom(
+                                                     backgroundColor: const Color(0xFF00C8A0),
+                                                     foregroundColor: Colors.white,
+                                                     disabledBackgroundColor: Colors.grey[300],
+                                                     disabledForegroundColor: Colors.grey[600],
+                                                     padding: const EdgeInsets.symmetric(
+                                                       horizontal: 20,
+                                                       vertical: 10,
+                                                     ),
+                                                     shape: RoundedRectangleBorder(
+                                                       borderRadius: BorderRadius.circular(8),
+                                                     ),
+                                                     elevation: 0,
+                                                   ),
+                                                   child: const Text(
+                                                     'Request',
+                                                     style: TextStyle(
+                                                       fontSize: 14,
+                                                       fontWeight: FontWeight.w600,
+                                                     ),
+                                                   ),
+                                                 ),
+                                             ],
+                                           ),
+                                         ],
+                                       ),
+                                     ),
+                                   );
+                                 }).toList(),
+                           ),
+                         );
+                       }),
+                     );
+                   },
+                 );
+               },
+             );
+           },
+         );
+       },
+     );
+   }
 
   //check post completed
   Future<bool> _checkPostStatus(String matchId, PostService postService) async {

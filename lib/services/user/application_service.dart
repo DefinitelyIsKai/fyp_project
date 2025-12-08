@@ -636,7 +636,7 @@ class ApplicationService {
   Future<void> checkAndAutoRejectApplications() async {
     try {
       final now = DateTime.now();
-      final tomorrow = DateTime(now.year, now.month, now.day + 1);
+      final today = DateTime(now.year, now.month, now.day);
 
       //pending applications for current user posts  recruiter
       final recruiterId = _authService.currentUserId;
@@ -691,7 +691,8 @@ class ApplicationService {
             eventStartDate.day,
           );
 
-          if (eventStartDateOnly.isAtSameMomentAs(tomorrow)) {
+          // Only auto-reject if event starts today or has already passed
+          if (eventStartDateOnly.isAtSameMomentAs(today) || eventStartDateOnly.isBefore(today)) {
             for (final appDoc in applications) {
               final appData = appDoc.data() as Map<String, dynamic>?;
               if (appData == null) continue;
@@ -778,15 +779,15 @@ class ApplicationService {
       if (eventStartDate == null) return;
 
       final now = DateTime.now();
-      final tomorrow = DateTime(now.year, now.month, now.day + 1);
+      final today = DateTime(now.year, now.month, now.day);
       final eventStartDateOnly = DateTime(
         eventStartDate.year,
         eventStartDate.month,
         eventStartDate.day,
       );
 
-      //event starts tomorrow reject 
-      if (eventStartDateOnly.isAtSameMomentAs(tomorrow)) {
+      // Only auto-reject if event starts today or has already passed
+      if (eventStartDateOnly.isAtSameMomentAs(today) || eventStartDateOnly.isBefore(today)) {
         await appDoc.reference.update({
           'status': 'rejected',
           'updatedAt': FieldValue.serverTimestamp(),

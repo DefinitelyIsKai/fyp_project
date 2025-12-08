@@ -167,6 +167,19 @@ class AvailabilityService {
         .map((doc) => BookingRequest.fromFirestore(doc).jobseekerId)
         .toList();
 
+    // Update all pending booking requests to rejected status (slot deleted)
+    if (pendingRequests.docs.isNotEmpty) {
+      final batch = _firestore.batch();
+      for (final doc in pendingRequests.docs) {
+        batch.update(doc.reference, {
+          'status': 'rejected',
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+      debugPrint('Updated ${pendingRequests.docs.length} pending booking request(s) to rejected status for slot $slotId');
+    }
+
     // Delete the slot
     await _firestore.collection('availability_slots').doc(slotId).delete();
 
@@ -431,6 +444,39 @@ class AvailabilityService {
     return dates;
   }
 
+  //stream booked dates for real-time updates
+  Stream<Set<DateTime>> streamBookedDatesForJobseeker(
+    String jobseekerId, {
+    DateTime? startDate,
+    DateTime? endDate,
+    String? matchId,
+  }) async* {
+    final now = DateTime.now();
+    final start = startDate ?? now;
+    final end = endDate ?? DateTime(now.year, now.month + 1, 0);
+
+    yield* _firestore
+        .collection('availability_slots')
+        .where('bookedBy', isEqualTo: jobseekerId)
+        .snapshots()
+        .map((snapshot) {
+          final dates = <DateTime>{};
+          for (final doc in snapshot.docs) {
+            try {
+              final slot = AvailabilitySlot.fromFirestore(doc);
+              //filter matchId
+              if (matchId != null && slot.matchId != matchId) continue;
+              //date range in memory
+              if (slot.date.isBefore(start) || slot.date.isAfter(end)) continue;
+              dates.add(DateTime(slot.date.year, slot.date.month, slot.date.day));
+            } catch (e) {
+              debugPrint('Error parsing slot in streamBookedDatesForJobseeker: $e');
+            }
+          }
+          return dates;
+        });
+  }
+
   
 
   
@@ -616,6 +662,33 @@ class AvailabilityService {
         .toSet();
   }
 
+  //stream requested slot IDs for real-time updates
+  Stream<Set<String>> streamRequestedSlotIdsForJobseeker(
+    String jobseekerId, {
+    String? matchId,
+  }) async* {
+    yield* _firestore
+        .collection('booking_requests')
+        .where('jobseekerId', isEqualTo: jobseekerId)
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs
+              .map((doc) {
+                try {
+                  return BookingRequest.fromFirestore(doc);
+                } catch (e) {
+                  debugPrint('Error parsing booking request in streamRequestedSlotIdsForJobseeker: $e');
+                  return null;
+                }
+              })
+              .whereType<BookingRequest>()
+              .where((request) => matchId == null || request.matchId == matchId)
+              .map((request) => request.slotId)
+              .toSet();
+        });
+  }
+
   
   Future<Set<String>> getRequestedSlotIdsForRecruiter(String recruiterId) async {
     final snapshot = await _firestore
@@ -627,6 +700,28 @@ class AvailabilityService {
     return snapshot.docs
         .map((doc) => BookingRequest.fromFirestore(doc).slotId)
         .toSet();
+  }
+
+  Stream<Set<String>> streamRequestedSlotIdsForRecruiter(String recruiterId) async* {
+    yield* _firestore
+        .collection('booking_requests')
+        .where('recruiterId', isEqualTo: recruiterId)
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs
+              .map((doc) {
+                try {
+                  return BookingRequest.fromFirestore(doc);
+                } catch (e) {
+                  debugPrint('Error parsing booking request in streamRequestedSlotIdsForRecruiter: $e');
+                  return null;
+                }
+              })
+              .whereType<BookingRequest>()
+              .map((request) => request.slotId)
+              .toSet();
+        });
   }
 
   

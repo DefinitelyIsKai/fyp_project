@@ -290,10 +290,10 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
                       final slots = snapshot.data ?? [];
                       final processed = _processSlots(slots);
 
-                      //get pending dates
-                      return FutureBuilder<Set<String>>(
-                        future: _availabilityService
-                            .getRequestedSlotIdsForRecruiter(
+                      //get pending dates - use StreamBuilder for real-time updates
+                      return StreamBuilder<Set<String>>(
+                        stream: _availabilityService
+                            .streamRequestedSlotIdsForRecruiter(
                               _authService.currentUserId,
                             ),
                         builder: (context, pendingSnapshot) {
@@ -404,13 +404,25 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
                           );
                         }
 
-                        // validate pending requests 
-                        return FutureBuilder<Set<String>>(
-                          future: _availabilityService
-                              .getRequestedSlotIdsForRecruiter(
+                        // validate pending requests - use StreamBuilder for real-time updates
+                        return StreamBuilder<Set<String>>(
+                          stream: _availabilityService
+                              .streamRequestedSlotIdsForRecruiter(
                                 _authService.currentUserId,
                               ),
                           builder: (context, requestedSnapshot) {
+                            // Show loading while requestedSlotIds is being fetched
+                            if (requestedSnapshot.connectionState == ConnectionState.waiting) {
+                              return const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(32.0),
+                                  child: CircularProgressIndicator(
+                                    color: Color(0xFF00C8A0),
+                                  ),
+                                ),
+                              );
+                            }
+                            
                             final requestedSlotIds =
                                 requestedSnapshot.data ?? {};
 
