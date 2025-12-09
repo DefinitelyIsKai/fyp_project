@@ -292,7 +292,6 @@ class WalletService {
     await _ensureWallet();
     final txnRef = _txnCol.doc();
 
-    //post title for description
     final postTitle = await _getPostTitle(postId);
     final description = postTitle.isNotEmpty
         ? 'Application fee (On Hold) - $postTitle'
@@ -843,7 +842,6 @@ class WalletService {
         final int newBalance = currentBalance - feeCredits;
         final int newHeldCredits = (currentHeldCredits - feeCredits).clamp(0, double.infinity).toInt();
 
-        // Update wallet to deduct from both balance and heldCredits
         tx.update(walletDoc, {
           'balance': newBalance,
           'heldCredits': newHeldCredits,
@@ -866,7 +864,7 @@ class WalletService {
           'createdAt': FieldValue.serverTimestamp(),
           'referenceId': postId,
           if (onHoldTxnId != null) 'parentTxnId': onHoldTxnId, 
-          //link original On Hold transaction
+          //link original onhold transaction
         });
       });
 
@@ -896,7 +894,6 @@ class WalletService {
     final String url = map['checkoutUrl'] as String;
     final String sessionId = map['sessionId'] as String? ?? '';
 
-    //store pending payment automatic crediting
     if (sessionId.isNotEmpty) {
       await _firestore.collection('pending_payments').doc(sessionId).set({
         'uid': _uid,
@@ -912,7 +909,7 @@ class WalletService {
     return Uri.parse(url);
   }
 
-  //check pending payments  auto-credit
+  //check pending payments 
   Future<void> checkAndCreditPendingPayments() async {
     try {
       final pendingPayments = await _firestore
@@ -946,7 +943,6 @@ class WalletService {
   Future<void> completePendingPayment({required String sessionId}) async {
     final paymentDocRef = _firestore.collection('pending_payments').doc(sessionId);
     
-    // Use transaction to atomically check status and mark as processing
     await _firestore.runTransaction((tx) async {
       final paymentSnap = await tx.get(paymentDocRef);
       
@@ -1031,7 +1027,7 @@ class WalletService {
 
   
 
-  //verify Stripe session with Cloudflare Worker and credit wallet
+  //verify Stripe session with Cloudflare and credit wallet
   Future<void> creditFromStripeSession({required String sessionId, required int credits}) async {
     final verification = await _verifyStripeSession(sessionId);
     if (!verification.paid) {

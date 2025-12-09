@@ -80,6 +80,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
   Post? _latestPostFromFirestore;
   bool _hasExternalUpdate = false;
   bool _isUserEditing = false;
+  Timer? _editingTimer;
 
   @override
   void initState() {
@@ -161,18 +162,18 @@ class _PostCreatePageState extends State<PostCreatePage> {
   }
 
   void _onFieldChanged() {
-    if (mounted) {
-      setState(() {
-        _isUserEditing = true;
-      });
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) {
-          setState(() {
-            _isUserEditing = false;
-          });
-        }
-      });
-    }
+    if (!mounted) return;
+  
+    _editingTimer?.cancel();
+    _isUserEditing = true;
+    setState(() {});
+    _editingTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _isUserEditing = false;
+        });
+      }
+    });
   }
 
   void _startRealtimeListener(String postId) {
@@ -199,105 +200,159 @@ class _PostCreatePageState extends State<PostCreatePage> {
         );
   }
 
-  //sync UI
   void _syncWithFirestoreData(Post updatedPost) {
     if (!mounted) return;
-    setState(() {
-      //title
-      if (_titleController.text != updatedPost.title) {
-        _titleController.text = updatedPost.title;
+    
+    bool needsRebuild = false;
+  
+    if (_titleController.text != updatedPost.title) {
+      final selection = _titleController.selection;
+      _titleController.text = updatedPost.title;
+      if (selection.isValid && selection.end <= updatedPost.title.length) {
+        _titleController.selection = selection;
       }
-      //description
-      if (_descriptionController.text != updatedPost.description) {
-        _descriptionController.text = updatedPost.description;
-      }
-      //budget
-      final currentMinBudget = _parseDouble(_budgetMinController.text);
-      if (currentMinBudget != updatedPost.budgetMin) {
-        _budgetMinController.text = (updatedPost.budgetMin ?? '').toString();
-      }
-      final currentMaxBudget = _parseDouble(_budgetMaxController.text);
-      if (currentMaxBudget != updatedPost.budgetMax) {
-        _budgetMaxController.text = (updatedPost.budgetMax ?? '').toString();
-      }
-      //location
-      if (_locationController.text != updatedPost.location) {
-        _locationController.text = updatedPost.location;
-        _latitude = updatedPost.latitude;
-        _longitude = updatedPost.longitude;
-      }
-      //event type
-      if (_selectedEvent != updatedPost.event && updatedPost.event.isNotEmpty) {
-        _selectedEvent = updatedPost.event;
-      }
-      //dates
-      if (_eventStartDate != updatedPost.eventStartDate) {
-        _eventStartDate = updatedPost.eventStartDate;
-      }
-      if (_eventEndDate != updatedPost.eventEndDate) {
-        _eventEndDate = updatedPost.eventEndDate;
-      }
-      //work times
-      if (updatedPost.workTimeStart != null) {
-        final parts = updatedPost.workTimeStart!.split(':');
-        if (parts.length == 2) {
-          final newTime = TimeOfDay(hour: int.tryParse(parts[0]) ?? 9, minute: int.tryParse(parts[1]) ?? 0);
-          if (_workTimeStart != newTime) {
-            _workTimeStart = newTime;
-          }
-        }
-      }
-      if (updatedPost.workTimeEnd != null) {
-        final parts = updatedPost.workTimeEnd!.split(':');
-        if (parts.length == 2) {
-          final newTime = TimeOfDay(hour: int.tryParse(parts[0]) ?? 17, minute: int.tryParse(parts[1]) ?? 0);
-          if (_workTimeEnd != newTime) {
-            _workTimeEnd = newTime;
-          }
-        }
-      }
-      //age
-      final currentMinAge = _parseInt(_minAgeController.text);
-      if (currentMinAge != updatedPost.minAgeRequirement) {
-        _minAgeController.text = updatedPost.minAgeRequirement?.toString() ?? '';
-      }
-      final currentMaxAge = _parseInt(_maxAgeController.text);
-      if (currentMaxAge != updatedPost.maxAgeRequirement) {
-        _maxAgeController.text = updatedPost.maxAgeRequirement?.toString() ?? '';
-      }
-      //quota
-      final currentQuota = _parseInt(_quotaController.text);
-      if (currentQuota != updatedPost.applicantQuota) {
-        _quotaController.text = updatedPost.applicantQuota?.toString() ?? '';
-      }
+      needsRebuild = true;
+    }
+    
 
-      //gender
-      final validGenders = ['any', 'male', 'female'];
-      if (_selectedGender != updatedPost.genderRequirement) {
-        _selectedGender =
-            (updatedPost.genderRequirement != null && validGenders.contains(updatedPost.genderRequirement))
-            ? updatedPost.genderRequirement
-            : null;
+    if (_descriptionController.text != updatedPost.description) {
+      final selection = _descriptionController.selection;
+      _descriptionController.text = updatedPost.description;
+
+      if (selection.isValid && selection.end <= updatedPost.description.length) {
+        _descriptionController.selection = selection;
       }
-      //job type
-      if (_jobType != updatedPost.jobType) {
-        _jobType = updatedPost.jobType;
+      needsRebuild = true;
+    }
+    
+    final currentMinBudget = _parseDouble(_budgetMinController.text);
+    if (currentMinBudget != updatedPost.budgetMin) {
+      final selection = _budgetMinController.selection;
+      _budgetMinController.text = (updatedPost.budgetMin ?? '').toString();
+      if (selection.isValid) {
+        _budgetMinController.selection = selection;
       }
-      //tags
-      if (updatedPost.tags.isNotEmpty) {
-        _tagService.getActiveTagCategoriesWithTags().then((tagCategoriesWithTags) {
-          if (mounted) {
-            _mapExistingTagsToCategories(updatedPost.tags, tagCategoriesWithTags);
-          }
-        });
+      needsRebuild = true;
+    }
+    final currentMaxBudget = _parseDouble(_budgetMaxController.text);
+    if (currentMaxBudget != updatedPost.budgetMax) {
+      final selection = _budgetMaxController.selection;
+      _budgetMaxController.text = (updatedPost.budgetMax ?? '').toString();
+      if (selection.isValid) {
+        _budgetMaxController.selection = selection;
       }
-      //attachments
-      if (updatedPost.attachments.isNotEmpty && _attachments != updatedPost.attachments) {
-        _attachments.clear();
-        _attachments.addAll(updatedPost.attachments);
+      needsRebuild = true;
+    }
+    
+    if (_locationController.text != updatedPost.location) {
+      final selection = _locationController.selection;
+      _locationController.text = updatedPost.location;
+      if (selection.isValid && selection.end <= updatedPost.location.length) {
+        _locationController.selection = selection;
       }
-      _hasExternalUpdate = false;
-    });
+      _latitude = updatedPost.latitude;
+      _longitude = updatedPost.longitude;
+      needsRebuild = true;
+    }
+    
+    if (_selectedEvent != updatedPost.event && updatedPost.event.isNotEmpty) {
+      _selectedEvent = updatedPost.event;
+      needsRebuild = true;
+    }
+    
+    if (_eventStartDate != updatedPost.eventStartDate) {
+      _eventStartDate = updatedPost.eventStartDate;
+      needsRebuild = true;
+    }
+    if (_eventEndDate != updatedPost.eventEndDate) {
+      _eventEndDate = updatedPost.eventEndDate;
+      needsRebuild = true;
+    }
+    
+    if (updatedPost.workTimeStart != null) {
+      final parts = updatedPost.workTimeStart!.split(':');
+      if (parts.length == 2) {
+        final newTime = TimeOfDay(hour: int.tryParse(parts[0]) ?? 9, minute: int.tryParse(parts[1]) ?? 0);
+        if (_workTimeStart != newTime) {
+          _workTimeStart = newTime;
+          needsRebuild = true;
+        }
+      }
+    }
+    if (updatedPost.workTimeEnd != null) {
+      final parts = updatedPost.workTimeEnd!.split(':');
+      if (parts.length == 2) {
+        final newTime = TimeOfDay(hour: int.tryParse(parts[0]) ?? 17, minute: int.tryParse(parts[1]) ?? 0);
+        if (_workTimeEnd != newTime) {
+          _workTimeEnd = newTime;
+          needsRebuild = true;
+        }
+      }
+    }
+    
+    final currentMinAge = _parseInt(_minAgeController.text);
+    if (currentMinAge != updatedPost.minAgeRequirement) {
+      final selection = _minAgeController.selection;
+      _minAgeController.text = updatedPost.minAgeRequirement?.toString() ?? '';
+      if (selection.isValid) {
+        _minAgeController.selection = selection;
+      }
+      needsRebuild = true;
+    }
+    final currentMaxAge = _parseInt(_maxAgeController.text);
+    if (currentMaxAge != updatedPost.maxAgeRequirement) {
+      final selection = _maxAgeController.selection;
+      _maxAgeController.text = updatedPost.maxAgeRequirement?.toString() ?? '';
+      if (selection.isValid) {
+        _maxAgeController.selection = selection;
+      }
+      needsRebuild = true;
+    }
+    
+    final currentQuota = _parseInt(_quotaController.text);
+    if (currentQuota != updatedPost.applicantQuota) {
+      final selection = _quotaController.selection;
+      _quotaController.text = updatedPost.applicantQuota?.toString() ?? '';
+      if (selection.isValid) {
+        _quotaController.selection = selection;
+      }
+      needsRebuild = true;
+    }
+
+    final validGenders = ['any', 'male', 'female'];
+    if (_selectedGender != updatedPost.genderRequirement) {
+      _selectedGender =
+          (updatedPost.genderRequirement != null && validGenders.contains(updatedPost.genderRequirement))
+          ? updatedPost.genderRequirement
+          : null;
+      needsRebuild = true;
+    }
+    
+    if (_jobType != updatedPost.jobType) {
+      _jobType = updatedPost.jobType;
+      needsRebuild = true;
+    }
+    
+    if (updatedPost.tags.isNotEmpty) {
+      _tagService.getActiveTagCategoriesWithTags().then((tagCategoriesWithTags) {
+        if (mounted) {
+          _mapExistingTagsToCategories(updatedPost.tags, tagCategoriesWithTags);
+        }
+      });
+    }
+    
+    if (updatedPost.attachments.isNotEmpty && _attachments != updatedPost.attachments) {
+      _attachments.clear();
+      _attachments.addAll(updatedPost.attachments);
+      needsRebuild = true;
+    }
+    
+    _hasExternalUpdate = false;
+    
+    //refrsh when changed
+    if (needsRebuild && mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _loadExistingAttachments(String postId) async {
@@ -348,7 +403,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
           if (categories.isEmpty) {
             _categoriesError = 'No event types available. Please contact support.';
           } else {
-            //validate event categories- dropdown
             if (_selectedEvent != null && _selectedEvent!.isNotEmpty) {
               final categoryNames = categories.map((c) => c.name).toList();
               if (!categoryNames.contains(_selectedEvent)) {
@@ -371,7 +425,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
   void _mapExistingTagsToCategories(List<String> existingTagNames, Map<TagCategory, List<Tag>> tagCategoriesWithTags) {
     final Map<String, List<String>> mappedTags = {};
     final Map<String, String> tagNameToCategoryId = {};
-    // Only map active tags
+ 
     for (final entry in tagCategoriesWithTags.entries) {
       final category = entry.key;
       final tags = entry.value;
@@ -379,7 +433,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
         tagNameToCategoryId[tag.name] = category.id;
       }
     }
-    //tags group by category - only include active tags
+
     for (final tagName in existingTagNames) {
       final categoryId = tagNameToCategoryId[tagName];
       if (categoryId != null) {
@@ -400,6 +454,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
 
   @override
   void dispose() {
+    _editingTimer?.cancel();
     _postStreamSubscription?.cancel();
     _titleController.removeListener(_onFieldChanged);
     _descriptionController.removeListener(_onFieldChanged);
@@ -422,20 +477,33 @@ class _PostCreatePageState extends State<PostCreatePage> {
     //title and desc
     final formState = _formKey.currentState;
     if (formState == null || !formState.validate()) {
+      String missingFields = '';
+      if (_titleController.text.trim().isEmpty) missingFields += 'Title, ';
+      if (_descriptionController.text.trim().isEmpty) missingFields += 'Description, ';
+      if (_budgetMinController.text.trim().isEmpty) missingFields += 'Min Budget, ';
+      if (_budgetMaxController.text.trim().isEmpty) missingFields += 'Max Budget, ';
+      if (_minAgeController.text.trim().isEmpty) missingFields += 'Min Age, ';
+      if (_maxAgeController.text.trim().isEmpty) missingFields += 'Max Age, ';
+      if (_quotaController.text.trim().isEmpty) missingFields += 'Applicant Quota, ';
+      
+      if (missingFields.isNotEmpty) {
+        missingFields = missingFields.substring(0, missingFields.length - 2);
+        return 'Please fill in the following required fields: $missingFields';
+      }
       return 'Please fill in all required form fields';
     }
-    //location
+ 
     if (_locationController.text.trim().isEmpty) {
       return 'Location is required';
     }
     if (_latitude == null || _longitude == null) {
       return 'Please select a valid location from the suggestions';
     }
-    //event type
+   
     if (_selectedEvent == null || _selectedEvent!.isEmpty) {
       return 'Event type is required';
     }
-    //event dates
+
     if (_eventStartDate == null) {
       return 'Event start date is required';
     }
@@ -452,7 +520,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
     if (_eventEndDate!.isBefore(_eventStartDate!)) {
       return 'Event end date cannot be before start date';
     }
-    //budget
+   
     if (_budgetMinController.text.trim().isEmpty) {
       return 'Minimum budget is required';
     }
@@ -467,7 +535,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
     if (maxBudget < minBudget) {
       return 'Maximum budget cannot be lower than minimum budget';
     }
-    //age
+
     if (_minAgeController.text.trim().isEmpty) {
       return 'Minimum age is required';
     }
@@ -479,14 +547,14 @@ class _PostCreatePageState extends State<PostCreatePage> {
     if (minAge == null || maxAge == null) {
       return 'Please enter valid age values';
     }
-    if (minAge < 17) {
-      return 'Minimum age must be 17 or above';
+    if (minAge < 18) {
+      return 'Minimum age must be 18 or above';
     }
     if (minAge > 50) {
       return 'Minimum age must be 50 or below';
     }
-    if (maxAge < 17) {
-      return 'Maximum age must be 17 or above';
+    if (maxAge < 18) {
+      return 'Maximum age must be 18 or above';
     }
     if (maxAge > 50) {
       return 'Maximum age must be 50 or below';
@@ -494,7 +562,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
     if (maxAge < minAge) {
       return 'Maximum age cannot be lower than minimum age';
     }
-    //applicant quota
     if (_quotaController.text.trim().isEmpty) {
       return 'Applicant quota is required';
     }
@@ -502,14 +569,14 @@ class _PostCreatePageState extends State<PostCreatePage> {
     if (quota == null || quota <= 0) {
       return 'Please enter a valid applicant quota (must be greater than 0)';
     }
-    //work time
+
     if (_workTimeStart == null) {
       return 'Work start time is required';
     }
     if (_workTimeEnd == null) {
       return 'Work end time is required';
     }
-    //check if end time is after start time and allow overnight time equals
+    //check if end time is after start time  allow overnight time equals
     final startMinutes = _workTimeStart!.hour * 60 + _workTimeStart!.minute;
     final endMinutes = _workTimeEnd!.hour * 60 + _workTimeEnd!.minute;
 
@@ -525,7 +592,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
         return 'Work end time must be after start time';
       }
     }
-    //gender
     if (_selectedGender == null || _selectedGender!.isEmpty) {
       return 'Gender requirement is required';
     }
@@ -571,14 +637,14 @@ class _PostCreatePageState extends State<PostCreatePage> {
   }
 
   Future<void> _save({required bool publish}) async {
-    //prevent many button clicks
+    //prevent multi action
     if (_saving) return;
     _saving = true;
     if (mounted) {
-      setState(() {}); //disable button
+      setState(() {}); 
     }
 
-    //validate
+    
     if (publish) {
       if (mounted) {
         setState(() {
@@ -592,10 +658,15 @@ class _PostCreatePageState extends State<PostCreatePage> {
           _workTimeEndTouched = true;
         });
       }
+      _budgetMinKey.currentState?.didChange(_budgetMinController.text);
       _budgetMinKey.currentState?.validate();
+      _budgetMaxKey.currentState?.didChange(_budgetMaxController.text);
       _budgetMaxKey.currentState?.validate();
+      _minAgeKey.currentState?.didChange(_minAgeController.text);
       _minAgeKey.currentState?.validate();
+      _maxAgeKey.currentState?.didChange(_maxAgeController.text);
       _maxAgeKey.currentState?.validate();
+      _quotaKey.currentState?.didChange(_quotaController.text);
       _quotaKey.currentState?.validate();
 
       final formState = _formKey.currentState;
@@ -625,14 +696,10 @@ class _PostCreatePageState extends State<PostCreatePage> {
         return;
       }
 
-      // For drafts, validate title field and event start date
-      // Description and other fields are optional for drafts
-      // But event start date cannot be today
       if (_eventStartDate != null) {
         final now = DateTime.now();
         final today = DateTime(now.year, now.month, now.day);
         final eventStartDateOnly = DateTime(_eventStartDate!.year, _eventStartDate!.month, _eventStartDate!.day);
-        // Event start date cannot be today
         if (eventStartDateOnly.isAtSameMomentAs(today)) {
           if (mounted) {
             setState(() => _saving = false);
@@ -647,8 +714,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
         if (mounted) setState(() => _saving = false);
         return;
       }
-
-      // Only validate title field for drafts
+//draft title
       if (_titleController.text.trim().isEmpty) {
         if (mounted) {
           setState(() => _saving = false);
@@ -717,7 +783,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
         await _service.update(post);
       }
       if (!mounted || _hasPopped) return;
-      // Only pop once to prevent "Future already completed" error
       _hasPopped = true;
       Navigator.pop(context, publish);
     } catch (e) {
@@ -733,11 +798,8 @@ class _PostCreatePageState extends State<PostCreatePage> {
           errorString.contains('INVALID_ARGUMENT');
 
       if (isSizeError) {
-        // Try to extract size information
         RegExpMatch? sizeMatch = RegExp(r'size \((\d+(?:,\d+)*) bytes\)').firstMatch(errorString);
         RegExpMatch? maxSizeMatch = RegExp(r'maximum allowed size of (\d+(?:,\d+)*) bytes').firstMatch(errorString);
-
-        // Fallback: try without commas
         if (sizeMatch == null) {
           sizeMatch = RegExp(r'size \((\d+) bytes\)').firstMatch(errorString);
         }
@@ -745,13 +807,12 @@ class _PostCreatePageState extends State<PostCreatePage> {
           maxSizeMatch = RegExp(r'maximum.*?(\d+) bytes').firstMatch(errorString);
         }
 
-        // Fallback: extract large numbers
+        //extract large numbers
         if (sizeMatch == null || maxSizeMatch == null) {
           final allLargeNumbers = RegExp(r'\d{6,}').allMatches(errorString).toList();
           if (allLargeNumbers.isNotEmpty) {
             final numbers = allLargeNumbers.map((m) => int.parse(m.group(0)!)).toList()..sort((a, b) => b.compareTo(a));
             if (numbers.isNotEmpty && numbers[0] > 1000000) {
-              // Use largest number as actual size, 1MB as max
               final actualSize = numbers[0];
               final maxSize = 1048576;
               final exceededSize = actualSize - maxSize;
@@ -833,7 +894,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
         'Recommended total size: less than $recommendedMaxReadable.';
   }
 
-  //generic size error message
+  //size error message
   String _buildGenericSizeErrorMessage() {
     return 'Image Size exceeds the limit!\n\n'
         'Document size exceeds the 1MB limit.\n\n'
@@ -883,6 +944,15 @@ class _PostCreatePageState extends State<PostCreatePage> {
   }
 
   void _onTagCategoryChanged(String categoryId, List<String> values) {
+    final currentValues = _selectedTags[categoryId] ?? <String>[];
+    final valuesChanged = currentValues.length != values.length ||
+        !currentValues.every((v) => values.contains(v)) ||
+        !values.every((v) => currentValues.contains(v));
+    
+    if (!valuesChanged && values.isEmpty == currentValues.isEmpty) {
+      return; 
+    }
+    
     setState(() {
       final next = Map<String, List<String>>.from(_selectedTags);
       if (values.isEmpty) {
@@ -892,6 +962,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
       }
       _selectedTags = next;
     });
+    _onFieldChanged(); 
   }
 
   @override
@@ -1043,7 +1114,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                               final requiredError = InputValidators.required(v, errorMessage: 'Required');
                               if (requiredError != null) return requiredError;
 
-                              if (v == null || v.trim().isEmpty) return null; // Already handled by required
+                              if (v == null || v.trim().isEmpty) return null; 
 
                               final maxBudget = _parseDouble(v);
                               final minBudget = _parseDouble(_budgetMinController.text);
@@ -1073,7 +1144,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                           _latitude = latitude;
                           _longitude = longitude;
                         });
-                        _onFieldChanged(); // Update button state
+                        _onFieldChanged(); 
                       },
                     ),
                   ],
@@ -1122,7 +1193,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
                             onDateSelected: (date) {
                               setState(() {
                                 _eventStartDate = date;
-                                // If end date is before new start date, clear it
                                 if (_eventEndDate != null && _eventEndDate!.isBefore(date)) {
                                   _eventEndDate = null;
                                 }
@@ -1150,10 +1220,10 @@ class _PostCreatePageState extends State<PostCreatePage> {
                                 _eventStartDate ??
                                 DateTime.now().add(
                                   const Duration(days: 1),
-                                ), // Must be at least tomorrow if no start date
+                                ), 
                             lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
                             required: true,
-                            helperText: ' ', // Add spacing to align with Event Start Date
+                            helperText: ' ', 
                           ),
                         ),
                       ],
@@ -1192,45 +1262,20 @@ class _PostCreatePageState extends State<PostCreatePage> {
                     _buildGenderDropdown(),
                     const SizedBox(height: 16),
 
-                    StreamBuilder<Map<TagCategory, List<Tag>>>(
-                      stream: _tagService.streamActiveTagCategoriesWithTags(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(24.0),
-                              child: CircularProgressIndicator(
-                                color: Color(0xFF00C8A0),
-                              ),
-                            ),
-                          );
-                        }
-
-                        final tagCategoriesWithTags = snapshot.data ?? {};
-                        
-                        // Map existing tags when data first loads (only once)
-                        if (widget.existing != null && 
-                            widget.existing!.tags.isNotEmpty && 
-                            tagCategoriesWithTags.isNotEmpty &&
-                            _selectedTags.isEmpty &&
-                            !_hasMappedExistingTags) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted && !_hasMappedExistingTags) {
-                              _mapExistingTagsToCategories(widget.existing!.tags, tagCategoriesWithTags);
-                              setState(() {
-                                _hasMappedExistingTags = true;
-                              });
-                            }
+                    _TagSelectionStreamBuilder(
+                      tagService: _tagService,
+                      selections: _selectedTags,
+                      onCategoryChanged: _onTagCategoryChanged,
+                      existing: widget.existing,
+                      onTagsMapped: () {
+                        if (mounted) {
+                          setState(() {
+                            _hasMappedExistingTags = true;
                           });
                         }
-
-                        return TagSelectionSection(
-                          selections: _selectedTags,
-                          onCategoryChanged: _onTagCategoryChanged,
-                          tagCategoriesWithTags: tagCategoriesWithTags,
-                          loading: false,
-                        );
                       },
+                      hasMappedExistingTags: _hasMappedExistingTags,
+                      mapExistingTagsToCategories: _mapExistingTagsToCategories,
                     ),
                   ],
                 ),
@@ -1282,6 +1327,10 @@ class _PostCreatePageState extends State<PostCreatePage> {
                               }
                               if (minAge > 50) {
                                 return 'Minimum age must be 50 or below';
+                              }
+                              final maxAge = _parseInt(_maxAgeController.text);
+                              if (maxAge != null && minAge > maxAge) {
+                                return 'Min age cannot be higher than max age';
                               }
                               return null;
                             },
@@ -1365,7 +1414,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
                   images: _attachments,
                   onImagesAdded: (newUrls) {
                     setState(() {
-                      // Limit to maximum 3 images
                       final remainingSlots = 3 - _attachments.length;
                       if (remainingSlots > 0) {
                         _attachments.addAll(newUrls.take(remainingSlots));
@@ -1377,12 +1425,12 @@ class _PostCreatePageState extends State<PostCreatePage> {
                       _attachments.removeAt(index);
                     });
                   },
-                  title: 'Attachments',
-                  description: 'Add images to showcase your project',
+                  title: 'Attachments (Optional)',
+                  description: 'Add images to showcase your project (optional)',
                   storageService: _storage,
                   uploadId: widget.existing?.id ?? _postId,
                   disabled: _saving,
-                  maxImages: 3, // Maximum 3 images allowed
+                  maxImages: 3, 
                 ),
               ),
               const SizedBox(height: 24),
@@ -1483,7 +1531,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                   onChanged: (v) {
                     setState(() => _jobType = v ?? JobType.weekdays);
                     _jobTypeFocusNode.unfocus();
-                    _onFieldChanged(); // Update button state
+                    _onFieldChanged();
                   },
                   onTap: () {
                     if (!_jobTypeFocused) {
@@ -1632,7 +1680,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                             _eventFocused = false;
                           });
                           _eventFocusNode.unfocus();
-                          _onFieldChanged(); // Update button state
+                          _onFieldChanged(); 
                         }
                       },
                       onTap: () {
@@ -1674,7 +1722,9 @@ class _PostCreatePageState extends State<PostCreatePage> {
       return FormField<String>(
         key: fieldKey,
         initialValue: controller.text,
-        validator: validator,
+        validator: (value) {
+          return validator?.call(controller.text);
+        },
         builder: (FormFieldState<String> field) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1690,7 +1740,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
                 maxLines: maxLines,
                 keyboardType: keyboardType,
                 onTap: () {
-                  // Mark field as focused when clicked
                   if (!_focusedFields.contains(controller)) {
                     setState(() {
                       _focusedFields.add(controller);
@@ -1949,6 +1998,89 @@ class _PostCreatePageState extends State<PostCreatePage> {
           },
         ),
       ],
+    );
+  }
+}
+
+class _TagSelectionStreamBuilder extends StatefulWidget {
+  const _TagSelectionStreamBuilder({
+    required this.tagService,
+    required this.selections,
+    required this.onCategoryChanged,
+    this.existing,
+    required this.onTagsMapped,
+    required this.hasMappedExistingTags,
+    required this.mapExistingTagsToCategories,
+  });
+
+  final TagService tagService;
+  final TagSelectionMap selections;
+  final void Function(String categoryId, List<String> values) onCategoryChanged;
+  final Post? existing;
+  final VoidCallback onTagsMapped;
+  final bool hasMappedExistingTags;
+  final void Function(List<String> existingTagNames, Map<TagCategory, List<Tag>> tagCategoriesWithTags) mapExistingTagsToCategories;
+
+  @override
+  State<_TagSelectionStreamBuilder> createState() => _TagSelectionStreamBuilderState();
+}
+
+class _TagSelectionStreamBuilderState extends State<_TagSelectionStreamBuilder> {
+  Map<TagCategory, List<Tag>>? _cachedData;
+  
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<Map<TagCategory, List<Tag>>>(
+      stream: widget.tagService.streamActiveTagCategoriesWithTags(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          if (_cachedData != null) {
+            return TagSelectionSection(
+              selections: widget.selections,
+              onCategoryChanged: widget.onCategoryChanged,
+              tagCategoriesWithTags: _cachedData!,
+              loading: false,
+            );
+          }
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24.0),
+              child: CircularProgressIndicator(
+                color: Color(0xFF00C8A0),
+              ),
+            ),
+          );
+        }
+
+        final tagCategoriesWithTags = snapshot.data ?? {};
+        
+        if (tagCategoriesWithTags.isNotEmpty) {
+          _cachedData = tagCategoriesWithTags;
+        } else if (_cachedData == null) {
+          _cachedData = {};
+        }
+        
+        //existing tags when data first loads 
+        if (widget.existing != null && 
+            widget.existing!.tags.isNotEmpty && 
+            tagCategoriesWithTags.isNotEmpty &&
+            widget.selections.isEmpty &&
+            !widget.hasMappedExistingTags) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && !widget.hasMappedExistingTags) {
+              widget.mapExistingTagsToCategories(widget.existing!.tags, tagCategoriesWithTags);
+              widget.onTagsMapped();
+            }
+          });
+        }
+
+        return TagSelectionSection(
+          selections: widget.selections,
+          onCategoryChanged: widget.onCategoryChanged,
+          tagCategoriesWithTags: _cachedData ?? tagCategoriesWithTags,
+          loading: false,
+        );
+      },
     );
   }
 }

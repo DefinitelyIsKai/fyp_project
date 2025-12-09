@@ -76,8 +76,6 @@ class _ProfilePageState extends State<ProfilePage> {
           final bool isRecruiter = (data?['role'] as String?)?.toLowerCase() == 'recruiter';
           final String? userStatus = _getUserStatus(data);
           final bool isSuspended = _isSuspended(userStatus);
-
-          //profile image
           final Map<String, dynamic>? imageData = (data?['image'] as Map<String, dynamic>?);
           final String? base64Image = (imageData?['base64'] as String?);
           final Uint8List? imageBytes = _decodeBase64(base64Image);
@@ -174,7 +172,6 @@ class _ProfilePageState extends State<ProfilePage> {
                 ],
               ),
 
-              //profile 
               SliverList(
                 delegate: SliverChildListDelegate([
                   Container(
@@ -193,7 +190,6 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     child: Column(
                       children: [
-                        //photo
                         GestureDetector(
                           onTap: _uploadingPhoto ? null : _handlePhotoUpdate,
                           child: Stack(
@@ -280,8 +276,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        
-                        // Email
+                      
                         Text(
                           isLoading ? '' : email,
                           style: TextStyle(
@@ -344,7 +339,6 @@ class _ProfilePageState extends State<ProfilePage> {
                       ],
                     ),
                   ),
-                  //menu
                   Container(
                     margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     decoration: BoxDecoration(
@@ -443,8 +437,6 @@ class _ProfilePageState extends State<ProfilePage> {
                       ],
                     ),
                   ),
-
-                  // Logout Button
                   Container(
                     margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
                     child: ElevatedButton(
@@ -489,7 +481,6 @@ class _ProfilePageState extends State<ProfilePage> {
           );
         },
       ),
-            //loading when photo upload
             if (_uploadingPhoto)
               Container(
                 color: Colors.black.withOpacity(0.3),
@@ -841,12 +832,11 @@ class _ProfilePageState extends State<ProfilePage> {
     if (confirmed != true || !mounted) return;
     
     try {
-      //delete image 
       await _authService.updateUserProfile({
         'image': FieldValue.delete(),
       });
       
-      //refresh
+
       if (mounted) {
         setState(() {
           _userFuture = _authService.getUserDoc();

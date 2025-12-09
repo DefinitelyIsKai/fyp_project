@@ -46,7 +46,6 @@ class InputDecorations {
     );
   }
 
-  /// Input decoration with icon
   static InputDecoration withIcon({
     required IconData icon,
     String? hintText,
@@ -67,7 +66,6 @@ class InputDecorations {
     );
   }
 
-  //search field
   static InputDecoration search({
     String? hintText,
     VoidCallback? onClear,
@@ -102,7 +100,7 @@ class InputDecorations {
     );
   }
 
-  //text areas
+
   static InputDecoration textArea({
     String? hintText,
     String? labelText,

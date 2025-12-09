@@ -12,8 +12,7 @@ import 'auth_service.dart';
 import 'tag_service.dart';
 import 'application_service.dart';
 import '../../utils/user/tag_definitions.dart';
-
-//matching weights 
+ 
 class _MatchingWeights {
   const _MatchingWeights({
     required this.textSimilarity,
@@ -34,7 +33,6 @@ class _MatchingWeights {
   final double decayFactor;
 }
 
-//default weights 
 const _defaultWeights = _MatchingWeights(
   textSimilarity: 0.35,
   tagMatching: 0.35,
@@ -90,15 +88,14 @@ class HybridMatchingEngine {
     }
   }
 
-  /// Fetch matching rule weights from Firestore with caching
   Future<_MatchingWeights> _getMatchingWeights() async {
     final now = DateTime.now();
     
-    // Safety check: ensure _weightsCacheTimestamp is a valid DateTime
+  
     if (_cachedWeights != null &&
         _weightsCacheTimestamp != null) {
       try {
-        // Verify timestamp is actually a DateTime
+    
         if (_weightsCacheTimestamp is! DateTime) {
           debugPrint('Warning: _weightsCacheTimestamp is not DateTime, clearing cache');
           _cachedWeights = null;
@@ -124,7 +121,6 @@ class HybridMatchingEngine {
           .get();
 
       debugPrint('Found ${snapshot.docs.length} total rules in Firestore');
-      //enabled rule weight applied
       double textSimilarity = 0.0;
       double tagMatching = 0.0;
       double requiredSkills = 0.0;
@@ -178,8 +174,6 @@ class HybridMatchingEngine {
         maxDistanceKm: maxDistanceKm,
         decayFactor: decayFactor,
       );
-
-      //log loaded weights
       debugPrint('textSimilarity: ${weights.textSimilarity}');
       debugPrint('tagMatching: ${weights.tagMatching}');
       debugPrint('requiredSkills: ${weights.requiredSkills}');
@@ -192,18 +186,15 @@ class HybridMatchingEngine {
       _weightsCacheTimestamp = now;
       return weights;
     } catch (e) {
-      // Return cached weights if available, otherwise defaults
       return _cachedWeights ?? _defaultWeights;
     }
   }
 
-  //clear cached matching weights force refresh 
   static void clearWeightsCache() {
     _cachedWeights = null;
     _weightsCacheTimestamp = null;
   }
-  
-  //reset all static caches 
+   
   static void resetAllCaches() {
     _cachedWeights = null;
     _weightsCacheTimestamp = null;
@@ -258,10 +249,9 @@ class HybridMatchingEngine {
     String userId,
     Map<String, dynamic> data,
   ) async {
-    //fetch matching weight
+
     final weights = await _getMatchingWeights();
     
-    //fetch tag data
     final tagData = await _getTagData();
     final skillCategoryIds = await _getSkillCategoryIds();
     final jobPreferenceCategoryIds = await _getJobPreferenceCategoryIds();
@@ -440,19 +430,18 @@ class HybridMatchingEngine {
     
     if (validJobs.isEmpty) return [];
 
-    // Filter out posts where event has already started
+
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final eventFilteredJobs = validJobs.where((job) {
-      // Only show posts where event hasn't started yet (eventStartDate is null or in the future)
-      // Exclude posts where event has already started (eventStartDate is today or in the past)
+     
       if (job.eventStartDate != null) {
         final eventStartDate = DateTime(
           job.eventStartDate!.year,
           job.eventStartDate!.month,
           job.eventStartDate!.day,
         );
-        // Exclude if event has already started (today or past)
+       
         if (eventStartDate.compareTo(today) <= 0) {
           return false;
         }
@@ -666,7 +655,7 @@ class HybridMatchingEngine {
       return [];
     }
 
-    // Use Embeddings + ANN for matching
+    //Embeddings + ANN 
     debugPrint('Job vector tokens: ${jobVector.featureVector.tokens.length}');
     debugPrint('Job vector tokens sample: ${jobVector.featureVector.tokens.take(5).join(", ")}');
     if (genderFilteredCandidates.isNotEmpty) {
@@ -686,7 +675,6 @@ class HybridMatchingEngine {
     //ANN no results then direct matching
     if (annNeighbors.isEmpty && genderFilteredCandidates.isNotEmpty) {
       debugPrint('ANN returned no results, using fallback direct matching');
-      //directcosine similarity calculation as fallback
       for (final candidate in genderFilteredCandidates) {
         final similarity = jobVector.featureVector.cosine(candidate.featureVector);
         debugPrint('Direct similarity for candidate ${candidate.id}: $similarity');
@@ -704,7 +692,7 @@ class HybridMatchingEngine {
       
       debugPrint('Candidate ${candidate.id} - Score: $score, Similarity: $similarity');
       
-      // Use minimum score threshold
+      //threshold
       const minScore = 0.05;
       if (score > minScore) {
         candidateScores[candidate] = score;
@@ -721,7 +709,7 @@ class HybridMatchingEngine {
     for (final candidate in selectedCandidates) {
       final score = candidateScores[candidate]!;
 
-      //find the application
+      //application
       final application = applications.firstWhere(
         (app) => app.jobseekerId == candidate.id,
         orElse: () => applications.first, 
@@ -732,7 +720,7 @@ class HybridMatchingEngine {
         jobVector.requiredSkills,
       );
 
-      // Get jobseeker name
+      //jobseeker name
       final jobseekerData = jobseekerDataMap[candidate.id] ?? {};
       final jobseekerName = (jobseekerData['fullName'] as String?) ??
           (jobseekerData['professionalProfile'] as String?) ??
@@ -919,7 +907,7 @@ class HybridMatchingEngine {
       if (!_meetsAgeRequirement(candidate, job.post)) continue;
       if (!_meetsGenderRequirement(candidate, job.post)) continue;
       
-      //calculate score from jobseeker's perspective
+      //calculate score jobseeker's perspective
       debugPrint('Before _scoreJobseekerMatch: weights.tagMatching=${weights.tagMatching}, weights.textSimilarity=${weights.textSimilarity}');
       final jobseekerScore = await _scoreJobseekerMatch(
         candidate,
@@ -928,7 +916,7 @@ class HybridMatchingEngine {
         weights,
       );
       
-      //calculate score from recruiter perspective
+      //calculate score recruiter perspective
       final jobScore = await _scoreRecruiterMatch(
         job,
         candidate,
@@ -952,7 +940,7 @@ class HybridMatchingEngine {
 
     if (weightedCompatibility.isEmpty) return [];
 
-    //TopK algorithm to get top 20 
+    //top 20 
     const k = 20;
     final topKEntries = _getTopK(
       weightedCompatibility.entries.toList(),
@@ -960,7 +948,7 @@ class HybridMatchingEngine {
       (entry) => entry.value,
     );
     
-    //
+    
     final results = <_JobseekerOptimalMatch>[];
     final jobById = {for (final job in jobVectors) job.post.id: job};
     
@@ -979,11 +967,7 @@ class HybridMatchingEngine {
     return results;
   }
 
-  /// TopK algorithm: Efficiently get top K elements using heap-based approach
-  /// Time Complexity: O(n log k) where n = total items, k = top K
-  /// Space Complexity: O(k)
-  /// 
-  /// Algorithm: Maintain a min-heap of size k to track top K largest elements
+
   List<T> _getTopK<T>(
     List<T> items,
     int k,
@@ -991,28 +975,26 @@ class HybridMatchingEngine {
   ) {
     if (items.isEmpty || k <= 0) return [];
     if (k >= items.length) {
-      // If k >= n, sort all items (no need for TopK optimization)
+      //k >= n, sort all items 
       final sorted = items.toList()
         ..sort((a, b) => getValue(b).compareTo(getValue(a)));
       return sorted;
     }
 
-    // Heap-based TopK: Maintain a min-heap of size k
-    // The heap stores the top K largest elements, with the smallest at the top
     final heap = <T>[];
     
     for (final item in items) {
       final value = getValue(item);
       
       if (heap.length < k) {
-        // Heap not full, add item
+        // Heap not full then add item
         heap.add(item);
         _heapifyUp(heap, heap.length - 1, getValue, ascending: true);
       } else {
-        // Heap is full, compare with smallest element
+        // Heap is ful compare with smallest element
         final smallestValue = getValue(heap[0]);
         if (value > smallestValue) {
-          // Replace smallest element with current item
+          //put smallest element with current item
           heap[0] = item;
           _heapifyDown(heap, 0, getValue, ascending: true);
         }
@@ -1025,7 +1007,7 @@ class HybridMatchingEngine {
     return heap;
   }
 
-  //heapify up bubble up for min-heap
+  // min-heap bubble up
   void _heapifyUp<T>(List<T> heap, int index, double Function(T) getValue, {required bool ascending}) {
     while (index > 0) {
       final parentIndex = (index - 1) ~/ 2;
@@ -1047,7 +1029,7 @@ class HybridMatchingEngine {
     }
   }
 
-  //heapify down (bubble down) for min-heap
+  //bubble down
   void _heapifyDown<T>(List<T> heap, int index, double Function(T) getValue, {required bool ascending}) {
     while (true) {
       int smallest = index;
@@ -1081,7 +1063,6 @@ class HybridMatchingEngine {
     }
   }
 
-  //check if candidate meets age requirement for a job
   bool _meetsAgeRequirement(_CandidateProfile candidate, Post job) {
     if (candidate.age == null) {
       return job.minAgeRequirement == null && job.maxAgeRequirement == null;
@@ -1099,7 +1080,6 @@ class HybridMatchingEngine {
   bool _meetsGenderRequirement(_CandidateProfile candidate, Post job) {
     final jobGenderRequirement = job.genderRequirement?.toLowerCase().trim();
     
-    // If job has any all candidates pass
     if (jobGenderRequirement == null || 
         jobGenderRequirement.isEmpty || 
         jobGenderRequirement == 'any') {
@@ -1134,7 +1114,6 @@ class HybridMatchingEngine {
   }
 
   Future<List<_CandidateProfile>> _loadCandidateProfiles() async {
-    //fetch tag data once for all candidates
     final tagData = await _getTagData();
     final skillCategoryIds = await _getSkillCategoryIds();
     final jobPreferenceCategoryIds = await _getJobPreferenceCategoryIds();
@@ -1481,7 +1460,7 @@ double _calculateDistance(
   double lat2,
   double lon2,
 ) {
-  return Geolocator.distanceBetween(lat1, lon1, lat2, lon2) / 1000; // Convert to km
+  return Geolocator.distanceBetween(lat1, lon1, lat2, lon2) / 1000; //km
 }
 
 //calculate distance score (0-1, where 1 is closest and 0 is farthest)
@@ -1493,7 +1472,7 @@ double _calculateDistanceScore(
   if (distanceKm <= 0) return 1.0; //same location
   if (distanceKm >= maxDistanceKm) return 0.0; //beyond max distance
   
-  //exponential decay: score = e^(-distance/maxDistance * decayFactor)
+  //exponential decay = score = e^(-distance/maxDistance * decayFactor)
   final normalizedDistance = distanceKm / maxDistanceKm;
   return exp(-normalizedDistance * decayFactor);
 }

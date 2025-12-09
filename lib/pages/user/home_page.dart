@@ -105,7 +105,6 @@ class _HomePageState extends State<HomePage> {
     
     setState(() {
       _selectedIndex = index;
-      //clear initial search events
      
       if (index != 1) {
         _initialSearchEvents = null;
@@ -311,7 +310,6 @@ class _HomeTabState extends State<_HomeTab> {
     super.initState();
     _popularCategoriesStream = _categoryService.streamPopularCategories(limit: 4);
     _loadProfile();
-    //GPS 
     _resolveDeviceLocation();
 
     _postService.autoCompleteExpiredPosts().catchError((error) {
@@ -708,7 +706,6 @@ class _HomeTabState extends State<_HomeTab> {
                     ),
                   );
                 }
-                //no draft
                 final List<Post> posts = (snapshot.data ?? <Post>[])
                     .where((p) => !p.isDraft)
                     .take(3)

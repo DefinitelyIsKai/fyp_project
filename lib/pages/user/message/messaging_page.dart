@@ -78,7 +78,6 @@ class _MessagingPageState extends State<MessagingPage> {
             ),
           ),
 
-          // Conversations List
           Expanded(
             child: StreamBuilder<List<Conversation>>(
               stream: _messagingService.streamConversations(),
@@ -125,13 +124,11 @@ class _MessagingPageState extends State<MessagingPage> {
 
                 final allConversations = snapshot.data ?? [];
                 
-                // Filter conversations based on search query (participant name only)
                 final conversations = _searchQuery.isEmpty
                     ? allConversations
                     : allConversations.where((conversation) {
                         final currentUserId = _authService.currentUserId;
                         final otherName = conversation.getOtherParticipantName(currentUserId).toLowerCase();
-                        // Search by participant name only
                         return otherName.contains(_searchQuery);
                       }).toList();
 
@@ -385,20 +382,16 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     final receiverId = widget.conversation.getOtherParticipantId(currentUserId);
     final messageContent = _messageController.text.trim();
 
-    //clear input field
     _messageController.clear();
     
-    //set flag to ensure bottom when streambuilder updates
     setState(() {
       _isButtonPressed = true;
       _isSending = true;
       _shouldStayAtBottom = true; 
     });
     
-    //to bottom
     _scrollToBottom();
     
-    //
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) {
         setState(() {
@@ -436,7 +429,6 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       }
     } finally {
       if (mounted) {
-        //delay clear flag
         Future.delayed(const Duration(milliseconds: 800), () {
           if (mounted) {
             setState(() {
@@ -698,7 +690,6 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
               },
             ),
           ),
-          // Message Input
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(

@@ -121,7 +121,7 @@ class _SearchDiscoveryJobseekerPageState
                         color: Colors.black,
                       ),
                     ),
-                    // View Toggle
+                    //toggle
                     Container(
                       decoration: BoxDecoration(
                         color: Colors.grey[100],
@@ -158,7 +158,6 @@ class _SearchDiscoveryJobseekerPageState
               );
             },
           ),
-          // Content Area
           Expanded(child: isMapView ? buildMapView() : _buildListView()),
         ],
       ),
@@ -261,7 +260,6 @@ class _SearchDiscoveryJobseekerPageState
             return distanceComparison;
           });
         } else {
-          //sort creation date descending when no distance filter is active
           nearbyPosts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         }
 
@@ -407,7 +405,6 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
         eventStartDate.month,
         eventStartDate.day,
       );
-      // Only block if event starts today or has already passed
       if (eventStartDateOnly.isAtSameMomentAs(today) || 
           eventStartDateOnly.isBefore(today)) {
         if (!mounted) return;
@@ -690,7 +687,6 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                       );
                       final hasApplied = application.postId == widget.post.id;
                       
-                      //real-time quota updates
                       return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                         stream: FirebaseFirestore.instance
                             .collection('posts')
@@ -727,7 +723,6 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                               eventStartDate.month,
                               eventStartDate.day,
                             );
-                            // Only block if event starts today or has already passed
                             isEventStartingSoon = eventStartDateOnly.isAtSameMomentAs(today) || eventStartDateOnly.isBefore(today);
                           }
                           

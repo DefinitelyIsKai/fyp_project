@@ -18,7 +18,7 @@ class EmptyState extends StatelessWidget {
     this.action,
   });
 
-  //no posts
+
   const EmptyState.noPosts({
     super.key,
     String? subtitle,
@@ -42,7 +42,7 @@ class EmptyState extends StatelessWidget {
        iconColor = Colors.grey,
        iconSize = 80.0;
 
-  //no transactions
+
   const EmptyState.noTransactions({
     super.key,
     this.action,
@@ -53,7 +53,7 @@ class EmptyState extends StatelessWidget {
        iconSize = 64.0;
 
 
-  /// Empty state for no applicants
+
   const EmptyState.noApplicants({
     super.key,
     this.action,

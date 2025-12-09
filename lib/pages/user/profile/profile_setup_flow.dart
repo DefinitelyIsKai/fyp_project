@@ -758,7 +758,6 @@ class _ResumePickerState extends State<_ResumePicker> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _uploading = false);
-      // Extract error message from exception
       String errorMessage = 'Failed to upload resume';
       if (e is Exception) {
         errorMessage = e.toString().replaceFirst('Exception: ', '');
@@ -790,10 +789,8 @@ class _ResumePickerState extends State<_ResumePicker> {
     if (confirmed != true || !mounted) return;
     
     try {
-      // Immediately delete resume and cvUrl from Firestore
       await _authService.updateUserProfile({
         'resume': FieldValue.delete(),
-        'cvUrl': FieldValue.delete(),
       });
       
       if (mounted) {

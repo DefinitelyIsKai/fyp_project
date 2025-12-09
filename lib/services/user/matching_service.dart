@@ -141,14 +141,11 @@ class MatchingService {
     });
   }
 
-  //manual trigger refresh clears weights cache 
   void refreshComputedMatches() {
-    //clear weights cache before refresh
     MatchingService.clearWeightsCache();
     _refreshController.add(null);
   }
 
-  //Compute matches for a specific recruiter post and its applicants.
   Future<List<RecruiterMatch>> computeMatchesForRecruiterPost({
     required String postId,
     required String recruiterId,
@@ -159,7 +156,6 @@ class MatchingService {
     );
   }
 
-  //get count of matched applicants for a specific post.
   Future<int> getMatchedApplicantCount({
     required String postId,
     required String recruiterId,
@@ -170,12 +166,10 @@ class MatchingService {
     );
   }
 
-  //clear cached matching weight
   static void clearWeightsCache() {
     HybridMatchingEngine.clearWeightsCache();
   }
   
-  //reset  caches 
   static void resetAllCaches() {
     HybridMatchingEngine.resetAllCaches();
   }

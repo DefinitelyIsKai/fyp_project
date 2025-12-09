@@ -51,7 +51,7 @@ class TimeSlotCard extends StatelessWidget {
   Future<void> _showPendingRequestDetails(BuildContext context) async {
     if (!context.mounted) return;
 
-    // Get pending booking requests for this slot
+    //get pending booking requests for this slot
     try {
       final requests = await availabilityService
           .streamBookingRequestsForRecruiter()

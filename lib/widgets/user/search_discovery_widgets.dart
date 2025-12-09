@@ -59,7 +59,6 @@ class FilterButton extends StatelessWidget {
   }
 }
 
-//toggle button 
 class ViewToggleButton extends StatelessWidget {
   final String label;
   final bool isActive;

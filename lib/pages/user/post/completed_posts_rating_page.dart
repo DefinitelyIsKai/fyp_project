@@ -409,7 +409,7 @@ class _ApplicantRatingCardState extends State<_ApplicantRatingCard> {
             builder: (context, snapshot) {
               final hasRating = snapshot.data ?? false;
               
-              // Update cache
+              //update cache
               final cacheKey = '${widget.post.id}_${widget.application.jobseekerId}';
               widget.hasRatingCache[cacheKey] = hasRating;
               

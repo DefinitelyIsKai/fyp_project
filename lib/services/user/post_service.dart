@@ -351,10 +351,9 @@ class PostService {
           }
         } catch (e) {
           debugPrint('Error deducting post creation credits: $e');
-          // Don't fail the update if credit processing fails
         }
       }
-      // Status changed from pending to rejected - release credits
+      //status changed from pending to rejected release credits
       else if (oldStatus == PostStatus.pending && newStatus == PostStatus.rejected) {
         try {
           final success = await WalletService.releasePostCreationCreditsForUser(
@@ -421,7 +420,7 @@ class PostService {
       debugPrint('Error fetching post $id for deletion: $e');
     }
 
-    // Notify recruiter about deletion
+    //notify recruiter about deletion
     if (ownerId != null && ownerId.isNotEmpty) {
       try {
         await _notificationService.notifyPostDeletedToRecruiter(

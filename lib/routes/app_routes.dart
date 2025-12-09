@@ -13,7 +13,6 @@ class AppRoutes {
   static const String adminForgotPassword = '/admin-forgot-password';
   static const String dashboard = '/dashboard';
   
-  // Legacy route (defaults to user login)
   static const String login = '/login';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {

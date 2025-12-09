@@ -61,7 +61,6 @@ class _LoginPageState extends State<LoginPage> {
           if (mounted) {
             setState(() => _isLoading = false);
           }
-          // Show dialog with option to resend verification email
           if (mounted) {
             showDialog(
               context: context,
@@ -85,7 +84,6 @@ class _LoginPageState extends State<LoginPage> {
                             context: context,
                             message: 'Verification email sent. Please check your inbox.',
                           );
-                          // Navigate to verification page
                           Navigator.pushReplacement(
                             context,
                             MaterialPageRoute(builder: (_) => const EmailVerificationLoadingPage()),
@@ -118,7 +116,7 @@ class _LoginPageState extends State<LoginPage> {
       
         }
         
-        //bool logintrue - only set to true if profileCompleted is true
+        //logintrue pccompletetrue
         try {
           final userId = credential.user?.uid;
           if (userId != null && userId.isNotEmpty) {

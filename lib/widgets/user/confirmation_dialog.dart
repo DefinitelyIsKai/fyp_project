@@ -1,38 +1,16 @@
 import 'package:flutter/material.dart';
 
-/// A reusable confirmation dialog widget that can be customized
-/// for various confirmation scenarios throughout the app.
 class ConfirmationDialog extends StatelessWidget {
-  /// The title of the dialog
   final String title;
-
-  /// The message/description shown in the dialog
   final String message;
-
-  /// The icon to display (optional)
   final IconData? icon;
-
-  /// The color for the icon background (optional, defaults to red with opacity)
   final Color? iconColor;
-
-  /// The background color for the icon container (optional)
   final Color? iconBackgroundColor;
-
-  /// The text for the confirm button
   final String confirmText;
-
-  /// The text for the cancel button
   final String cancelText;
-
-  /// The color for the confirm button
   final Color confirmButtonColor;
-
-  /// The color for the cancel button text/border
   final Color? cancelButtonColor;
-
-  /// Whether the confirm button should be destructive (red) or normal
   final bool isDestructive;
-
   const ConfirmationDialog({
     super.key,
     required this.title,
@@ -49,15 +27,14 @@ class ConfirmationDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Determine icon color based on isDestructive or provided color
     final effectiveIconColor = iconColor ?? (isDestructive ? Colors.red : const Color(0xFF00C8A0));
     final effectiveIconBackgroundColor = iconBackgroundColor ?? 
         (isDestructive ? Colors.red.withOpacity(0.1) : const Color(0xFF00C8A0).withOpacity(0.1));
     
-    // Determine confirm button color
+ 
     final effectiveConfirmColor = isDestructive ? Colors.red : confirmButtonColor;
     
-    // Determine cancel button color
+
     final effectiveCancelColor = cancelButtonColor ?? Colors.grey;
 
     return Dialog(

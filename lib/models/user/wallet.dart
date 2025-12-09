@@ -13,7 +13,7 @@ class Wallet {
   final int heldCredits; 
   final DateTime updatedAt;
 
-  //balance = balance - heldCredits
+  
   int get availableBalance => balance - heldCredits;
 
   Map<String, dynamic> toMap() {
@@ -36,7 +36,6 @@ class Wallet {
       } else if (updatedAtValue is Timestamp) {
         updatedAt = updatedAtValue.toDate();
       } else if (updatedAtValue is Map) {
-        // Handle server timestamp placeholder
         updatedAt = DateTime.now();
       }
     }

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-//message types 
 enum MessageBoxType {
   success,
   warning,

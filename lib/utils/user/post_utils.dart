@@ -35,7 +35,7 @@ class PostUtils {
     //check content
     for (final newPost in newPosts) {
       final oldPost = oldPostsMap[newPost.id];
-      if (oldPost == null) return true; // New post
+      if (oldPost == null) return true; //new
 
       //compare field
       if (oldPost.title != newPost.title ||
@@ -46,11 +46,11 @@ class PostUtils {
           oldPost.views != newPost.views ||
           oldPost.applicants != newPost.applicants ||
           oldPost.description != newPost.description) {
-        return true; // Content changed
+        return true; //content change
       }
     }
 
-    return false; // No content changes detected
+    return false;
   }
 }
 

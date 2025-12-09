@@ -183,27 +183,9 @@ class StorageService {
               }
             }
             
-            //clean up
-            if (existingData['image'] is Map) {
-              final existingImage = Map<String, dynamic>.from(existingData['image'] as Map);
-              if (existingImage.containsKey('base64')) {
-                existingImage.remove('base64');
-                // Only keep image if it has downloadUrl
-                if (existingImage.containsKey('downloadUrl') && existingImage['downloadUrl'] != null) {
-                  await _firestore.collection('users').doc(_uid).update({
-                    'image': existingImage,
-                  });
-                  // Update existingData to reflect the change
-                  existingData['image'] = existingImage;
-                } else {
-                  // Remove image if no downloadUrl
-                  await _firestore.collection('users').doc(_uid).update({
-                    'image': FieldValue.delete(),
-                  });
-                  existingData.remove('image');
-                }
-              }
-            }
+            // Don't clean up image when uploading resume - image and resume are independent
+            // Only clean up resume base64 data to save space
+            // Image cleanup should only happen when uploading a new image
           }
         }
       } catch (cleanupError) {
@@ -367,22 +349,9 @@ class StorageService {
               }
             }
             
- 
-            if (existingData['resume'] is Map) {
-              final existingResume = Map<String, dynamic>.from(existingData['resume'] as Map);
-              if (existingResume.containsKey('base64')) {
-                existingResume.remove('base64');
-                if (existingResume.containsKey('downloadUrl') && existingResume['downloadUrl'] != null) {
-                  await _firestore.collection('users').doc(_uid).update({
-                    'resume': existingResume,
-                  });
-                } else {
-                  await _firestore.collection('users').doc(_uid).update({
-                    'resume': FieldValue.delete(),
-                  });
-                }
-              }
-            }
+            // Don't clean up resume when uploading image - image and resume are independent
+            // Only clean up image base64 data to save space
+            // Resume cleanup should only happen when uploading a new resume
           }
         }
       } catch (cleanupError) {
@@ -512,6 +481,7 @@ class StorageService {
       if (selectedFiles.isEmpty) return <String>[];
 
       final List<String> base64Strings = [];
+      final List<String> errorMessages = [];
 
       for (final xFile in selectedFiles) {
         try {
@@ -522,22 +492,49 @@ class StorageService {
           const int maxOriginalSize = 1500 * 1024;
           
           if (bytes.length > maxOriginalSize) {
-            throw Exception('Image "${xFile.name}" is too large (${(bytes.length / 1024 / 1024).toStringAsFixed(2)}MB). '
-                'Maximum size is 1.5MB. Please select a smaller image.');
+            final errorMsg = 'Image "${xFile.name}" is too large (${(bytes.length / 1024 / 1024).toStringAsFixed(2)}MB). '
+                'Maximum size is 1.5MB. Please select a smaller image.';
+            errorMessages.add(errorMsg);
+            print('Failed to process image ${xFile.name}: $errorMsg');
+            continue;
           }
           
           final base64String = base64Encode(bytes);
         
           const int maxBase64Size = 980 * 1024; 
           if (base64String.length > maxBase64Size) {
-            throw Exception('Image "${xFile.name}" is too large after encoding (${(base64String.length / 1024).toStringAsFixed(1)}KB). '
-                'Firestore limit is 1MB per document. Please select a smaller image.');
+            final errorMsg = 'Image "${xFile.name}" is too large after encoding (${(base64String.length / 1024).toStringAsFixed(1)}KB). '
+                'Firestore limit is 1MB per document. Please select a smaller image.';
+            errorMessages.add(errorMsg);
+            print('Failed to process image ${xFile.name}: $errorMsg');
+            continue;
           }
 
           base64Strings.add(base64String);
         } catch (e) {
+          final errorMsg = e.toString().contains('too large') 
+              ? e.toString() 
+              : 'Failed to process image "${xFile.name}": ${e.toString()}';
+          errorMessages.add(errorMsg);
           print('Failed to process image ${xFile.name}: $e');
         }
+      }
+
+      // If we have errors and no successful images, throw an exception
+      if (errorMessages.isNotEmpty && base64Strings.isEmpty) {
+        throw Exception(errorMessages.join('\n\n'));
+      }
+      
+      // If we have some errors but also some successful images, we'll return the successful ones
+      // but the error messages will be handled by the caller if needed
+      // For now, we'll throw if there are any errors to ensure user sees them
+      if (errorMessages.isNotEmpty) {
+        // Combine successful count with error messages
+        final successCount = base64Strings.length;
+        final errorCount = errorMessages.length;
+        final combinedMessage = errorMessages.join('\n\n') + 
+            (successCount > 0 ? '\n\nNote: $successCount image(s) were added successfully, but $errorCount image(s) failed.' : '');
+        throw Exception(combinedMessage);
       }
 
       return base64Strings;

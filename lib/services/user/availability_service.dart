@@ -16,15 +16,12 @@ class AvailabilityService {
   final EmailService _emailService = EmailService();
   final PostService _postService = PostService();
 
-  // Get availability slots for recruiter
   Stream<List<AvailabilitySlot>> streamAvailabilitySlots({
     DateTime? startDate,
     DateTime? endDate,
   }) async* {
     final userId = _authService.currentUserId;
 
-    // Query only by recruiterId to avoid composite index requirement
-    // Filter by date in memory instead
     yield* _firestore
         .collection('availability_slots')
         .where('recruiterId', isEqualTo: userId)
@@ -34,7 +31,6 @@ class AvailabilityService {
               .map((doc) => AvailabilitySlot.fromFirestore(doc))
               .toList();
 
-          // Filter by date range in memory
           final filteredSlots = slots.where((slot) {
             if (startDate != null && slot.date.isBefore(startDate)) {
               return false;
@@ -45,7 +41,6 @@ class AvailabilityService {
             return true;
           }).toList();
 
-          // Sort by date first, then by time
           filteredSlots.sort((a, b) {
             final dateCompare = a.date.compareTo(b.date);
             if (dateCompare != 0) return dateCompare;
@@ -55,7 +50,6 @@ class AvailabilityService {
         });
   }
 
-  // Get availability slots for a specific date
   Future<List<AvailabilitySlot>> getAvailabilitySlotsForDate(
     DateTime date,
   ) async {
@@ -63,8 +57,6 @@ class AvailabilityService {
     final startOfDay = DateTime(date.year, date.month, date.day);
     final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
 
-    // Query only by recruiterId to avoid composite index requirement
-    // Filter by date in memory instead
     final snapshot = await _firestore
         .collection('availability_slots')
         .where('recruiterId', isEqualTo: userId)
@@ -73,19 +65,16 @@ class AvailabilityService {
     final slots = snapshot.docs
         .map((doc) => AvailabilitySlot.fromFirestore(doc))
         .where((slot) {
-          // Filter by date range in memory
           return slot.date.isAfter(
                 startOfDay.subtract(const Duration(seconds: 1)),
               ) &&
               slot.date.isBefore(endOfDay.add(const Duration(seconds: 1)));
         })
         .toList();
-    // Sort by startTime in memory
     slots.sort((a, b) => a.startTime.compareTo(b.startTime));
     return slots;
   }
 
-  // Create availability slot
   Future<String> createAvailabilitySlot({
     required DateTime date,
     required String startTime,
@@ -109,9 +98,8 @@ class AvailabilityService {
     return docRef.id;
   }
 
-  // Toggle availability slot
   Future<void> toggleAvailabilitySlot(String slotId, bool isAvailable) async {
-    // Check if slot is booked - cannot toggle if booked
+    //check  slot is booked 
     final slotDoc = await _firestore.collection('availability_slots').doc(slotId).get();
     if (!slotDoc.exists) {
       throw Exception('Slot not found');
@@ -129,8 +117,6 @@ class AvailabilityService {
     });
   }
 
-  // Book a slot (INTERNAL USE ONLY - called by approveBookingRequest)
-  // Jobseekers should use createBookingRequest instead, which creates a pending request
   Future<void> bookSlot({
     required String slotId,
     required String matchId,
@@ -143,9 +129,8 @@ class AvailabilityService {
     });
   }
 
-  // Delete availability slot
+
   Future<void> deleteAvailabilitySlot(String slotId) async {
-    // Get slot details before deletion for notifications
     final slotDoc = await _firestore.collection('availability_slots').doc(slotId).get();
     if (!slotDoc.exists) {
       throw Exception('Slot not found');
@@ -156,7 +141,6 @@ class AvailabilityService {
     final recruiterId = slot.recruiterId;
     final bookedBy = slot.bookedBy;
 
-    // Get all pending booking requests for this slot
     final pendingRequests = await _firestore
         .collection('booking_requests')
         .where('slotId', isEqualTo: slotId)
@@ -167,7 +151,6 @@ class AvailabilityService {
         .map((doc) => BookingRequest.fromFirestore(doc).jobseekerId)
         .toList();
 
-    // Update all pending booking requests to rejected status (slot deleted)
     if (pendingRequests.docs.isNotEmpty) {
       final batch = _firestore.batch();
       for (final doc in pendingRequests.docs) {
@@ -180,10 +163,9 @@ class AvailabilityService {
       debugPrint('Updated ${pendingRequests.docs.length} pending booking request(s) to rejected status for slot $slotId');
     }
 
-    // Delete the slot
+ 
     await _firestore.collection('availability_slots').doc(slotId).delete();
 
-    // notified asynchronously
     _sendSlotDeletionNotifications(
       recruiterId: recruiterId,
       bookedBy: bookedBy,
@@ -224,7 +206,6 @@ class AvailabilityService {
         slotTimeDisplay: slotTimeDisplay,
       );
 
-      // Send email notification to booked jobseeker
       if (slot != null) {
         _sendBookingCancellationEmail(
           jobseekerId: bookedBy,
@@ -444,7 +425,6 @@ class AvailabilityService {
     return dates;
   }
 
-  //stream booked dates for real-time updates
   Stream<Set<DateTime>> streamBookedDatesForJobseeker(
     String jobseekerId, {
     DateTime? startDate,
@@ -464,7 +444,7 @@ class AvailabilityService {
           for (final doc in snapshot.docs) {
             try {
               final slot = AvailabilitySlot.fromFirestore(doc);
-              //filter matchId
+              //filter matchid
               if (matchId != null && slot.matchId != matchId) continue;
               //date range in memory
               if (slot.date.isBefore(start) || slot.date.isAfter(end)) continue;
@@ -495,13 +475,12 @@ class AvailabilityService {
     return 'Unknown';
   }
 
-  //format slot time display
+
   String _formatSlotTimeDisplay(AvailabilitySlot slot) {
     final dateStr = '${slot.date.year}-${slot.date.month.toString().padLeft(2, '0')}-${slot.date.day.toString().padLeft(2, '0')}';
     return '$dateStr ${slot.timeDisplay}';
   }
 
-  //create booking request 
   Future<String> createBookingRequest({
     required String slotId,
     required String matchId,
@@ -577,8 +556,6 @@ class AvailabilityService {
     final docRef = await _firestore
         .collection('booking_requests')
         .add(request.toFirestore());
-
-    //notifications 
     _sendBookingRequestNotifications(
       jobseekerId: jobseekerId,
       recruiterId: recruiterId,
@@ -662,7 +639,6 @@ class AvailabilityService {
         .toSet();
   }
 
-  //stream requested slot IDs for real-time updates
   Stream<Set<String>> streamRequestedSlotIdsForJobseeker(
     String jobseekerId, {
     String? matchId,
@@ -983,7 +959,6 @@ class AvailabilityService {
     return null;
   }
 
-  //reject booking request
   Future<void> rejectBookingRequest(String requestId) async {
     await _firestore.collection('booking_requests').doc(requestId).update({
       'status': 'rejected',

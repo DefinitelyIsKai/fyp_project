@@ -24,7 +24,7 @@ class AuthService {
     final userEmail = credential.user!.email ?? email.trim();
     await _firestore.collection('users').doc(uid).set({
       'fullName': fullName.trim(),
-      'email': userEmail, //email  auth
+      'email': userEmail, 
       'createdAt': FieldValue.serverTimestamp(), 
       'emailVerified': false, 
       'profileCompleted': false,
@@ -39,7 +39,6 @@ class AuthService {
       'workExperience': null,
     });
 
-    //verification email
     await credential.user!.sendEmailVerification();
 
     return credential;
@@ -149,7 +148,7 @@ class AuthService {
     }
   }
 
-  // check if email exists 
+
   Future<bool> doesEmailExist(String email) async {
     final trimmedEmail = email.trim();
     try {
@@ -164,7 +163,7 @@ class AuthService {
     }
   }
 
-  // Check if email exists and is verified
+
   Future<Map<String, dynamic>> checkEmailStatus(String email) async {
     final trimmedEmail = email.trim();
     try {
@@ -191,68 +190,49 @@ class AuthService {
     }
   }
 
-  Future<bool> canSendPasswordReset(String email) async {
-    final trimmedEmail = email.trim();
-    
-    // Check if email exists
-    final exists = await doesEmailExist(trimmedEmail);
-    if (!exists) {
-      throw FirebaseAuthException(
-        code: 'user-not-found',
-        message: 'No account found with this email.',
-      );
-    }
 
-    
+  Future<bool> isEmailVerified(String email) async {
     try {
-      final querySnapshot = await _firestore
-          .collection('users')
-          .where('email', isEqualTo: trimmedEmail)
-          .limit(1)
-          .get();
-
-      if (querySnapshot.docs.isNotEmpty) {
-        final userData = querySnapshot.docs.first.data();
-        
-      
-        final emailVerified = userData['emailVerified'];
-        if (emailVerified != null) {
-        
-          if (emailVerified == false) {
-            return false;
-          }
-          
-          if (emailVerified == true) {
-            return true;
-          }
-        }
-        
-        
-        final createdAt = userData['createdAt'] as Timestamp?;
-        if (createdAt != null) {
-          final accountAge = DateTime.now().difference(createdAt.toDate());
-          if (accountAge.inHours < 24) {
-            return false; 
-          }
-        }
-      }
+      final status = await checkEmailStatus(email);
+      return status['exists'] == true && status['verified'] == true;
     } catch (e) {
-      
+      debugPrint('Error checking email verification: $e');
+      return false;
     }
-
-    return true;
   }
 
   Future<void> sendPasswordResetEmail({required String email}) async {
-    //password reset 
-    final canReset = await canSendPasswordReset(email);
-    if (!canReset) {
-      throw FirebaseAuthException(
-        code: 'email-not-verified',
-        message: 'Please verify your email before resetting your password. Check your inbox for the verification email.',
-      );
+    final trimmedEmail = email.trim();
+    
+    try {
+      final status = await checkEmailStatus(trimmedEmail);
+      
+      if (status['exists'] == false) {
+        throw FirebaseAuthException(
+          code: 'user-not-found',
+          message: 'No account found with this email address.',
+        );
+      }
+      
+      if (status['verified'] == false) {
+        throw FirebaseAuthException(
+          code: 'email-not-verified',
+          message: 'Please verify your email before resetting your password. Check your inbox for the verification email.',
+        );
+      }
+      
+
+      await _auth.sendPasswordResetEmail(email: trimmedEmail);
+    } catch (e) {
+
+      if (e is FirebaseAuthException && 
+          (e.code == 'user-not-found' || e.code == 'email-not-verified')) {
+        rethrow;
+      }
+      
+      debugPrint('Firestore check failed, falling back to direct reset: $e');
+      await _auth.sendPasswordResetEmail(email: trimmedEmail);
     }
-    await _auth.sendPasswordResetEmail(email: email.trim());
   }
 
   Future<bool> refreshAndCheckEmailVerified() async {

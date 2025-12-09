@@ -649,7 +649,7 @@ class _PostCard extends StatelessWidget {
     final bool isPending = !post.isDraft && post.status == PostStatus.pending;
     final bool isRejected = post.status == PostStatus.rejected;
     final bool canMarkCompleted = post.status == PostStatus.active && !post.isDraft;
-    final bool canEdit = post.isDraft; // Only draft posts can be edited
+    final bool canEdit = post.isDraft; 
     final bool canDelete = post.isDraft || isPending;
 
     return Container(
@@ -727,7 +727,6 @@ class _PostCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                // View button - only show for non-draft posts
                 if (!post.isDraft)
                   OutlinedButton(
                     onPressed: onView,
@@ -739,7 +738,6 @@ class _PostCard extends StatelessWidget {
                     ),
                     child: const Text('View'),
                   ),
-                 //edit when not active and completed and rejected
                 if (canEdit)
                   OutlinedButton(
                     onPressed: onEdit,
@@ -751,7 +749,6 @@ class _PostCard extends StatelessWidget {
                     ),
                     child: const Text('Edit'),
                   ),
-                //delete when draft or pending
                 if (canDelete)
                   OutlinedButton(
                     onPressed: onDelete,
