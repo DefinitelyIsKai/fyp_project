@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class EditableDetailRow extends StatelessWidget {
   final String label;
@@ -6,6 +7,8 @@ class EditableDetailRow extends StatelessWidget {
   final IconData icon;
   final bool enabled;
   final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
+  final int? maxLength;
 
   const EditableDetailRow({
     super.key,
@@ -14,6 +17,8 @@ class EditableDetailRow extends StatelessWidget {
     required this.icon,
     this.enabled = true,
     this.keyboardType,
+    this.inputFormatters,
+    this.maxLength,
   });
 
   @override
@@ -53,6 +58,8 @@ class EditableDetailRow extends StatelessWidget {
                   controller: controller,
                   enabled: enabled,
                   keyboardType: keyboardType,
+                  inputFormatters: inputFormatters,
+                  maxLength: maxLength,
                   decoration: InputDecoration(
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -62,6 +69,7 @@ class EditableDetailRow extends StatelessWidget {
                       vertical: 12,
                     ),
                     isDense: true,
+                    counterText: '',
                   ),
                   style: const TextStyle(
                     fontSize: 16,

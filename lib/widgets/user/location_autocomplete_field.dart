@@ -11,7 +11,7 @@ class LocationAutocompleteField extends StatefulWidget {
   final bool required;
   final Function(String description, double? latitude, double? longitude)? onLocationSelected;
   final String? helperText;
-  final String? restrictToCountry; //malaysia
+  final String? restrictToCountry;
   const LocationAutocompleteField({
     super.key,
     required this.controller,
@@ -51,7 +51,6 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
 
   void _onFocusChanged() {
     if (!_focusNode.hasFocus) {
-      // Delay hiding to allow tap on suggestion
       Future.delayed(const Duration(milliseconds: 200), () {
         if (!_focusNode.hasFocus && mounted) {
           setState(() {
@@ -63,7 +62,6 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
   }
 
   void _onLocationChanged() {
-    //reduce api call delayinmg it
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 500), () {
       if (widget.controller.text.trim().isNotEmpty && _focusNode.hasFocus) {
@@ -107,7 +105,6 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
     final description = suggestion['description'] as String? ?? '';
     final placeId = suggestion['place_id'] as String?;
 
-    // Get place details to retrieve coordinates
     if (placeId != null) {
       try {
         final url = Uri.parse(
@@ -155,7 +152,7 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
     }
 
     return Container(
-      constraints: const BoxConstraints(maxHeight: 200),
+      constraints: const BoxConstraints(maxHeight: 300),
       margin: const EdgeInsets.only(top: 4),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -199,8 +196,8 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
                           child: Text(
                             description,
                             style: const TextStyle(fontSize: 14, color: Colors.black87),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                            maxLines: 3,
+                            overflow: TextOverflow.visible,
                           ),
                         ),
                       ],
@@ -237,6 +234,8 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
         TextField(
           controller: widget.controller,
           focusNode: _focusNode,
+          maxLines: null,
+          minLines: 1,
           decoration: InputDecoration(
             labelText: widget.hintText ?? 'Search location...',
             hintText: widget.hintText ?? 'Search location...',
@@ -269,6 +268,10 @@ class _LocationAutocompleteFieldState extends State<LocationAutocompleteField> {
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Color(0xFF00C8A0)),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 12,
             ),
           ),
         ),

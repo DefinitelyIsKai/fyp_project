@@ -13,6 +13,7 @@ import 'package:fyp_project/routes/app_routes.dart';
 import 'package:provider/provider.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 import 'package:fyp_project/pages/user/authentication/login_page.dart' as user_login;
+import 'package:fyp_project/widgets/user/loading_dialog.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
@@ -302,6 +303,10 @@ class _LoginPageState extends State<LoginPage> {
       if (similarity >= threshold) {
         
         print('Verification SUCCESS - Navigating to dashboard');
+        
+        // Set isLogin to true only after successful face verification
+        await authService.setLoginStatus(true);
+        
         _logLoginSuccess(
           email: email,
           userId: currentUser?.id,
@@ -411,6 +416,10 @@ class _LoginPageState extends State<LoginPage> {
             );
           } else {
             
+            // If no current user but login succeeded, set isLogin to true
+            // This handles edge case where verification is skipped
+            await authService.setLoginStatus(true);
+            
             if (mounted) {
               Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
             }
@@ -494,6 +503,10 @@ class _LoginPageState extends State<LoginPage> {
             }
           }
         } else {
+          // If no current user but login succeeded, set isLogin to true
+          // This handles edge case where verification is skipped
+          await authService.setLoginStatus(true);
+          
           if (mounted) {
             Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
           }
@@ -665,11 +678,17 @@ class _LoginPageState extends State<LoginPage> {
       _isLoading = false;
     });
 
+    LoadingDialog.show(
+      context: context,
+      message: 'Sending OTP...',
+    );
+
     try {
       
       final hasActiveOtp = await _otpService.hasActiveOtp(email);
       if (hasActiveOtp) {
         if (mounted) {
+          LoadingDialog.hide(context);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('An OTP has already been sent. Please check your email or wait a moment before requesting a new one.'),
@@ -679,6 +698,10 @@ class _LoginPageState extends State<LoginPage> {
             ),
           );
         }
+        setState(() {
+          _isSendingOtp = false;
+        });
+        return;
       }
 
       final otpId = await _otpService.sendOtp(
@@ -687,6 +710,7 @@ class _LoginPageState extends State<LoginPage> {
       );
 
       if (mounted) {
+        LoadingDialog.hide(context);
         setState(() {
           _showOtpInput = true;
           _otpId = otpId;
@@ -709,6 +733,7 @@ class _LoginPageState extends State<LoginPage> {
       }
     } catch (e) {
       if (mounted) {
+        LoadingDialog.hide(context);
         setState(() {
           _isSendingOtp = false;
           _isLoading = false;
@@ -779,6 +804,9 @@ class _LoginPageState extends State<LoginPage> {
         
         final authService = Provider.of<AuthService>(context, listen: false);
         final currentUser = authService.currentAdmin;
+        
+        // Set isLogin to true only after successful OTP verification
+        await authService.setLoginStatus(true);
         
         _logLoginSuccess(
           email: _pendingEmail!,

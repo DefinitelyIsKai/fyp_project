@@ -788,6 +788,10 @@ class UserService {
     String? professionalProfile,
     String? workExperience,
     String? seeking,
+    int? age,
+    String? gender,
+    double? latitude,
+    double? longitude,
   }) async {
     try {
       final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
@@ -808,6 +812,10 @@ class UserService {
       if (professionalProfile != null) updateData['professionalProfile'] = professionalProfile;
       if (workExperience != null) updateData['workExperience'] = workExperience;
       if (seeking != null) updateData['seeking'] = seeking;
+      if (age != null) updateData['age'] = age;
+      if (gender != null) updateData['gender'] = gender;
+      if (latitude != null) updateData['latitude'] = latitude;
+      if (longitude != null) updateData['longitude'] = longitude;
       
       updateData['updatedAt'] = FieldValue.serverTimestamp();
       updateData['lastUpdatedBy'] = currentAdminId;

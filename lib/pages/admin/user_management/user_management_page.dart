@@ -167,17 +167,31 @@ class UserManagementPage extends StatelessWidget {
         },
         stats: 'Manage accounts',
       ),
-      _ManagementCard(
-        title: 'User Analytics',
-        description: 'View user growth and engagement statistics',
-        icon: Icons.analytics,
-        iconColor: Colors.purple[700]!,
-        backgroundColor: Colors.purple[50]!,
-        onTap: () {
-          Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const UserAnalyticsPage()));
+      Builder(
+        builder: (context) {
+          final authService = Provider.of<AuthService>(context, listen: false);
+          final currentAdmin = authService.currentAdmin;
+          final canAccessAnalytics = currentAdmin != null && 
+              (currentAdmin.permissions.contains('all') || 
+               currentAdmin.permissions.contains('analytics'));
+          
+          if (!canAccessAnalytics) {
+            return const SizedBox.shrink();
+          }
+          
+          return _ManagementCard(
+            title: 'User Analytics',
+            description: 'View user growth and engagement statistics',
+            icon: Icons.analytics,
+            iconColor: Colors.purple[700]!,
+            backgroundColor: Colors.purple[50]!,
+            onTap: () {
+              Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const UserAnalyticsPage()));
+            },
+            stats: 'View Analytics',
+          );
         },
-        stats: 'View Analytics',
       ),
     ];
 

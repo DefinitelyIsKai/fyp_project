@@ -23,6 +23,9 @@ import 'package:fyp_project/widgets/admin/dialogs/user_dialogs/warning_dialog.da
 import 'package:fyp_project/widgets/admin/dialogs/user_dialogs/suspend_dialog.dart';
 import 'package:fyp_project/widgets/admin/dialogs/user_dialogs/delete_dialog.dart';
 import 'package:fyp_project/widgets/admin/dialogs/user_dialogs/image_preview_dialog.dart';
+import 'package:fyp_project/widgets/admin/dialogs/user_dialogs/add_admin_image_step.dart';
+import 'package:fyp_project/widgets/admin/dialogs/user_dialogs/add_admin_basic_info_step.dart';
+import 'package:fyp_project/widgets/admin/dialogs/user_dialogs/add_admin_additional_info_step.dart';
 
 class ViewUsersPage extends StatefulWidget {
   const ViewUsersPage({super.key});
@@ -59,8 +62,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      
-      await _userService.checkAndAutoUnsuspendExpiredUsers();
       
       final users = await _userService.getAllUsers();
       
@@ -1001,14 +1002,24 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                     Expanded(
                       child: ValueListenableBuilder<int>(
                         valueListenable: currentPageNotifier,
-                        builder: (context, currentPage, _) => Text(
-                          currentPage == 0 ? 'Step 1: Upload Profile Photo' : 'Step 2: Admin Information',
+                        builder: (context, currentPage, _) {
+                          String title;
+                          if (currentPage == 0) {
+                            title = 'Step 1: Upload Profile Photo';
+                          } else if (currentPage == 1) {
+                            title = 'Step 2: Basic Information';
+                          } else {
+                            title = 'Step 3: Additional Information';
+                          }
+                          return Text(
+                            title,
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
                             color: Colors.white,
                           ),
-                        ),
+                          );
+                        },
                       ),
                     ),
                   ],
@@ -1024,15 +1035,15 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                   },
                   children: [
                     
-                    _buildImageUploadStep(
-                      context,
-                      selectedImageBase64Notifier,
-                      selectedImageFileTypeNotifier,
-                      isPickingImageNotifier,
-                      isImageUploadedNotifier,
-                      faceDetectedNotifier,
-                      isDetectingFaceNotifier,
-                      () {
+                    AddAdminImageStep(
+                      selectedImageBase64Notifier: selectedImageBase64Notifier,
+                      selectedImageFileTypeNotifier: selectedImageFileTypeNotifier,
+                      isPickingImageNotifier: isPickingImageNotifier,
+                      isImageUploadedNotifier: isImageUploadedNotifier,
+                      faceDetectedNotifier: faceDetectedNotifier,
+                      isDetectingFaceNotifier: isDetectingFaceNotifier,
+                      imageCache: _imageCache,
+                      onNext: () {
                         pageController.nextPage(
                           duration: const Duration(milliseconds: 300),
                           curve: Curves.easeInOut,
@@ -1040,46 +1051,231 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                       },
                     ),
                     
-                    _buildInformationStep(
-                      context,
-                      pageContext,
-                      setDialogState,
-                      nameController,
-                      emailController,
-                      passwordController,
-                      confirmPasswordController,
-                      locationController,
-                      ageController,
-                      phoneNumberController,
-                      currentPasswordController,
-                      selectedRole,
-                      selectedGender,
-                      obscurePasswordNotifier,
-                      obscureConfirmPasswordNotifier,
-                      obscureCurrentPasswordNotifier,
-                      nameErrorNotifier,
-                      emailErrorNotifier,
-                      passwordErrorNotifier,
-                      confirmPasswordErrorNotifier,
-                      ageErrorNotifier,
-                      phoneNumberErrorNotifier,
-                      selectedImageBase64Notifier,
-                      selectedImageFileTypeNotifier,
-                      keyboardHeightNotifier,
-                      (role) => selectedRole = role,
-                      (gender) => selectedGender = gender,
-                      (obscure) => obscurePasswordNotifier.value = obscure,
-                      (obscure) => obscureConfirmPasswordNotifier.value = obscure,
-                      (obscure) => obscureCurrentPasswordNotifier.value = obscure,
-                      (errors) {
-                        nameErrorNotifier.value = errors['name'];
-                        emailErrorNotifier.value = errors['email'];
-                        passwordErrorNotifier.value = errors['password'];
-                        confirmPasswordErrorNotifier.value = errors['confirmPassword'];
+                    AddAdminBasicInfoStep(
+                      setDialogState: setDialogState,
+                      nameController: nameController,
+                      emailController: emailController,
+                      passwordController: passwordController,
+                      confirmPasswordController: confirmPasswordController,
+                      selectedRole: selectedRole,
+                      adminRoles: _adminRoles,
+                      obscurePasswordNotifier: obscurePasswordNotifier,
+                      obscureConfirmPasswordNotifier: obscureConfirmPasswordNotifier,
+                      nameErrorNotifier: nameErrorNotifier,
+                      emailErrorNotifier: emailErrorNotifier,
+                      passwordErrorNotifier: passwordErrorNotifier,
+                      confirmPasswordErrorNotifier: confirmPasswordErrorNotifier,
+                      onRoleChanged: (role) => selectedRole = role,
+                      onObscurePasswordChanged: (obscure) => obscurePasswordNotifier.value = obscure,
+                      onObscureConfirmPasswordChanged: (obscure) => obscureConfirmPasswordNotifier.value = obscure,
+                      getRoleDisplayName: _getRoleDisplayName,
+                      onNext: () {
+                        pageController.nextPage(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                        );
+                      },
+                    ),
+                    
+                    AddAdminAdditionalInfoStep(
+                      pageContext: pageContext,
+                      setDialogState: setDialogState,
+                      pageController: pageController,
+                      locationController: locationController,
+                      ageController: ageController,
+                      phoneNumberController: phoneNumberController,
+                      currentPasswordController: currentPasswordController,
+                      selectedGender: selectedGender,
+                      obscureCurrentPasswordNotifier: obscureCurrentPasswordNotifier,
+                      ageErrorNotifier: ageErrorNotifier,
+                      phoneNumberErrorNotifier: phoneNumberErrorNotifier,
+                      onGenderChanged: (gender) => selectedGender = gender,
+                      onObscureCurrentPasswordChanged: (obscure) => obscureCurrentPasswordNotifier.value = obscure,
+                      onErrorsChanged: (errors) {
                         ageErrorNotifier.value = errors['age'];
                         phoneNumberErrorNotifier.value = errors['phoneNumber'];
                       },
-                      () => Navigator.pop(context),
+                      nameController: nameController,
+                      emailController: emailController,
+                      passwordController: passwordController,
+                      confirmPasswordController: confirmPasswordController,
+                      selectedRole: selectedRole,
+                      nameErrorNotifier: nameErrorNotifier,
+                      emailErrorNotifier: emailErrorNotifier,
+                      passwordErrorNotifier: passwordErrorNotifier,
+                      confirmPasswordErrorNotifier: confirmPasswordErrorNotifier,
+                      selectedImageBase64Notifier: selectedImageBase64Notifier,
+                      selectedImageFileTypeNotifier: selectedImageFileTypeNotifier,
+                      onSubmit: () async {
+                        final name = nameController.text.trim();
+                        final email = emailController.text.trim();
+                        final password = passwordController.text;
+                        final confirmPassword = confirmPasswordController.text.trim();
+
+                        String? nameErr;
+                        String? emailErr;
+                        String? passwordErr;
+                        String? confirmPasswordErr;
+                        String? ageErr;
+                        String? phoneNumberErr;
+                        bool hasError = false;
+
+                        if (name.isEmpty) {
+                          nameErr = 'Please enter a name';
+                          hasError = true;
+                        }
+
+                        if (email.isEmpty || !email.contains('@')) {
+                          emailErr = 'Please enter a valid email address';
+                          hasError = true;
+                        }
+
+                        if (password.isEmpty || password.length < 6) {
+                          passwordErr = 'Password must be at least 6 characters';
+                          hasError = true;
+                        }
+
+                        if (password != confirmPassword) {
+                          confirmPasswordErr = 'Passwords do not match';
+                          hasError = true;
+                        }
+
+                        final ageText = ageController.text.trim();
+                        if (ageText.isNotEmpty) {
+                          final age = int.tryParse(ageText);
+                          if (age == null) {
+                            ageErr = 'Please enter a valid age';
+                            hasError = true;
+                          } else if (age < 18 || age > 80) {
+                            ageErr = 'Age must be between 18 and 80';
+                            hasError = true;
+                          }
+                        }
+
+                        final phoneText = phoneNumberController.text.trim();
+                        if (phoneText.isNotEmpty) {
+                          final digitsOnly = phoneText.replaceAll(RegExp(r'[^\d]'), '');
+                          if (digitsOnly.length != 10) {
+                            phoneNumberErr = 'Phone number must be 10 digits (XXX-XXX XXXX)';
+                            hasError = true;
+                          }
+                        }
+
+                        nameErrorNotifier.value = nameErr;
+                        emailErrorNotifier.value = emailErr;
+                        passwordErrorNotifier.value = passwordErr;
+                        confirmPasswordErrorNotifier.value = confirmPasswordErr;
+                        ageErrorNotifier.value = ageErr;
+                        phoneNumberErrorNotifier.value = phoneNumberErr;
+
+                        if (hasError) {
+                          return;
+                        }
+
+                        try {
+                          final roleService = RoleService();
+                          final roleModel = await roleService.getRoleByName(selectedRole.toLowerCase());
+                          if (roleModel == null) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error: Role "$selectedRole" not found. Please select a valid role.'),
+                                  backgroundColor: Colors.red,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                            return;
+                          }
+                          
+                          if (roleModel.permissions.isEmpty) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error: Role "$selectedRole" has no permissions assigned. Please assign permissions to this role first.'),
+                                  backgroundColor: Colors.red,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                            return;
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error validating role: $e'),
+                                backgroundColor: Colors.red,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                          return;
+                        }
+                        
+                        final adminUserService = AdminUserService();
+                        final form = AddAdminFormModel(
+                          name: name,
+                          email: email,
+                          password: password,
+                          confirmPassword: confirmPassword,
+                          role: selectedRole,
+                          location: locationController.text.trim().isEmpty ? null : locationController.text.trim(),
+                          age: ageController.text.trim().isEmpty ? null : int.tryParse(ageController.text.trim()),
+                          phoneNumber: phoneNumberController.text.trim().isEmpty ? null : phoneNumberController.text.trim(),
+                          gender: selectedGender,
+                          currentPassword: currentPasswordController.text.trim().isEmpty ? null : currentPasswordController.text.trim(),
+                          imageBase64: selectedImageBase64Notifier.value,
+                          imageFileType: selectedImageFileTypeNotifier.value,
+                        );
+                        
+                        CreateAdminResult? result;
+                        try {
+                          result = await adminUserService.createAdminUser(context, form);
+                        } catch (e) {
+                          debugPrint('Error in createAdminUser: $e');
+                          if (context.mounted) {
+                            Navigator.pop(context);
+                            _showSnackBar('Error creating admin user: $e', isError: true);
+                          }
+                          return;
+                        }
+                        
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                        }
+                        
+                        await Future.delayed(const Duration(milliseconds: 100));
+                        
+                        if (result.success) {
+                          _showSnackBar(result.message ?? 'Admin user "$name" created successfully');
+                          
+                          await Future.delayed(const Duration(milliseconds: 300));
+                          
+                          if (mounted) {
+                            await _loadData();
+                          }
+                        } else {
+                          _showSnackBar(result.error ?? 'Failed to create admin user.', isError: true);
+                          
+                          if (result.requiresReauth) {
+                            await Future.delayed(const Duration(milliseconds: 2000));
+                            if (pageContext.mounted) {
+                              try {
+                                final navigator = Navigator.of(pageContext, rootNavigator: true);
+                                if (navigator.canPop() || navigator.context.mounted) {
+                                  navigator.pushNamedAndRemoveUntil(
+                                    '/login',
+                                    (route) => false,
+                                  );
+                                }
+                              } catch (e) {
+                                debugPrint('Error navigating to login: $e');
+                              }
+                            }
+                          }
+                        }
+                      },
                     ),
                   ],
                 ),
@@ -1088,305 +1284,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
             ),
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildImageUploadStep(
-    BuildContext context,
-    ValueNotifier<String?> selectedImageBase64Notifier,
-    ValueNotifier<String?> selectedImageFileTypeNotifier,
-    ValueNotifier<bool> isPickingImageNotifier,
-    ValueNotifier<bool> isImageUploadedNotifier,
-    ValueNotifier<bool?> faceDetectedNotifier,
-    ValueNotifier<bool> isDetectingFaceNotifier,
-    VoidCallback onNext,
-  ) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(height: 40),
-          const Text(
-            'Upload Profile Photo',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Please upload or take a photo for the admin profile',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 40),
-          
-          ValueListenableBuilder<String?>(
-            valueListenable: selectedImageBase64Notifier,
-            builder: (context, selectedImageBase64, _) => ValueListenableBuilder<bool>(
-              valueListenable: isPickingImageNotifier,
-              builder: (context, isPickingImage, _) => GestureDetector(
-                onTap: isPickingImage ? null : () async {
-                  isPickingImageNotifier.value = true;
-                  try {
-                    final imageData = await _pickImageBase64();
-                    if (imageData != null && imageData['base64'] != null) {
-                      final cleanBase64 = imageData['base64']!.trim().replaceAll(RegExp(r'\s+'), '');
-                      selectedImageBase64Notifier.value = cleanBase64;
-                      selectedImageFileTypeNotifier.value = imageData['fileType'];
-                      isPickingImageNotifier.value = false;
-                      
-                      faceDetectedNotifier.value = null;
-                      
-                      await _detectFaceInImage(
-                        context,
-                        cleanBase64,
-                        faceDetectedNotifier,
-                        isDetectingFaceNotifier,
-                      );
-                      
-                      isImageUploadedNotifier.value = faceDetectedNotifier.value == true;
-                    } else {
-                      isPickingImageNotifier.value = false;
-                      isImageUploadedNotifier.value = false;
-                    }
-                  } catch (e) {
-                    isPickingImageNotifier.value = false;
-                    isImageUploadedNotifier.value = false;
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Row(
-                            children: [
-                              const Icon(Icons.error_outline, color: Colors.white, size: 20),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(e.toString().replaceFirst('Exception: ', '')),
-                              ),
-                            ],
-                          ),
-                          backgroundColor: Colors.red,
-                          behavior: SnackBarBehavior.floating,
-                          duration: const Duration(seconds: 4),
-                        ),
-                      );
-                    }
-                  }
-                },
-                child: Container(
-                  width: 200,
-                  height: 200,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: selectedImageBase64 != null ? Colors.green : Colors.grey[300]!,
-                      width: 3,
-                    ),
-                    color: selectedImageBase64 != null ? Colors.green[50] : Colors.grey[50],
-                  ),
-                  child: isPickingImage
-                      ? const Center(
-                          child: CircularProgressIndicator(),
-                        )
-                      : selectedImageBase64 != null
-                          ? ClipOval(
-                              child: _buildPreviewImage(selectedImageBase64),
-                            )
-                          : Icon(
-                              Icons.add_photo_alternate,
-                              color: Colors.grey[400],
-                              size: 64,
-                            ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          
-          ValueListenableBuilder<bool?>(
-            valueListenable: faceDetectedNotifier,
-            builder: (context, faceDetected, _) => ValueListenableBuilder<bool>(
-              valueListenable: isDetectingFaceNotifier,
-              builder: (context, isDetectingFace, _) {
-                if (selectedImageBase64Notifier.value == null) {
-                  return const SizedBox.shrink();
-                }
-                if (isDetectingFace) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.blue[50],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.blue[200]!),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue[700]!),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Detecting face...',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.blue,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                if (faceDetected == true) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.green[50],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.green[200]!),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.check_circle, color: Colors.green[700], size: 20),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Face detected',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.green,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                if (faceDetected == false) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange[50],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.orange[200]!),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.warning_amber_rounded, color: Colors.orange[700], size: 20),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'No face detected',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.orange,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                return const SizedBox.shrink();
-              },
-            ),
-          ),
-          const SizedBox(height: 16),
-          
-          ValueListenableBuilder<String?>(
-            valueListenable: selectedImageBase64Notifier,
-            builder: (context, selectedImageBase64, _) {
-              if (selectedImageBase64 != null) {
-                return Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: () => _showImagePreview(selectedImageBase64),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue[50],
-                        foregroundColor: Colors.blue[700],
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      icon: const Icon(Icons.preview, size: 20),
-                      label: const Text(
-                        'Preview',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        selectedImageBase64Notifier.value = null;
-                        selectedImageFileTypeNotifier.value = null;
-                        isImageUploadedNotifier.value = false;
-                        faceDetectedNotifier.value = null;
-                        isDetectingFaceNotifier.value = false;
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red[50],
-                        foregroundColor: Colors.red[700],
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      icon: const Icon(Icons.delete_outline, size: 20),
-                      label: const Text(
-                        'Remove',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
-                );
-              }
-              return const SizedBox.shrink();
-            },
-          ),
-          const SizedBox(height: 60),
-          
-          ValueListenableBuilder<bool>(
-            valueListenable: isImageUploadedNotifier,
-            builder: (context, isUploaded, _) => SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: isUploaded ? onNext : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryDark,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
-                ),
-                child: const Text(
-                  'Next',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1433,7 +1330,7 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
               duration: Duration(seconds: 3),
             ),
           );
-        } else {
+                    } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Face detected! ${faces.length} face(s) found.'),
@@ -1443,22 +1340,22 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
             ),
           );
         }
-      }
-    } catch (e) {
-      if (context.mounted) {
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
         faceDetectedNotifier.value = false;
         isDetectingFaceNotifier.value = false;
         debugPrint('Error detecting face: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
             content: Text('Error detecting face: $e'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
+                          backgroundColor: Colors.red,
+                          behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    }
+                        ),
+                      );
+                    }
+                  }
   }
 
   Widget _buildPreviewImage(String base64String) {
@@ -1484,12 +1381,983 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
       );
     } catch (e) {
       return Container(
-        width: 200,
-        height: 200,
+                  width: 200,
+                  height: 200,
         color: Colors.grey[100],
         child: Icon(Icons.broken_image, color: Colors.red[300], size: 40),
       );
     }
+  }
+
+  Widget _buildBasicInfoStep(
+    BuildContext context,
+    StateSetter setDialogState,
+    TextEditingController nameController,
+    TextEditingController emailController,
+    TextEditingController passwordController,
+    TextEditingController confirmPasswordController,
+    String selectedRole,
+    ValueNotifier<bool> obscurePasswordNotifier,
+    ValueNotifier<bool> obscureConfirmPasswordNotifier,
+    ValueNotifier<String?> nameErrorNotifier,
+    ValueNotifier<String?> emailErrorNotifier,
+    ValueNotifier<String?> passwordErrorNotifier,
+    ValueNotifier<String?> confirmPasswordErrorNotifier,
+    Function(String) onRoleChanged,
+    Function(bool) onObscurePasswordChanged,
+    Function(bool) onObscureConfirmPasswordChanged,
+    Function(Map<String, String?>) onErrorsChanged,
+    VoidCallback onNext,
+  ) {
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.account_circle_outlined, color: Colors.blue[700], size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Basic Information',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blue[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      RepaintBoundary(
+                        child: ValueListenableBuilder<String?>(
+                          valueListenable: nameErrorNotifier,
+                          builder: (context, nameError, _) {
+                            final hasError = nameError != null;
+                            return TextField(
+                              controller: nameController,
+                              onChanged: (value) {
+                                if (nameError != null) {
+                                  nameErrorNotifier.value = null;
+                                }
+                              },
+                              decoration: InputDecoration(
+                                labelText: 'Full Name *',
+                                hintText: 'Enter full name',
+                                errorText: nameError,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
+                                ),
+                                errorBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(color: Colors.red, width: 2),
+                                ),
+                                focusedErrorBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(color: Colors.red, width: 2),
+                                ),
+                                prefixIcon: Icon(Icons.person_outline, color: hasError ? Colors.red : Colors.grey),
+                                filled: true,
+                                fillColor: hasError ? Colors.red[50] : Colors.grey[50],
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                              ),
+                              textCapitalization: TextCapitalization.words,
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      RepaintBoundary(
+                        child: ValueListenableBuilder<String?>(
+                          valueListenable: emailErrorNotifier,
+                          builder: (context, emailError, _) {
+                            final hasError = emailError != null;
+                            return TextField(
+                              controller: emailController,
+                              onChanged: (value) {
+                                if (emailError != null) {
+                                  emailErrorNotifier.value = null;
+                                }
+                              },
+                              decoration: InputDecoration(
+                                labelText: 'Email Address *',
+                                hintText: 'example@email.com',
+                                errorText: emailError,
+                                border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
+                                ),
+                                errorBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(color: Colors.red, width: 2),
+                                ),
+                                focusedErrorBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(color: Colors.red, width: 2),
+                                ),
+                                prefixIcon: Icon(Icons.email_outlined, color: hasError ? Colors.red : Colors.grey),
+                                filled: true,
+                                fillColor: hasError ? Colors.red[50] : Colors.grey[50],
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                              ),
+                              keyboardType: TextInputType.emailAddress,
+                              textCapitalization: TextCapitalization.none,
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      RepaintBoundary(
+                        child: ValueListenableBuilder<String?>(
+                          valueListenable: passwordErrorNotifier,
+                          builder: (context, passwordError, _) {
+                            final hasError = passwordError != null;
+                            return ValueListenableBuilder<bool>(
+                              valueListenable: obscurePasswordNotifier,
+                              builder: (context, obscurePassword, _) {
+                                return TextField(
+                                  controller: passwordController,
+                                  onChanged: (value) {
+                                    if (passwordError != null) {
+                                      passwordErrorNotifier.value = null;
+                                    }
+                                    if (confirmPasswordErrorNotifier.value != null && value == confirmPasswordController.text) {
+                                      confirmPasswordErrorNotifier.value = null;
+                                    }
+                                  },
+                                  decoration: InputDecoration(
+                                    labelText: 'Password *',
+                                    hintText: 'Minimum 6 characters',
+                                    errorText: passwordError,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
+                                    ),
+                                    errorBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(color: Colors.red, width: 2),
+                                    ),
+                                    focusedErrorBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(color: Colors.red, width: 2),
+                                    ),
+                                    prefixIcon: Icon(Icons.lock_outline, color: hasError ? Colors.red : Colors.grey),
+                                    suffixIcon: IconButton(
+                                      icon: Icon(
+                                        obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                        color: hasError ? Colors.red : Colors.grey[600],
+                                      ),
+                                      onPressed: () {
+                                        obscurePasswordNotifier.value = !obscurePassword;
+                                        onObscurePasswordChanged(obscurePasswordNotifier.value);
+                                      },
+                                    ),
+                                    filled: true,
+                                    fillColor: hasError ? Colors.red[50] : Colors.grey[50],
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                  ),
+                                  obscureText: obscurePassword,
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      RepaintBoundary(
+                        child: ValueListenableBuilder<String?>(
+                          valueListenable: confirmPasswordErrorNotifier,
+                          builder: (context, confirmPasswordError, _) {
+                            final hasError = confirmPasswordError != null;
+                            return ValueListenableBuilder<bool>(
+                              valueListenable: obscureConfirmPasswordNotifier,
+                              builder: (context, obscureConfirmPassword, _) {
+                                return TextField(
+                                  controller: confirmPasswordController,
+                                  onChanged: (value) {
+                                    if (confirmPasswordError != null && value == passwordController.text) {
+                                      confirmPasswordErrorNotifier.value = null;
+                                    }
+                                  },
+                                  decoration: InputDecoration(
+                                    labelText: 'Confirm Password *',
+                                    hintText: 'Re-enter password',
+                                    errorText: confirmPasswordError,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
+                                    ),
+                                    errorBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(color: Colors.red, width: 2),
+                                    ),
+                                    focusedErrorBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(color: Colors.red, width: 2),
+                                    ),
+                                    prefixIcon: Icon(Icons.lock_outline, color: hasError ? Colors.red : Colors.grey),
+                                    suffixIcon: IconButton(
+                                      icon: Icon(
+                                        obscureConfirmPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                        color: hasError ? Colors.red : Colors.grey[600],
+                                      ),
+                                      onPressed: () {
+                                        obscureConfirmPasswordNotifier.value = !obscureConfirmPassword;
+                                        onObscureConfirmPasswordChanged(obscureConfirmPasswordNotifier.value);
+                                      },
+                                    ),
+                                    filled: true,
+                                    fillColor: hasError ? Colors.red[50] : Colors.grey[50],
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                  ),
+                                  obscureText: obscureConfirmPassword,
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      
+                        const Text(
+                        'Role *',
+                          style: TextStyle(
+                            fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey[300]!),
+                          borderRadius: BorderRadius.circular(12),
+                          color: Colors.grey[50],
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: selectedRole,
+                            isExpanded: true,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            icon: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                            items: _adminRoles.map((role) {
+                              return DropdownMenuItem(
+                                value: role.name,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _getRoleDisplayName(role.name),
+                                      style: const TextStyle(
+                            fontWeight: FontWeight.w500,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                    if (role.description.isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        role.description,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[600],
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                      ],
+                    ),
+                  );
+                            }).toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                setDialogState(() {
+                                  onRoleChanged(value);
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+        ),
+        
+        SafeArea(
+          top: false,
+          child: Container(
+            padding: const EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 12,
+              bottom: 12,
+            ),
+                    decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: onNext,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryDark,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
+                child: const Text(
+                  'Next',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAdditionalInfoStep(
+    BuildContext context,
+    BuildContext pageContext,
+    StateSetter setDialogState,
+    PageController pageController,
+    TextEditingController locationController,
+    TextEditingController ageController,
+    TextEditingController phoneNumberController,
+    TextEditingController currentPasswordController,
+    String? selectedGender,
+    ValueNotifier<bool> obscureCurrentPasswordNotifier,
+    ValueNotifier<String?> ageErrorNotifier,
+    ValueNotifier<String?> phoneNumberErrorNotifier,
+    ValueNotifier<String?> selectedImageBase64Notifier,
+    ValueNotifier<String?> selectedImageFileTypeNotifier,
+    ValueNotifier<double> keyboardHeightNotifier,
+    Function(String?) onGenderChanged,
+    Function(bool) onObscureCurrentPasswordChanged,
+    Function(Map<String, String?>) onErrorsChanged,
+    TextEditingController nameController,
+    TextEditingController emailController,
+    TextEditingController passwordController,
+    TextEditingController confirmPasswordController,
+    String selectedRole,
+    ValueNotifier<String?> nameErrorNotifier,
+    ValueNotifier<String?> emailErrorNotifier,
+    ValueNotifier<String?> passwordErrorNotifier,
+    ValueNotifier<String?> confirmPasswordErrorNotifier,
+    VoidCallback onCancel,
+  ) {
+    return Column(
+                      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                LocationAutocompleteField(
+                  controller: locationController,
+                  label: 'Location (Optional)',
+                  hintText: 'Search location... (e.g., Kuala Lumpur)',
+                  restrictToCountry: 'my',
+                  onLocationSelected: (description, latitude, longitude) {
+                    if (latitude != null && longitude != null) {
+                      print('Selected location: $description');
+                      print('Coordinates: $latitude, $longitude');
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                
+                RepaintBoundary(
+                  child: ValueListenableBuilder<String?>(
+                    valueListenable: ageErrorNotifier,
+                    builder: (context, ageError, _) {
+                      final hasError = ageError != null;
+                      return TextField(
+                        controller: ageController,
+                        onChanged: (value) {
+                          if (ageError != null) {
+                            ageErrorNotifier.value = null;
+                          }
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Age (Optional)',
+                          hintText: 'Enter age (18-80)',
+                          errorText: ageError,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.red, width: 2),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.red, width: 2),
+                          ),
+                          prefixIcon: Icon(Icons.cake_outlined, color: hasError ? Colors.red : Colors.grey),
+                          filled: true,
+                          fillColor: hasError ? Colors.red[50] : Colors.grey[50],
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                        keyboardType: TextInputType.number,
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+                
+                RepaintBoundary(
+                  child: ValueListenableBuilder<String?>(
+                    valueListenable: phoneNumberErrorNotifier,
+                    builder: (context, phoneNumberError, _) {
+                      final hasError = phoneNumberError != null;
+                      return TextField(
+                        controller: phoneNumberController,
+                        onChanged: (value) {
+                          if (phoneNumberError != null) {
+                            final digitsOnly = value.replaceAll(RegExp(r'[^\d]'), '');
+                            if (digitsOnly.length == 10) {
+                              phoneNumberErrorNotifier.value = null;
+                            }
+                          }
+                        },
+                        inputFormatters: [
+                          PhoneNumberFormatter(),
+                        ],
+                        decoration: InputDecoration(
+                          labelText: 'Phone Number (Optional)',
+                          hintText: 'XXX-XXX XXXX',
+                          errorText: phoneNumberError,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.grey),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: hasError ? Colors.red : Colors.blue, width: 2),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.red, width: 2),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.red, width: 2),
+                          ),
+                          prefixIcon: Icon(Icons.phone_outlined, color: hasError ? Colors.red : Colors.grey),
+                          filled: true,
+                          fillColor: hasError ? Colors.red[50] : Colors.grey[50],
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                        keyboardType: TextInputType.phone,
+                        maxLength: 13,
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+                
+                        const Text(
+                  'Gender (Optional)',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey[300]!),
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.grey[50],
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String?>(
+                      value: selectedGender,
+                      isExpanded: true,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      icon: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                      hint: const Text(
+                        'Select gender',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Not specified'),
+                        ),
+                        const DropdownMenuItem<String>(
+                          value: 'Male',
+                          child: Text('Male'),
+                        ),
+                        const DropdownMenuItem<String>(
+                          value: 'Female',
+                          child: Text('Female'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setDialogState(() {
+                          onGenderChanged(value);
+                        });
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                
+                Container(
+                  padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange[200]!),
+                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                      Row(
+                        children: [
+                          Icon(Icons.lock_outline, color: Colors.orange[700], size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Current Password (Optional)',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                              color: Colors.orange[700],
+                          ),
+                        ),
+                      ],
+                    ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Enter your current password to stay logged in after creating the new admin. If left empty, you will need to log in again.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.orange[900],
+                          height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: currentPasswordController,
+                        decoration: InputDecoration(
+                          labelText: 'Your Current Password',
+                          hintText: 'Enter your password to stay logged in',
+                          border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey[300]!),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey[300]!),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.orange[700]!, width: 2),
+                          ),
+                          prefixIcon: Icon(Icons.lock_outline, color: Colors.orange[700]),
+                          suffixIcon: ValueListenableBuilder<bool>(
+                            valueListenable: obscureCurrentPasswordNotifier,
+                            builder: (context, obscureCurrentPassword, _) {
+                              return IconButton(
+                                icon: Icon(
+                                  obscureCurrentPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                  color: Colors.grey[600],
+                                ),
+                      onPressed: () {
+                                  obscureCurrentPasswordNotifier.value = !obscureCurrentPassword;
+                                  onObscureCurrentPasswordChanged(obscureCurrentPasswordNotifier.value);
+                                },
+                              );
+                            },
+                          ),
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                        obscureText: obscureCurrentPasswordNotifier.value,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue[50],
+                          borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue[200]!),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.blue[700], size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'The new admin will be able to log in immediately with the provided credentials.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.blue[900],
+                            height: 1.3,
+                          ),
+                      ),
+                    ),
+                  ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+        ),
+        
+        SafeArea(
+          top: false,
+          child: Container(
+            padding: const EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 12,
+              bottom: 12,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      pageController.previousPage(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      );
+                    },
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                      'Back',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      final name = nameController.text.trim();
+                      final email = emailController.text.trim();
+                      final password = passwordController.text;
+                      final confirmPassword = confirmPasswordController.text.trim();
+
+                      String? nameErr;
+                      String? emailErr;
+                      String? passwordErr;
+                      String? confirmPasswordErr;
+                      String? ageErr;
+                      String? phoneNumberErr;
+                      bool hasError = false;
+
+                      if (name.isEmpty) {
+                        nameErr = 'Please enter a name';
+                        hasError = true;
+                      }
+
+                      if (email.isEmpty || !email.contains('@')) {
+                        emailErr = 'Please enter a valid email address';
+                        hasError = true;
+                      }
+
+                      if (password.isEmpty || password.length < 6) {
+                        passwordErr = 'Password must be at least 6 characters';
+                        hasError = true;
+                      }
+
+                      if (password != confirmPassword) {
+                        confirmPasswordErr = 'Passwords do not match';
+                        hasError = true;
+                      }
+
+                      final ageText = ageController.text.trim();
+                      if (ageText.isNotEmpty) {
+                        final age = int.tryParse(ageText);
+                        if (age == null) {
+                          ageErr = 'Please enter a valid age';
+                          hasError = true;
+                        } else if (age < 18 || age > 80) {
+                          ageErr = 'Age must be between 18 and 80';
+                          hasError = true;
+                        }
+                      }
+
+                      final phoneText = phoneNumberController.text.trim();
+                      if (phoneText.isNotEmpty) {
+                        final digitsOnly = phoneText.replaceAll(RegExp(r'[^\d]'), '');
+                        if (digitsOnly.length != 10) {
+                          phoneNumberErr = 'Phone number must be 10 digits (XXX-XXX XXXX)';
+                          hasError = true;
+                        }
+                      }
+
+                      nameErrorNotifier.value = nameErr;
+                      emailErrorNotifier.value = emailErr;
+                      passwordErrorNotifier.value = passwordErr;
+                      confirmPasswordErrorNotifier.value = confirmPasswordErr;
+                      ageErrorNotifier.value = ageErr;
+                      phoneNumberErrorNotifier.value = phoneNumberErr;
+
+                      if (hasError) {
+                        return;
+                      }
+
+                      try {
+                        final roleService = RoleService();
+                        final roleModel = await roleService.getRoleByName(selectedRole.toLowerCase());
+                        if (roleModel == null) {
+      if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error: Role "$selectedRole" not found. Please select a valid role.'),
+                                backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                          return;
+                        }
+                        
+                        if (roleModel.permissions.isEmpty) {
+                          if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                                content: Text('Error: Role "$selectedRole" has no permissions assigned. Please assign permissions to this role first.'),
+                                backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+                          return;
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+                              content: Text('Error validating role: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+                        return;
+                      }
+                      
+                        final adminUserService = AdminUserService();
+                        final form = AddAdminFormModel(
+                          name: name,
+                          email: email,
+                          password: password,
+                          confirmPassword: confirmPassword,
+                          role: selectedRole,
+                          location: locationController.text.trim().isEmpty ? null : locationController.text.trim(),
+                          age: ageController.text.trim().isEmpty ? null : int.tryParse(ageController.text.trim()),
+                          phoneNumber: phoneNumberController.text.trim().isEmpty ? null : phoneNumberController.text.trim(),
+                          gender: selectedGender,
+                          currentPassword: currentPasswordController.text.trim().isEmpty ? null : currentPasswordController.text.trim(),
+                          imageBase64: selectedImageBase64Notifier.value,
+                          imageFileType: selectedImageFileTypeNotifier.value,
+                        );
+                        
+                        CreateAdminResult result;
+                        try {
+                          result = await adminUserService.createAdminUser(context, form);
+                        } catch (e) {
+                          debugPrint('Error in createAdminUser: $e');
+                          if (context.mounted) {
+                            Navigator.pop(context);
+                            _showSnackBar('Error creating admin user: $e', isError: true);
+                          }
+                          return;
+                        }
+                        
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                        }
+                        
+                        await Future.delayed(const Duration(milliseconds: 100));
+                        
+                        if (result.success) {
+                          _showSnackBar(result.message ?? 'Admin user "$name" created successfully');
+                          
+                          await Future.delayed(const Duration(milliseconds: 300));
+                          
+                          if (mounted) {
+                            await _loadData();
+                          }
+                        } else {
+                          _showSnackBar(result.error ?? 'Failed to create admin user.', isError: true);
+                          
+                          if (result.requiresReauth && mounted) {
+                            await Future.delayed(const Duration(milliseconds: 2000));
+                            if (mounted) {
+                              Navigator.of(context).pushNamedAndRemoveUntil(
+                                '/login',
+                                (route) => false,
+                              );
+                            }
+                          }
+                        }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryDark,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    icon: const Icon(Icons.person_add, size: 20),
+                    label: const Text(
+                      'Complete',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildInformationStep(

@@ -14,6 +14,9 @@ import 'package:fyp_project/widgets/admin/common/user_detail_section.dart';
 import 'package:fyp_project/widgets/admin/common/editable_detail_row.dart';
 import 'package:fyp_project/widgets/admin/common/editable_detail_section.dart';
 import 'package:fyp_project/widgets/admin/tabs/credit_logs_tab.dart';
+import 'package:fyp_project/widgets/user/location_autocomplete_field.dart';
+import 'package:fyp_project/utils/admin/phone_number_formatter.dart';
+import 'package:flutter/services.dart';
 
 class UserDetailPage extends StatefulWidget {
   final UserModel user;
@@ -33,10 +36,15 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
   late TextEditingController _fullNameController;
   late TextEditingController _phoneNumberController;
   late TextEditingController _locationController;
+  late TextEditingController _ageController;
   late TextEditingController _professionalSummaryController;
   late TextEditingController _professionalProfileController;
   late TextEditingController _workExperienceController;
   late TextEditingController _seekingController;
+  
+  String? _selectedGender;
+  double? _latitude;
+  double? _longitude;
 
   @override
   void initState() {
@@ -50,10 +58,14 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
     _fullNameController = TextEditingController(text: _user.fullName);
     _phoneNumberController = TextEditingController(text: _user.phoneNumber ?? '');
     _locationController = TextEditingController(text: _user.location);
+    _ageController = TextEditingController(text: _user.age?.toString() ?? '');
     _professionalSummaryController = TextEditingController(text: _user.professionalSummary);
     _professionalProfileController = TextEditingController(text: _user.professionalProfile);
     _workExperienceController = TextEditingController(text: _user.workExperience);
     _seekingController = TextEditingController(text: _user.seeking);
+    _selectedGender = _user.gender;
+    _latitude = _user.latitude;
+    _longitude = _user.longitude;
   }
 
   @override
@@ -61,6 +73,7 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
     _fullNameController.dispose();
     _phoneNumberController.dispose();
     _locationController.dispose();
+    _ageController.dispose();
     _professionalSummaryController.dispose();
     _professionalProfileController.dispose();
     _workExperienceController.dispose();
@@ -286,6 +299,9 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
     try {
       final userService = UserService();
       
+      final ageText = _ageController.text.trim();
+      final age = ageText.isEmpty ? null : int.tryParse(ageText);
+      
       final result = await userService.updateUserInfo(
         userId: _user.id,
         fullName: _fullNameController.text.trim(),
@@ -297,6 +313,10 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
         professionalProfile: _professionalProfileController.text.trim(),
         workExperience: _workExperienceController.text.trim(),
         seeking: _seekingController.text.trim(),
+        age: age,
+        gender: _selectedGender,
+        latitude: _latitude,
+        longitude: _longitude,
       );
 
       if (!mounted) return;
@@ -831,12 +851,80 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
                 icon: Icons.phone,
                 enabled: !_isSaving,
                 keyboardType: TextInputType.phone,
+                inputFormatters: [
+                  PhoneNumberFormatter(),
+                ],
+                maxLength: 13,
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: LocationAutocompleteField(
+                  controller: _locationController,
+                  label: 'Location',
+                  hintText: 'Search location... (e.g., Kuala Lumpur)',
+                  restrictToCountry: 'my',
+                  onLocationSelected: (description, latitude, longitude) {
+                    setState(() {
+                      _latitude = latitude;
+                      _longitude = longitude;
+                    });
+                  },
+                ),
               ),
               EditableDetailRow(
-                label: 'Location',
-                controller: _locationController,
-                icon: Icons.location_on,
+                label: 'Age',
+                controller: _ageController,
+                icon: Icons.cake,
                 enabled: !_isSaving,
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Gender',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(12),
+                  color: Colors.grey[50],
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String?>(
+                    value: _selectedGender,
+                    isExpanded: true,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    icon: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                    hint: const Text(
+                      'Select gender',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Not specified'),
+                      ),
+                      const DropdownMenuItem<String>(
+                        value: 'Male',
+                        child: Text('Male'),
+                      ),
+                      const DropdownMenuItem<String>(
+                        value: 'Female',
+                        child: Text('Female'),
+                      ),
+                    ],
+                    onChanged: _isSaving ? null : (value) {
+                      setState(() {
+                        _selectedGender = value;
+                      });
+                    },
+                  ),
+                ),
               ),
             ] else ...[
               UserDetailRow(
@@ -861,10 +949,52 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
                   value: user.phoneNumber!,
                   icon: Icons.phone,
                 ),
-              UserDetailRow(
-                label: 'Location',
-                value: user.location.isNotEmpty ? user.location : 'Not specified',
-                icon: Icons.location_on,
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.location_on,
+                        size: 18,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Location',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            user.location.isNotEmpty ? user.location : 'Not specified',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87,
+                            ),
+                            maxLines: null,
+                            overflow: TextOverflow.visible,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
             if (user.age != null)

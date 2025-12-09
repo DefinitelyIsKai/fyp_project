@@ -9,6 +9,8 @@ import 'package:fyp_project/services/admin/user_service.dart';
 import 'package:fyp_project/services/admin/post_service.dart';
 import 'package:fyp_project/services/admin/system_config_service.dart';
 import 'package:fyp_project/pages/admin/post_moderation/post_detail_page.dart';
+import 'package:fyp_project/pages/admin/user_management/user_detail_page.dart';
+import 'package:fyp_project/models/admin/user_model.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 import 'package:fyp_project/widgets/admin/dialogs/user_dialogs/handle_user_report_dialog.dart';
 import 'package:fyp_project/widgets/admin/cards/report_status_banner.dart';
@@ -235,26 +237,41 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
 
     if (result != null && result['success'] == true) {
       if (result['action'] == 'suspend') {
-        
-        final durationDays = result['durationDays'] as int;
-        final suspendedUserName = result['userName'] as String;
-        
-        await _reportService.updateReportStatus(
-          widget.report.id,
-          ReportStatus.resolved,
-          notes: _notesController.text.isEmpty ? null : _notesController.text,
-          reviewedBy: _getCurrentUserId(),
-          actionTaken: 'User suspended for $durationDays days due to insufficient balance for credit deduction (${deductAmount?.toInt() ?? 0} credits required).',
-        );
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('$suspendedUserName has been suspended for $durationDays days due to insufficient balance.'),
-              backgroundColor: Colors.orange,
-            ),
+        setState(() => _isProcessing = true);
+        try {
+          final durationDays = result['durationDays'] as int;
+          final suspendedUserName = result['userName'] as String;
+          
+          await _reportService.updateReportStatus(
+            widget.report.id,
+            ReportStatus.resolved,
+            notes: _notesController.text.isEmpty ? null : _notesController.text,
+            reviewedBy: _getCurrentUserId(),
+            actionTaken: 'User suspended for $durationDays days due to insufficient balance for credit deduction (${deductAmount?.toInt() ?? 0} credits required).',
           );
-          Navigator.pop(context, true);
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('$suspendedUserName has been suspended for $durationDays days due to insufficient balance.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+            Navigator.pop(context, true);
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error resolving report: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        } finally {
+          if (mounted) {
+            setState(() => _isProcessing = false);
+          }
         }
       } else {
         
@@ -516,33 +533,48 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
 
     if (result != null && result['success'] == true && mounted) {
       if (result['action'] == 'suspend') {
-        
-        final durationDays = result['durationDays'] as int;
-        final suspendedUserName = result['userName'] as String;
-        
-        bool postRejected = false;
-        if (postStatus == 'active' || postStatus == 'approved') {
+        setState(() => _isProcessing = true);
+        try {
+          final durationDays = result['durationDays'] as int;
+          final suspendedUserName = result['userName'] as String;
           
-          await _postService.rejectPost(postId, 'Post owner suspended due to insufficient balance for credit deduction.');
-          postRejected = true;
-        }
-        
-        await _reportService.updateReportStatus(
-          widget.report.id,
-          ReportStatus.resolved,
-          notes: _notesController.text.isEmpty ? null : _notesController.text,
-          reviewedBy: _getCurrentUserId(),
-          actionTaken: 'Post owner suspended for $durationDays days due to insufficient balance for credit deduction (${deductAmount?.toInt() ?? 0} credits required).${postRejected ? ' Post rejected.' : ''}',
-        );
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('$suspendedUserName has been suspended for $durationDays days.${postRejected ? ' Post rejected.' : ''}'),
-              backgroundColor: Colors.orange,
-            ),
+          bool postRejected = false;
+          if (postStatus == 'active' || postStatus == 'approved') {
+            
+            await _postService.rejectPost(postId, 'Post owner suspended due to insufficient balance for credit deduction.');
+            postRejected = true;
+          }
+          
+          await _reportService.updateReportStatus(
+            widget.report.id,
+            ReportStatus.resolved,
+            notes: _notesController.text.isEmpty ? null : _notesController.text,
+            reviewedBy: _getCurrentUserId(),
+            actionTaken: 'Post owner suspended for $durationDays days due to insufficient balance for credit deduction (${deductAmount?.toInt() ?? 0} credits required).${postRejected ? ' Post rejected.' : ''}',
           );
-          Navigator.pop(context, true);
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('$suspendedUserName has been suspended for $durationDays days.${postRejected ? ' Post rejected.' : ''}'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+            Navigator.pop(context, true);
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error resolving report: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        } finally {
+          if (mounted) {
+            setState(() => _isProcessing = false);
+          }
         }
       } else {
         
@@ -784,6 +816,7 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
     
     if (widget.report.status != ReportStatus.pending) return;
     
+    setState(() => _isProcessing = true);
     try {
       await _reportService.updateReportStatus(
         widget.report.id,
@@ -809,7 +842,18 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
         });
       }
     } catch (e) {
-      print('Error auto-resolving report: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error auto-resolving report: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 
@@ -946,6 +990,62 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
     return null;
   }
 
+  String? _getReportedUserId() {
+    if (widget.report.reportType != ReportType.user) return null;
+    final userId = widget.report.reportedEmployeeId ?? widget.report.reportedItemId;
+    return userId.isNotEmpty ? userId : null;
+  }
+
+  Future<void> _viewUserDetails() async {
+    final userId = _getReportedUserId();
+    if (userId == null || userId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('User ID not available'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
+      
+      if (userDoc.exists) {
+        final user = UserModel.fromJson(userDoc.data()!, userDoc.id);
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => UserDetailPage(user: user),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('User not found'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading user: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   String? _getDeductedCreditsFromActionTaken() {
     if (widget.report.actionTaken == null || widget.report.actionTaken!.isEmpty) {
       return null;
@@ -979,55 +1079,120 @@ class _ReportDetailPageState extends State<ReportDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Report Details'),
-        backgroundColor: AppColors.cardRed,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ReportStatusBanner(report: widget.report),
-            ReportInformationCard(
-              report: widget.report,
-              isLoading: _isLoadingInfo,
-              getUserDisplay: _getUserDisplay,
-              getPostDisplay: _getPostDisplay,
-              getPostOwnerId: _getPostOwnerId,
-              isPostDeleted: _isPostDeleted,
-              isPostRejected: _isPostRejected,
-              onViewPostDetails: _viewPostDetails,
-              formatDateTime: _formatDateTime,
-              getDeductedCreditsFromActionTaken: _getDeductedCreditsFromActionTaken,
+    return PopScope(
+      canPop: !_isProcessing,
+      child: Stack(
+        children: [
+          Scaffold(
+            appBar: AppBar(
+              title: const Text('Report Details'),
+              backgroundColor: AppColors.cardRed,
+              foregroundColor: Colors.white,
+              elevation: 0,
             ),
-            ReportInternalNotesSection(
-              notesController: _notesController,
-              isResolved: widget.report.status == ReportStatus.resolved,
+            body: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ReportStatusBanner(report: widget.report),
+                  ReportInformationCard(
+                    report: widget.report,
+                    isLoading: _isLoadingInfo,
+                    getUserDisplay: _getUserDisplay,
+                    getPostDisplay: _getPostDisplay,
+                    getPostOwnerId: _getPostOwnerId,
+                    isPostDeleted: _isPostDeleted,
+                    isPostRejected: _isPostRejected,
+                    onViewPostDetails: _viewPostDetails,
+                    onViewUserDetails: widget.report.reportType == ReportType.user ? _viewUserDetails : null,
+                    getReportedUserId: _getReportedUserId,
+                    formatDateTime: _formatDateTime,
+                    getDeductedCreditsFromActionTaken: _getDeductedCreditsFromActionTaken,
+                  ),
+                  ReportInternalNotesSection(
+                    notesController: _notesController,
+                    isResolved: widget.report.status == ReportStatus.resolved,
+                  ),
+                  if (widget.report.status != ReportStatus.resolved) ...[
+                    const SizedBox(height: 24),
+                  ],
+                  ReportActionButtons(
+                    report: widget.report,
+                    isProcessing: _isProcessing,
+                    isLoadingInfo: _isLoadingInfo,
+                    isPostDeleted: _isPostDeleted,
+                    isPostRejected: _isPostRejected,
+                    getPostActionButtonText: _getPostActionButtonText,
+                    postExists: (postId) => _postExists.containsKey(postId),
+                    onDismissReport: _dismissReport,
+                    onHandleUserReport: _showWarningDialog,
+                    onRejectPost: _showRejectPostDialog,
+                  ),
+                  if (widget.report.status == ReportStatus.resolved) ...[
+                    const ReportResolvedMessage(),
+                    const SizedBox(height: 24),
+                  ],
+                ],
+              ),
             ),
-            if (widget.report.status != ReportStatus.resolved) ...[
-              const SizedBox(height: 24),
-            ],
-            ReportActionButtons(
-              report: widget.report,
-              isProcessing: _isProcessing,
-              isLoadingInfo: _isLoadingInfo,
-              isPostDeleted: _isPostDeleted,
-              isPostRejected: _isPostRejected,
-              getPostActionButtonText: _getPostActionButtonText,
-              postExists: (postId) => _postExists.containsKey(postId),
-              onDismissReport: _dismissReport,
-              onHandleUserReport: _showWarningDialog,
-              onRejectPost: _showRejectPostDialog,
+          ),
+          if (_isProcessing)
+            Positioned.fill(
+              child: AbsorbPointer(
+                child: Container(
+                  color: Colors.black.withOpacity(0.5),
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CircularProgressIndicator(),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Processing...',
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                              fontFamily: 'Roboto',
+                              color: Color(0xFF1A1A1A),
+                              letterSpacing: 0.5,
+                              decoration: TextDecoration.none,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Please wait while we process your request',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontFamily: 'Roboto',
+                              color: Colors.grey[700],
+                              letterSpacing: 0.2,
+                              decoration: TextDecoration.none,
+                              fontWeight: FontWeight.w400,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-            if (widget.report.status == ReportStatus.resolved) ...[
-              const ReportResolvedMessage(),
-              const SizedBox(height: 24),
-            ],
-          ],
-        ),
+        ],
       ),
     );
   }

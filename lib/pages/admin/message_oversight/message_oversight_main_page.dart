@@ -1,11 +1,47 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fyp_project/pages/admin/message_oversight/flagged_content_page.dart';
 import 'package:fyp_project/pages/admin/message_oversight/manage_ratings_page.dart';
+import 'package:fyp_project/services/admin/auth_service.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 
-class MessageOversightMainPage extends StatelessWidget {
+class MessageOversightMainPage extends StatefulWidget {
   const MessageOversightMainPage({super.key});
+
+  @override
+  State<MessageOversightMainPage> createState() => _MessageOversightMainPageState();
+}
+
+class _MessageOversightMainPageState extends State<MessageOversightMainPage> {
+  bool _isRefreshing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshPermissions();
+  }
+
+  Future<void> _refreshPermissions() async {
+    if (_isRefreshing) return;
+    _isRefreshing = true;
+    
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentAdmin = authService.currentAdmin;
+    
+    if (currentAdmin != null) {
+      final role = currentAdmin.role.toLowerCase();
+      if (['manager', 'hr', 'staff'].contains(role)) {
+        debugPrint('MessageOversightMainPage: Refreshing permissions for role: $role');
+        await authService.refreshPermissions();
+        if (mounted) {
+          setState(() {});
+        }
+      }
+    }
+    _isRefreshing = false;
+  }
 
   Stream<int> _totalRatingsCountStream() {
     return FirebaseFirestore.instance
@@ -24,6 +60,66 @@ class MessageOversightMainPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentAdmin = authService.currentAdmin;
+    
+    debugPrint('MessageOversightMainPage: currentAdmin = ${currentAdmin?.name}');
+    debugPrint('MessageOversightMainPage: role = ${currentAdmin?.role}');
+    debugPrint('MessageOversightMainPage: permissions = ${currentAdmin?.permissions}');
+    
+    final canAccessMessageOversight = currentAdmin != null && 
+        (currentAdmin.permissions.contains('all') || 
+         currentAdmin.permissions.contains('message_oversight') ||
+         currentAdmin.permissions.contains('report_management'));
+    
+    debugPrint('MessageOversightMainPage: canAccessMessageOversight = $canAccessMessageOversight');
+    
+    if (!canAccessMessageOversight) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text(
+            'Message Oversight',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          backgroundColor: AppColors.cardRed,
+          foregroundColor: Colors.white,
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.lock_outline,
+                size: 64,
+                color: Colors.grey[400],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Access Denied',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[700],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'You do not have permission to access this page.',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey[600],
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text(
