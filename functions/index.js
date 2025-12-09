@@ -181,9 +181,7 @@ exports.autoApprovePendingPosts = functions
       try {
         console.log("autoApprovePendingPosts: Function started");
         const now = new Date();
-        const twoDaysFromNow = new Date(now);
-        twoDaysFromNow.setDate(now.getDate() + 2);
-        console.log(`autoApprovePendingPosts: Checking posts with eventStartDate <= ${twoDaysFromNow.toISOString()}`);
+        console.log(`autoApprovePendingPosts: Current server time: ${now.toISOString()}`);
 
         const snapshot = await db.collection("posts")
             .where("status", "==", "pending")
@@ -201,7 +199,10 @@ exports.autoApprovePendingPosts = functions
           const eventStartDate = postData.eventStartDate;
           const ownerId = postData.ownerId;
 
-          if (!eventStartDate || !ownerId) continue;
+          if (!eventStartDate || !ownerId) {
+            console.log(`autoApprovePendingPosts: Post ${doc.id} skipped (missing eventStartDate or ownerId)`);
+            continue;
+          }
 
           let startDate;
           if (eventStartDate.toDate) {
@@ -209,29 +210,66 @@ exports.autoApprovePendingPosts = functions
           } else if (eventStartDate instanceof Date) {
             startDate = eventStartDate;
           } else {
+            console.log(`autoApprovePendingPosts: Post ${doc.id} skipped (invalid eventStartDate format)`);
             continue;
           }
 
+          // Convert to UTC+8 timezone for date comparison
+          // Firestore Timestamp.toDate() returns a Date in UTC
+          // We need to get the date in UTC+8 timezone
+          const utc8Offset = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
+          
+          // Convert UTC time to UTC+8 by adding 8 hours, then get the date components
+          const startDateUTC8 = new Date(startDate.getTime() + utc8Offset);
+          const nowUTC8 = new Date(now.getTime() + utc8Offset);
+          
+          // Extract date only (year, month, day) - these are already in UTC+8 representation
           const startDateOnly = new Date(
-              startDate.getFullYear(),
-              startDate.getMonth(),
-              startDate.getDate()
+              Date.UTC(
+                  startDateUTC8.getUTCFullYear(),
+                  startDateUTC8.getUTCMonth(),
+                  startDateUTC8.getUTCDate()
+              )
           );
-          const twoDaysFromNowOnly = new Date(
-              twoDaysFromNow.getFullYear(),
-              twoDaysFromNow.getMonth(),
-              twoDaysFromNow.getDate()
+          
+          const nowOnly = new Date(
+              Date.UTC(
+                  nowUTC8.getUTCFullYear(),
+                  nowUTC8.getUTCMonth(),
+                  nowUTC8.getUTCDate()
+              )
           );
 
-          if (startDateOnly <= twoDaysFromNowOnly) {
-            console.log(`autoApprovePendingPosts: Post ${doc.id} eligible (eventStartDate: ${startDate.toISOString()})`);
+          // Calculate 2 days before eventStartDate
+          const twoDaysBeforeEvent = new Date(startDateOnly);
+          twoDaysBeforeEvent.setUTCDate(startDateOnly.getUTCDate() - 2);
+          
+          console.log(`autoApprovePendingPosts: Post ${doc.id} raw dates:`);
+          console.log(`  - startDate (UTC): ${startDate.toISOString()}`);
+          console.log(`  - startDateUTC8: ${startDateUTC8.toISOString()}`);
+          console.log(`  - now (UTC): ${now.toISOString()}`);
+          console.log(`  - nowUTC8: ${nowUTC8.toISOString()}`);
+
+          console.log(`autoApprovePendingPosts: Post ${doc.id} date comparison:`);
+          console.log(`  - eventStartDate (UTC+8): ${startDateOnly.toISOString()}`);
+          console.log(`  - 2 days before (UTC+8): ${twoDaysBeforeEvent.toISOString()}`);
+          console.log(`  - current date (UTC+8): ${nowOnly.toISOString()}`);
+          console.log(`  - condition check: ${nowOnly >= twoDaysBeforeEvent} && ${nowOnly < startDateOnly} = ${nowOnly >= twoDaysBeforeEvent && nowOnly < startDateOnly}`);
+
+          // Check if current date is >= 2 days before eventStartDate
+          // Allow approval if current date >= 2 days before eventStartDate (even if event already started)
+          if (nowOnly >= twoDaysBeforeEvent) {
+            console.log(`autoApprovePendingPosts: Post ${doc.id} eligible for approval`);
+            if (nowOnly >= startDateOnly) {
+              console.log(`  - Event already started, but approving anyway (current date >= 2 days before event)`);
+            }
             postsToApprove.push({
               postId: doc.id,
               postData: postData,
               ownerId: ownerId,
             });
           } else {
-            console.log(`autoApprovePendingPosts: Post ${doc.id} not eligible (eventStartDate: ${startDate.toISOString()} > ${twoDaysFromNowOnly.toISOString()})`);
+            console.log(`autoApprovePendingPosts: Post ${doc.id} not eligible - Too early (need to wait until ${twoDaysBeforeEvent.toISOString()}, current: ${nowOnly.toISOString()})`);
           }
         }
         

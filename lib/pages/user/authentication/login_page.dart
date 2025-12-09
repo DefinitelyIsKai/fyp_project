@@ -15,6 +15,7 @@ import '../home_page.dart';
 import '../profile/profile_setup_flow.dart';
 import 'sign_up_page.dart';
 import 'forgot_password_page.dart';
+import 'email_verification_loading_page.dart';
 
 enum LoginMode { user, admin }
 
@@ -57,10 +58,54 @@ class _LoginPageState extends State<LoginPage> {
         //block email 
         await credential.user?.reload();
         if (!(credential.user?.emailVerified ?? false)) {
-          DialogUtils.showWarningMessage(
-            context: context,
-            message: 'Please verify your email before logging in.',
-          );
+          if (mounted) {
+            setState(() => _isLoading = false);
+          }
+          // Show dialog with option to resend verification email
+          if (mounted) {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Email Not Verified'),
+                content: const Text(
+                  'Please verify your email before logging in. Would you like to resend the verification email?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      Navigator.of(context).pop();
+                      try {
+                        await _authService.resendVerificationEmail();
+                        if (mounted) {
+                          DialogUtils.showSuccessMessage(
+                            context: context,
+                            message: 'Verification email sent. Please check your inbox.',
+                          );
+                          // Navigate to verification page
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(builder: (_) => const EmailVerificationLoadingPage()),
+                          );
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          DialogUtils.showWarningMessage(
+                            context: context,
+                            message: 'Failed to resend verification email: $e',
+                          );
+                        }
+                      }
+                    },
+                    child: const Text('Resend Email'),
+                  ),
+                ],
+              ),
+            );
+          }
           return;
         }
         bool goToSetup = false;

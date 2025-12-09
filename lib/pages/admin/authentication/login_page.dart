@@ -9,6 +9,7 @@ import 'package:fyp_project/services/admin/auth_service.dart';
 import 'package:fyp_project/services/admin/profile_pic_service.dart';
 import 'package:fyp_project/services/admin/face_recognition_service.dart';
 import 'package:fyp_project/services/admin/otp_service.dart';
+import 'package:fyp_project/services/user/cloud_functions_service.dart';
 import 'package:fyp_project/routes/app_routes.dart';
 import 'package:provider/provider.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
@@ -36,6 +37,7 @@ class _LoginPageState extends State<LoginPage> {
   final _profilePicService = ProfilePicService();
   final _faceService = FaceRecognitionService();
   final _otpService = OtpService();
+  final _cloudFunctionsService = CloudFunctionsService();
   final CollectionReference<Map<String, dynamic>> _logsRef = 
       FirebaseFirestore.instance.collection('logs');
   bool _isLoading = false;
@@ -315,6 +317,9 @@ class _LoginPageState extends State<LoginPage> {
 
         _clearLoginResources();
 
+        // Run cloud functions after successful login
+        _runCloudFunctionsAfterLogin();
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -578,6 +583,27 @@ class _LoginPageState extends State<LoginPage> {
     }
     print('Login resources cleaned up');
   }
+
+  void _runCloudFunctionsAfterLogin() {
+    // Run cloud functions in background after successful login
+    _cloudFunctionsService.autoApprovePendingPosts().then((result) {
+      debugPrint('Login: Auto-approve result: ${result['success']}, approved: ${result['approvedCount']}');
+      if (result['success'] == false) {
+        debugPrint('Login: Auto-approve error: ${result['message']}');
+      }
+    }).catchError((e) {
+      debugPrint('Login: Error auto-approving posts: $e');
+    });
+
+    _cloudFunctionsService.autoUnsuspendExpiredUsers().then((result) {
+      debugPrint('Login: Auto-unsuspend result: ${result['success']}, unsuspended: ${result['unsuspendedCount']}');
+      if (result['success'] == false) {
+        debugPrint('Login: Auto-unsuspend error: ${result['message']}');
+      }
+    }).catchError((e) {
+      debugPrint('Login: Error auto-unsuspending users: $e');
+    });
+  }
   
   Future<void> _logLoginSuccess({
     required String email,
@@ -822,6 +848,9 @@ class _LoginPageState extends State<LoginPage> {
           _otpController.clear();
           _isVerifyingOtp = false;
         });
+
+        // Run cloud functions after successful login
+        _runCloudFunctionsAfterLogin();
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
