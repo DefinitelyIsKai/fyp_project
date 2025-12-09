@@ -13,7 +13,6 @@ import 'package:fyp_project/pages/admin/message_oversight/flagged_content_page.d
 import 'package:fyp_project/pages/admin/analytics/analytics_page.dart';
 import 'package:fyp_project/services/admin/auth_service.dart';
 import 'package:fyp_project/services/admin/dashboard_service.dart';
-import 'package:fyp_project/services/user/cloud_functions_service.dart';
 import 'package:fyp_project/routes/app_routes.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -25,7 +24,6 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   final DashboardService _dashboardService = DashboardService();
-  final CloudFunctionsService _cloudFunctionsService = CloudFunctionsService();
   StreamSubscription<int>? _reportsSubscription;
   StreamSubscription<int>? _pendingPostsSubscription;
 
@@ -128,29 +126,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
     setState(() => _isLoading = true);
     try {
-      debugPrint('Dashboard: Starting auto-approve and auto-unsuspend functions...');
-      
-      unawaited(
-        _cloudFunctionsService.autoApprovePendingPosts().then((result) {
-          debugPrint('Dashboard: Auto-approve result: ${result['success']}, approved: ${result['approvedCount']}');
-          if (result['success'] == false) {
-            debugPrint('Dashboard: Auto-approve error: ${result['message']}');
-          }
-        }).catchError((e) {
-          debugPrint('Dashboard: Error auto-approving posts: $e');
-        }),
-      );
-      
-      unawaited(
-        _cloudFunctionsService.autoUnsuspendExpiredUsers().then((result) {
-          debugPrint('Dashboard: Auto-unsuspend result: ${result['success']}, unsuspended: ${result['unsuspendedCount']}');
-          if (result['success'] == false) {
-            debugPrint('Dashboard: Auto-unsuspend error: ${result['message']}');
-          }
-        }).catchError((e) {
-          debugPrint('Dashboard: Error auto-unsuspending users: $e');
-        }),
-      );
+      // Cloud functions are now called after login, not when dashboard loads
       
       final users = await _dashboardService.getActiveUsersCount();
       final authService = Provider.of<AuthService>(context, listen: false);
