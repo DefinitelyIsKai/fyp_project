@@ -164,6 +164,33 @@ class AuthService {
     }
   }
 
+  // Check if email exists and is verified
+  Future<Map<String, dynamic>> checkEmailStatus(String email) async {
+    final trimmedEmail = email.trim();
+    try {
+      final querySnapshot = await _firestore
+          .collection('users')
+          .where('email', isEqualTo: trimmedEmail)
+          .limit(1)
+          .get();
+      
+      if (querySnapshot.docs.isEmpty) {
+        return {'exists': false, 'verified': false};
+      }
+      
+      final userData = querySnapshot.docs.first.data();
+      final emailVerified = userData['emailVerified'] ?? false;
+      
+      return {
+        'exists': true,
+        'verified': emailVerified is bool ? emailVerified : (emailVerified.toString().toLowerCase() == 'true'),
+        'userId': querySnapshot.docs.first.id,
+      };
+    } catch (e) {
+      return {'exists': false, 'verified': false};
+    }
+  }
+
   Future<bool> canSendPasswordReset(String email) async {
     final trimmedEmail = email.trim();
     

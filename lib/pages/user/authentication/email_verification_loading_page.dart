@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../services/user/auth_service.dart';
 import '../../../utils/user/dialog_utils.dart';
 import 'login_page.dart';
@@ -15,8 +16,10 @@ class EmailVerificationLoadingPage extends StatefulWidget {
 class _EmailVerificationLoadingPageState extends State<EmailVerificationLoadingPage> {
   final AuthService _authService = AuthService();
   Timer? _pollTimer;
+  Timer? _cooldownTimer;
   bool _checking = false;
   bool _resending = false;
+  int _resendCooldown = 0; // Cooldown in seconds
 
   @override
   void initState() {
@@ -27,6 +30,7 @@ class _EmailVerificationLoadingPageState extends State<EmailVerificationLoadingP
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _cooldownTimer?.cancel();
     super.dispose();
   }
 
@@ -63,24 +67,81 @@ class _EmailVerificationLoadingPageState extends State<EmailVerificationLoadingP
   }
 
   Future<void> _resend() async {
-    if (_resending) return;
+    if (_resending || _resendCooldown > 0) return;
     setState(() => _resending = true);
     try {
       await _authService.resendVerificationEmail();
       if (!mounted) return;
       DialogUtils.showSuccessMessage(
         context: context,
-        message: 'Verification email resent.',
+        message: 'Verification email resent. Please check your inbox.',
+      );
+      // Start cooldown after successful resend (60 seconds)
+      if (mounted) {
+        setState(() {
+          _resendCooldown = 60;
+        });
+        _startResendCooldown();
+      }
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      String errorMessage = 'Failed to resend verification email.';
+      
+      if (e.code == 'too-many-requests') {
+        errorMessage = 'Too many requests. Please wait a few minutes before trying again.';
+        // Set longer cooldown for rate limit errors (5 minutes = 300 seconds)
+        if (mounted) {
+          setState(() {
+            _resendCooldown = 300;
+          });
+          _startResendCooldown();
+        }
+      } else if (e.code == 'user-not-found') {
+        errorMessage = 'User account not found. Please sign up again.';
+      } else if (e.code == 'user-disabled') {
+        errorMessage = 'This account has been disabled.';
+      } else {
+        errorMessage = 'Failed to resend: ${e.message ?? e.code}';
+      }
+      
+      DialogUtils.showWarningMessage(
+        context: context,
+        message: errorMessage,
       );
     } catch (e) {
       if (!mounted) return;
+      String errorMessage = 'Failed to resend verification email.';
+      if (e.toString().contains('too-many-requests')) {
+        errorMessage = 'Too many requests. Please wait a few minutes before trying again.';
+        if (mounted) {
+          setState(() {
+            _resendCooldown = 300;
+          });
+          _startResendCooldown();
+        }
+      } else {
+        errorMessage = 'Failed to resend: $e';
+      }
       DialogUtils.showWarningMessage(
         context: context,
-        message: 'Failed to resend: $e',
+        message: errorMessage,
       );
     } finally {
       if (mounted) setState(() => _resending = false);
     }
+  }
+
+  void _startResendCooldown() {
+    _cooldownTimer?.cancel();
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted && _resendCooldown > 0) {
+        setState(() {
+          _resendCooldown--;
+        });
+      } else {
+        timer.cancel();
+      }
+    });
   }
 
   @override
@@ -142,7 +203,7 @@ class _EmailVerificationLoadingPageState extends State<EmailVerificationLoadingP
                       width: double.infinity,
                       height: 52,
                       child: ElevatedButton(
-                        onPressed: _resending ? null : _resend,
+                        onPressed: (_resending || _resendCooldown > 0) ? null : _resend,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: primaryColor,
                           foregroundColor: Colors.white,
@@ -160,9 +221,11 @@ class _EmailVerificationLoadingPageState extends State<EmailVerificationLoadingP
                                   color: Colors.white,
                                 ),
                               )
-                            : const Text(
-                                'Resend Email',
-                                style: TextStyle(
+                            : Text(
+                                _resendCooldown > 0
+                                    ? 'Resend in ${_resendCooldown}s'
+                                    : 'Resend Email',
+                                style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                 ),

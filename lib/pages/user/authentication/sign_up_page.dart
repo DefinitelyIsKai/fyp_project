@@ -21,6 +21,7 @@ class _SignUpPageState extends State<SignUpPage> {
   final _passwordController = TextEditingController();
   final _authService = AuthService();
   bool _submitting = false;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -34,16 +35,71 @@ class _SignUpPageState extends State<SignUpPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _submitting = true);
     try {
-      //check email  exists
-      final exists = await _authService.doesEmailExist(_emailController.text);
-      if (exists) {
-        if (!mounted) return;
-        DialogUtils.showWarningMessage(
-          context: context,
-          message: 'Email already in use.',
-        );
-        return;
+      // Check email status (exists and verified)
+      final emailStatus = await _authService.checkEmailStatus(_emailController.text);
+      
+      if (emailStatus['exists'] == true) {
+        if (emailStatus['verified'] == true) {
+          // Email exists and is verified
+          if (!mounted) return;
+          DialogUtils.showWarningMessage(
+            context: context,
+            message: 'Email already in use. Please login instead.',
+          );
+          return;
+        } else {
+          // Email exists but not verified - try to login and resend verification
+          try {
+            final credential = await _authService.signIn(
+              email: _emailController.text,
+              password: _passwordController.text,
+            );
+            
+            // Check if email is still not verified
+            await credential.user?.reload();
+            if (!(credential.user?.emailVerified ?? false)) {
+              // Resend verification email
+              await _authService.resendVerificationEmail();
+              if (!mounted) return;
+              DialogUtils.showSuccessMessage(
+                context: context,
+                message: 'Verification email resent. Please check your inbox.',
+              );
+              // Navigate to verification page
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const EmailVerificationLoadingPage()),
+              );
+              return;
+            } else {
+              // Email is now verified, proceed to login
+              if (!mounted) return;
+              DialogUtils.showSuccessMessage(
+                context: context,
+                message: 'Email verified. Please login.',
+              );
+              return;
+            }
+          } on FirebaseAuthException catch (authError) {
+            // Wrong password or other auth error
+            if (!mounted) return;
+            if (authError.code == 'wrong-password' || authError.code == 'user-not-found') {
+              DialogUtils.showWarningMessage(
+                context: context,
+                message: 'Email already registered but password is incorrect. Please use the correct password or use "Forgot Password" to reset.',
+              );
+            } else {
+              DialogUtils.showWarningMessage(
+                context: context,
+                message: 'Email already registered but not verified. ${authError.message ?? "Please try logging in with your password."}',
+              );
+            }
+            return;
+          }
+        }
       }
+      
+      // Email doesn't exist, proceed with registration
       await _authService.registerUser(
         fullName: _nameController.text,
         email: _emailController.text,
@@ -55,8 +111,35 @@ class _SignUpPageState extends State<SignUpPage> {
         MaterialPageRoute(builder: (_) => const EmailVerificationLoadingPage()),
       );
     } on FirebaseAuthException catch (e) {
-      final message = e.message ?? 'Sign up failed';
       if (!mounted) return;
+      String message = e.message ?? 'Sign up failed';
+      if (e.code == 'email-already-in-use') {
+        // This means email exists in Firebase Auth but might not be in Firestore
+        // Try to handle it by attempting login
+        try {
+          final credential = await _authService.signIn(
+            email: _emailController.text,
+            password: _passwordController.text,
+          );
+          await credential.user?.reload();
+          if (!(credential.user?.emailVerified ?? false)) {
+            await _authService.resendVerificationEmail();
+            if (!mounted) return;
+            DialogUtils.showSuccessMessage(
+              context: context,
+              message: 'Verification email resent. Please check your inbox.',
+            );
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const EmailVerificationLoadingPage()),
+            );
+            return;
+          }
+        } catch (_) {
+          // Login failed, show original error
+        }
+        message = 'Email already in use. Please login instead.';
+      }
       DialogUtils.showWarningMessage(
         context: context,
         message: message,
@@ -186,8 +269,44 @@ class _SignUpPageState extends State<SignUpPage> {
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: _passwordController,
-                    obscureText: true,
-                    decoration: inputDecoration('••••••••'),
+                    obscureText: _obscurePassword,
+                    decoration: InputDecoration(
+                      hintText: '••••••••',
+                      filled: true,
+                      fillColor: Colors.grey[50],
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      border: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: primaryColor, width: 2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      errorBorder: OutlineInputBorder(
+                        borderSide: const BorderSide(color: Colors.red),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      focusedErrorBorder: OutlineInputBorder(
+                        borderSide: const BorderSide(color: Colors.red, width: 2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                          color: Colors.grey[600],
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
+                      ),
+                    ),
                     enabled: !_submitting,
                     validator: (v) => InputValidators.password(v, minLength: 6),
                   ),
