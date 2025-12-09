@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/user/tag_category.dart';
 import '../../models/user/tag.dart';
@@ -53,39 +54,74 @@ class TagService {
   }
 
   Stream<Map<TagCategory, List<Tag>>> streamActiveTagCategoriesWithTags() {
-    return _tagCategoriesCol
+    // Stream both categories and tags for real-time updates
+    final categoriesStream = _tagCategoriesCol
         .where('isActive', isEqualTo: true)
-        .snapshots()
-        .asyncMap((categoriesSnapshot) async {
-      final categories = categoriesSnapshot.docs
-          .map((doc) => TagCategory.fromFirestore(doc))
-          .toList();
+        .snapshots();
+    
+    final tagsStream = _tagsCol
+        .where('isActive', isEqualTo: true)
+        .snapshots();
 
-      //fetch all active tag
-      final tagsSnapshot = await _tagsCol
-          .where('isActive', isEqualTo: true)
-          .get();
+    // Combine both streams - emit when either changes
+    final controller = StreamController<Map<TagCategory, List<Tag>>>();
+    QuerySnapshot<Map<String, dynamic>>? lastCategoriesSnapshot;
+    QuerySnapshot<Map<String, dynamic>>? lastTagsSnapshot;
 
-      final allTags = tagsSnapshot.docs
-          .map((doc) => Tag.fromFirestore(doc))
-          .toList();
+    void emitIfReady() {
+      if (lastCategoriesSnapshot != null && lastTagsSnapshot != null) {
+        final categories = lastCategoriesSnapshot!.docs
+            .map((doc) => TagCategory.fromFirestore(doc))
+            .toList();
 
-      //group tag categoryId
-      final Map<TagCategory, List<Tag>> result = {};
-      for (final category in categories) {
-        final categoryTags = allTags
-            .where((tag) => tag.categoryId == category.id)
-            .toList()
-          ..sort((a, b) => a.name.compareTo(b.name));
-        result[category] = categoryTags;
+        final allTags = lastTagsSnapshot!.docs
+            .map((doc) => Tag.fromFirestore(doc))
+            .toList();
+
+        //group tag categoryId
+        final Map<TagCategory, List<Tag>> result = {};
+        for (final category in categories) {
+          final categoryTags = allTags
+              .where((tag) => tag.categoryId == category.id)
+              .toList()
+            ..sort((a, b) => a.name.compareTo(b.name));
+          result[category] = categoryTags;
+        }
+
+        //sort by title
+        final sortedEntries = result.entries.toList()
+          ..sort((a, b) => a.key.title.compareTo(b.key.title));
+
+        if (!controller.isClosed) {
+          controller.add(Map.fromEntries(sortedEntries));
+        }
       }
+    }
 
-      //sort by title
-      final sortedEntries = result.entries.toList()
-        ..sort((a, b) => a.key.title.compareTo(b.key.title));
-
-      return Map.fromEntries(sortedEntries);
+    final categoriesSubscription = categoriesStream.listen((snapshot) {
+      lastCategoriesSnapshot = snapshot;
+      emitIfReady();
+    }, onError: (error) {
+      if (!controller.isClosed) {
+        controller.addError(error);
+      }
     });
+
+    final tagsSubscription = tagsStream.listen((snapshot) {
+      lastTagsSnapshot = snapshot;
+      emitIfReady();
+    }, onError: (error) {
+      if (!controller.isClosed) {
+        controller.addError(error);
+      }
+    });
+
+    controller.onCancel = () {
+      categoriesSubscription.cancel();
+      tagsSubscription.cancel();
+    };
+
+    return controller.stream;
   }
 
   //fetch a single tag category by ID

@@ -79,10 +79,13 @@ class ReputationPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
                       if (role != 'recruiter')
-                        FutureBuilder<double>(
-                          future: userId == null ? Future.value(0.0) : reviewService.getAverageRatingForUser(userId),
-                          builder: (context, avgSnap) {
-                            final avg = (avgSnap.data ?? 0.0);
+                        StreamBuilder<List<Review>>(
+                          stream: userId == null ? Stream.value([]) : reviewService.streamReviewsForUser(userId),
+                          builder: (context, reviewSnap) {
+                            final reviews = reviewSnap.data ?? [];
+                            final avg = reviews.isEmpty
+                                ? 0.0
+                                : reviews.map((r) => r.rating.toDouble()).reduce((a, b) => a + b) / reviews.length;
                             return Column(
                               children: [
                                 Text(

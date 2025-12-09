@@ -205,8 +205,8 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                 final applicationId = application.id;
                 
                 // First, check post data to filter by eventEndDate BEFORE displaying slots
-                return FutureBuilder<Post?>(
-                  future: widget.postService.getById(application.postId),
+                return StreamBuilder<Post?>(
+                  stream: widget.postService.streamPostById(application.postId),
                   builder: (context, postSnapshot) {
                     // Show loading while post data is being fetched
                     if (postSnapshot.connectionState == ConnectionState.waiting) {
@@ -267,20 +267,16 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                         break; 
                       }
                     }
-                    return FutureBuilder<Map<String, dynamic>>(
-                      future: Future.wait([
-                        widget.availabilityService.getRequestedSlotIdsForJobseeker(
-                          jobseekerId,
-                          matchId: applicationId, 
-                        ),
-                        _checkPostStatus(applicationId, widget.postService), 
-                      ]).then((results) => {
-                        'requestedSlotIds': results[0] as Set<String>,
-                        'isPostCompleted': results[1] as bool,
-                      }),
-                      builder: (context, dataSnapshot) {
-                        final requestedSlotIds = (dataSnapshot.data?['requestedSlotIds'] as Set<String>?) ?? {};
-                        final isPostCompleted = (dataSnapshot.data?['isPostCompleted'] as bool?) ?? false;
+                    // Use post from the outer StreamBuilder to check completion status
+                    final isPostCompleted = post?.status == PostStatus.completed;
+                    
+                    return StreamBuilder<Set<String>>(
+                      stream: widget.availabilityService.streamRequestedSlotIdsForJobseeker(
+                        jobseekerId,
+                        matchId: applicationId,
+                      ),
+                      builder: (context, requestedSnapshot) {
+                        final requestedSlotIds = (requestedSnapshot.data ?? <String>{});
 
                         final filteredSlots = dateFilteredSlots.where((slot) {
                           // Post eventEndDate filtering already done above
@@ -325,26 +321,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                FutureBuilder<String>(
-                                  future: _loadRecruiterName(application.recruiterId),
-                                  builder: (context, snapshot) {
-                                    return Text(
-                                      snapshot.data ?? 'Recruiter',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.grey[600],
-                                      ),
-                                    );
-                                  },
-                                ),
-                                const SizedBox(height: 12),
-                                Divider(
-                                  height: 1,
-                                  thickness: 1,
-                                  color: Colors.grey[200],
-                                ),
-                                const SizedBox(height: 12),
                                 Row(
                                   children: [
                                     Container(
@@ -352,7 +328,7 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                                       height: 40,
                                       decoration: BoxDecoration(
                                         color: isBooked
-                                            ? Colors.green
+                                            ? Colors.red
                                             : isRequested
                                             ? Colors.amber[700]
                                             : isUnavailable
@@ -392,10 +368,10 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                                           vertical: 8,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: Colors.green[50],
+                                          color: Colors.red[50],
                                           borderRadius: BorderRadius.circular(8),
                                           border: Border.all(
-                                            color: Colors.green[300]!,
+                                            color: Colors.red[300]!,
                                             width: 1.5,
                                           ),
                                         ),
@@ -405,13 +381,13 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                                             Icon(
                                               Icons.check_circle,
                                               size: 16,
-                                              color: Colors.green[700],
+                                              color: Colors.red[700],
                                             ),
                                             const SizedBox(width: 6),
                                             Text(
                                               'Booked',
                                               style: TextStyle(
-                                                color: Colors.green[800],
+                                                color: Colors.red[800],
                                                 fontSize: 14,
                                                 fontWeight: FontWeight.w600,
                                               ),
@@ -561,8 +537,8 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
               return const SizedBox.shrink();
             }
             
-            return FutureBuilder<Post?>(
-              future: widget.postService.getById(widget.selectedApplication!.postId),
+            return StreamBuilder<Post?>(
+              stream: widget.postService.streamPostById(widget.selectedApplication!.postId),
               builder: (context, postSnapshot) {
                 // Show loading while post data is being fetched
                 if (postSnapshot.connectionState == ConnectionState.waiting) {
@@ -598,20 +574,16 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                   slotsByRecruiter.putIfAbsent(slot.recruiterId, () => []).add(slot);
                 }
                  
-                 return FutureBuilder<Map<String, dynamic>>(
-                   future: Future.wait([
-                     widget.availabilityService.getRequestedSlotIdsForJobseeker(
-                       jobseekerId,
-                       matchId: applicationId, 
-                     ),
-                     applicationId != null ? _checkPostStatus(applicationId, widget.postService) : Future.value(false),
-                   ]).then((results) => {
-                     'requestedSlotIds': results[0] as Set<String>,
-                     'isPostCompleted': results[1] as bool,
-                   }),
-                   builder: (context, dataSnapshot) {
-                     final requestedSlotIds = (dataSnapshot.data?['requestedSlotIds'] as Set<String>?) ?? {};
-                     final isPostCompleted = (dataSnapshot.data?['isPostCompleted'] as bool?) ?? false;
+                 // Use post from the outer StreamBuilder to check completion status
+                 final isPostCompleted = post?.status == PostStatus.completed;
+                 
+                 return StreamBuilder<Set<String>>(
+                   stream: widget.availabilityService.streamRequestedSlotIdsForJobseeker(
+                     jobseekerId,
+                     matchId: applicationId,
+                   ),
+                   builder: (context, requestedSnapshot) {
+                     final requestedSlotIds = (requestedSnapshot.data ?? <String>{});
 
                      return Column(
                        children: List.generate(slotsByRecruiter.length, (index) {
@@ -846,29 +818,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
          );
        },
      );
-   }
-
-  //check post completed
-  Future<bool> _checkPostStatus(String matchId, PostService postService) async {
-    try {
-      final firestore = FirebaseFirestore.instance;
-      String? postId;
-      
-      //applicationmatchid
-      final applicationDoc = await firestore.collection('applications').doc(matchId).get();
-      if (applicationDoc.exists) {
-        final appData = applicationDoc.data();
-        postId = appData?['postId'] as String?;
-      }
-
-      if (postId != null) {
-        final post = await postService.getById(postId);
-        return post?.status == PostStatus.completed;
-      }
-    } catch (e) {
-      debugPrint('Error checking post status: $e');
-    }
-    return false;
   }
 
   Future<void> _bookSlot(

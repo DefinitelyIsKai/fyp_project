@@ -59,8 +59,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
   List<Category> _categories = <Category>[];
   bool _categoriesLoading = true;
   String? _categoriesError;
-  Map<TagCategory, List<Tag>> _tagCategoriesWithTags = {};
-  bool _tagsLoading = true;
+  bool _hasMappedExistingTags = false;
   final FocusNode _jobTypeFocusNode = FocusNode();
   final FocusNode _eventFocusNode = FocusNode();
   bool _jobTypeFocused = false;
@@ -87,7 +86,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
     super.initState();
     _postId = widget.existing?.id ?? FirebaseFirestore.instance.collection('posts').doc().id;
     _loadCategories();
-    _loadTags();
     _jobTypeFocusNode.addListener(() {
       setState(() {
         _jobTypeFocused = _jobTypeFocusNode.hasFocus;
@@ -287,7 +285,11 @@ class _PostCreatePageState extends State<PostCreatePage> {
       }
       //tags
       if (updatedPost.tags.isNotEmpty) {
-        _mapExistingTagsToCategories(updatedPost.tags);
+        _tagService.getActiveTagCategoriesWithTags().then((tagCategoriesWithTags) {
+          if (mounted) {
+            _mapExistingTagsToCategories(updatedPost.tags, tagCategoriesWithTags);
+          }
+        });
       }
       //attachments
       if (updatedPost.attachments.isNotEmpty && _attachments != updatedPost.attachments) {
@@ -366,38 +368,18 @@ class _PostCreatePageState extends State<PostCreatePage> {
     }
   }
 
-  Future<void> _loadTags() async {
-    try {
-      final tagsData = await _tagService.getActiveTagCategoriesWithTags();
-      if (mounted) {
-        setState(() {
-          _tagCategoriesWithTags = tagsData;
-          _tagsLoading = false;
-        });
-        if (widget.existing != null && widget.existing!.tags.isNotEmpty) {
-          _mapExistingTagsToCategories(widget.existing!.tags);
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _tagsLoading = false;
-        });
-      }
-    }
-  }
-
-  void _mapExistingTagsToCategories(List<String> existingTagNames) {
+  void _mapExistingTagsToCategories(List<String> existingTagNames, Map<TagCategory, List<Tag>> tagCategoriesWithTags) {
     final Map<String, List<String>> mappedTags = {};
     final Map<String, String> tagNameToCategoryId = {};
-    for (final entry in _tagCategoriesWithTags.entries) {
+    // Only map active tags
+    for (final entry in tagCategoriesWithTags.entries) {
       final category = entry.key;
       final tags = entry.value;
-      for (final tag in tags) {
+      for (final tag in tags.where((tag) => tag.isActive)) {
         tagNameToCategoryId[tag.name] = category.id;
       }
     }
-    //tags group by category
+    //tags group by category - only include active tags
     for (final tagName in existingTagNames) {
       final categoryId = tagNameToCategoryId[tagName];
       if (categoryId != null) {
@@ -414,6 +396,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
       _selectedTags = mappedTags;
     });
   }
+
 
   @override
   void dispose() {
@@ -1209,11 +1192,45 @@ class _PostCreatePageState extends State<PostCreatePage> {
                     _buildGenderDropdown(),
                     const SizedBox(height: 16),
 
-                    TagSelectionSection(
-                      selections: _selectedTags,
-                      onCategoryChanged: _onTagCategoryChanged,
-                      tagCategoriesWithTags: _tagCategoriesWithTags,
-                      loading: _tagsLoading,
+                    StreamBuilder<Map<TagCategory, List<Tag>>>(
+                      stream: _tagService.streamActiveTagCategoriesWithTags(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(24.0),
+                              child: CircularProgressIndicator(
+                                color: Color(0xFF00C8A0),
+                              ),
+                            ),
+                          );
+                        }
+
+                        final tagCategoriesWithTags = snapshot.data ?? {};
+                        
+                        // Map existing tags when data first loads (only once)
+                        if (widget.existing != null && 
+                            widget.existing!.tags.isNotEmpty && 
+                            tagCategoriesWithTags.isNotEmpty &&
+                            _selectedTags.isEmpty &&
+                            !_hasMappedExistingTags) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted && !_hasMappedExistingTags) {
+                              _mapExistingTagsToCategories(widget.existing!.tags, tagCategoriesWithTags);
+                              setState(() {
+                                _hasMappedExistingTags = true;
+                              });
+                            }
+                          });
+                        }
+
+                        return TagSelectionSection(
+                          selections: _selectedTags,
+                          onCategoryChanged: _onTagCategoryChanged,
+                          tagCategoriesWithTags: tagCategoriesWithTags,
+                          loading: false,
+                        );
+                      },
                     ),
                   ],
                 ),
