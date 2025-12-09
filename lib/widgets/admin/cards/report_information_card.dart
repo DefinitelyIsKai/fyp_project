@@ -11,6 +11,8 @@ class ReportInformationCard extends StatelessWidget {
   final bool Function() isPostDeleted;
   final bool Function() isPostRejected;
   final VoidCallback onViewPostDetails;
+  final VoidCallback? onViewUserDetails;
+  final String? Function()? getReportedUserId;
   final String Function(DateTime) formatDateTime;
   final String? Function() getDeductedCreditsFromActionTaken;
 
@@ -24,6 +26,8 @@ class ReportInformationCard extends StatelessWidget {
     required this.isPostDeleted,
     required this.isPostRejected,
     required this.onViewPostDetails,
+    this.onViewUserDetails,
+    this.getReportedUserId,
     required this.formatDateTime,
     required this.getDeductedCreditsFromActionTaken,
   });
@@ -86,13 +90,7 @@ class ReportInformationCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     if (report.reportType == ReportType.user) ...[
-                      DetailRow(
-                        label: 'Reported User',
-                        value: getUserDisplay(
-                          report.reportedEmployeeId ?? report.reportedItemId
-                        ),
-                        labelWidth: 130,
-                      ),
+                      _buildReportedUserSection(),
                     ] else if (report.reportType == ReportType.jobPost) ...[
                       _buildReportedPostSection(),
                       if (getPostOwnerId() != null && getPostOwnerId()!.isNotEmpty) ...[
@@ -307,6 +305,73 @@ class ReportInformationCard extends StatelessWidget {
                       ],
                     ),
                   ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReportedUserSection() {
+    final userId = report.reportedEmployeeId ?? report.reportedItemId;
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(
+            width: 130,
+            child: Text(
+              'Reported User',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                color: Colors.grey,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  getUserDisplay(userId),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Colors.black87,
+                  ),
+                ),
+                if (onViewUserDetails != null && getReportedUserId != null) ...[
+                  Builder(
+                    builder: (context) {
+                      final reportedUserId = getReportedUserId!();
+                      if (reportedUserId != null && reportedUserId.isNotEmpty) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              onPressed: onViewUserDetails,
+                              icon: const Icon(Icons.person, size: 16),
+                              label: const Text('View User Details'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.blue[700],
+                                side: BorderSide(color: Colors.blue[300]!),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ],
               ],
             ),
           ),

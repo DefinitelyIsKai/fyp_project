@@ -63,8 +63,6 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
     setState(() => _isLoading = true);
     try {
       
-      await _userService.checkAndAutoUnsuspendExpiredUsers();
-      
       final users = await _userService.getAllUsers();
       
       List<String> roles = [];

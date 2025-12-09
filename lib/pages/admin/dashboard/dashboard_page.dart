@@ -1,5 +1,6 @@
 ﻿import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:fyp_project/pages/admin/post_moderation/post_moderation_page.dart';
 import 'package:fyp_project/pages/admin/post_moderation/approve_reject_posts_page.dart';
@@ -12,7 +13,7 @@ import 'package:fyp_project/pages/admin/message_oversight/flagged_content_page.d
 import 'package:fyp_project/pages/admin/analytics/analytics_page.dart';
 import 'package:fyp_project/services/admin/auth_service.dart';
 import 'package:fyp_project/services/admin/dashboard_service.dart';
-import 'package:fyp_project/services/admin/user_service.dart';
+import 'package:fyp_project/services/user/cloud_functions_service.dart';
 import 'package:fyp_project/routes/app_routes.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -24,7 +25,7 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   final DashboardService _dashboardService = DashboardService();
-  final UserService _userService = UserService();
+  final CloudFunctionsService _cloudFunctionsService = CloudFunctionsService();
   StreamSubscription<int>? _reportsSubscription;
   StreamSubscription<int>? _pendingPostsSubscription;
 
@@ -59,6 +60,7 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void initState() {
     super.initState();
+    debugPrint('Dashboard: initState called');
     _loadDashboardData();
     _setupRealtimeUpdates();
   }
@@ -119,18 +121,36 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Future<void> _loadDashboardData() async {
-    if (!mounted) return;
+    debugPrint('Dashboard: _loadDashboardData called');
+    if (!mounted) {
+      debugPrint('Dashboard: Not mounted, returning early');
+      return;
+    }
     setState(() => _isLoading = true);
     try {
-      _userService.checkAndAutoUnsuspendExpiredUsers().catchError((e) {
-        debugPrint('Error in auto unsuspend check: $e');
-        return <String, dynamic>{
-          'success': false,
-          'error': e.toString(),
-          'unsuspendedCount': 0,
-          'unsuspendedUserNames': [],
-        };
-      });
+      debugPrint('Dashboard: Starting auto-approve and auto-unsuspend functions...');
+      
+      unawaited(
+        _cloudFunctionsService.autoApprovePendingPosts().then((result) {
+          debugPrint('Dashboard: Auto-approve result: ${result['success']}, approved: ${result['approvedCount']}');
+          if (result['success'] == false) {
+            debugPrint('Dashboard: Auto-approve error: ${result['message']}');
+          }
+        }).catchError((e) {
+          debugPrint('Dashboard: Error auto-approving posts: $e');
+        }),
+      );
+      
+      unawaited(
+        _cloudFunctionsService.autoUnsuspendExpiredUsers().then((result) {
+          debugPrint('Dashboard: Auto-unsuspend result: ${result['success']}, unsuspended: ${result['unsuspendedCount']}');
+          if (result['success'] == false) {
+            debugPrint('Dashboard: Auto-unsuspend error: ${result['message']}');
+          }
+        }).catchError((e) {
+          debugPrint('Dashboard: Error auto-unsuspending users: $e');
+        }),
+      );
       
       final users = await _dashboardService.getActiveUsersCount();
       final authService = Provider.of<AuthService>(context, listen: false);
