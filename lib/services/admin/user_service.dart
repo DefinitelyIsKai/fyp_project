@@ -792,6 +792,8 @@ class UserService {
     String? gender,
     double? latitude,
     double? longitude,
+    Map<String, dynamic>? image,
+    Map<String, dynamic>? resume,
   }) async {
     try {
       final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
@@ -816,6 +818,8 @@ class UserService {
       if (gender != null) updateData['gender'] = gender;
       if (latitude != null) updateData['latitude'] = latitude;
       if (longitude != null) updateData['longitude'] = longitude;
+      if (image != null) updateData['image'] = image;
+      if (resume != null) updateData['resume'] = resume;
       
       updateData['updatedAt'] = FieldValue.serverTimestamp();
       updateData['lastUpdatedBy'] = currentAdminId;

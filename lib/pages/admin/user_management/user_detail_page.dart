@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:fyp_project/models/admin/user_model.dart';
+import 'package:fyp_project/models/user/resume_attachment.dart';
 import 'package:fyp_project/services/admin/user_service.dart';
 import 'package:fyp_project/services/admin/auth_service.dart';
+import 'package:fyp_project/services/admin/profile_pic_service.dart';
+import 'package:fyp_project/utils/user/resume_utils.dart';
 import 'package:intl/intl.dart';
 import 'package:fyp_project/utils/admin/app_colors.dart';
 import 'package:fyp_project/widgets/admin/common/info_chip.dart';
@@ -17,6 +20,7 @@ import 'package:fyp_project/widgets/admin/tabs/credit_logs_tab.dart';
 import 'package:fyp_project/widgets/user/location_autocomplete_field.dart';
 import 'package:fyp_project/utils/admin/phone_number_formatter.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 
 class UserDetailPage extends StatefulWidget {
   final UserModel user;
@@ -45,6 +49,13 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
   String? _selectedGender;
   double? _latitude;
   double? _longitude;
+  
+  Map<String, dynamic>? _newImageData;
+  Map<String, dynamic>? _newResumeData;
+  bool _isUploadingImage = false;
+  bool _isUploadingResume = false;
+  
+  final ProfilePicService _profilePicService = ProfilePicService();
 
   @override
   void initState() {
@@ -90,19 +101,22 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
     
     if (currentAdmin == null) return false;
     
-    if (currentAdmin.id == _user.id) {
-      return false;
-    }
-    
     final currentRole = currentAdmin.role.toLowerCase();
     final targetRole = _user.role.toLowerCase();
     
+    // Manager can edit their own profile and other managers
+    if (currentRole == 'manager') {
+      return true;
+    }
+    
+    // Staff and HR cannot edit managers
     if ((currentRole == 'staff' || currentRole == 'hr') && targetRole == 'manager') {
       return false;
     }
     
-    if (currentRole == 'manager') {
-      return true;
+    // Staff and HR cannot edit their own profile
+    if ((currentRole == 'staff' || currentRole == 'hr') && currentAdmin.id == _user.id) {
+      return false;
     }
     
     return true;
@@ -114,13 +128,19 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
     
     if (currentAdmin == null) return false;
     
+    final currentRole = currentAdmin.role.toLowerCase();
+    
+    // Only managers can access account management
+    if (currentRole != 'manager') {
+      return false;
+    }
+    
+    // Managers cannot manage their own account (cannot delete/suspend themselves)
     if (currentAdmin.id == _user.id) {
       return false;
     }
     
-    final currentRole = currentAdmin.role.toLowerCase();
-    
-    return currentRole == 'manager';
+    return true;
   }
 
   Color _getRoleColor(String role) {
@@ -181,14 +201,14 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
   }
 
   Widget _buildProfileAvatar() {
-    final imageData = user.image;
+    final imageData = _newImageData ?? user.image;
     String? base64String;
     
     if (imageData != null && imageData['base64'] != null) {
       base64String = imageData['base64'] as String?;
     }
     
-    return Container(
+    Widget avatarWidget = Container(
       width: 100,
       height: 100,
       decoration: BoxDecoration(
@@ -205,6 +225,51 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
             : _buildPlaceholderAvatar(),
       ),
     );
+    
+    if (_isEditing && _canEditUser()) {
+      return GestureDetector(
+        onTap: _isUploadingImage ? null : _pickProfileImage,
+        child: Stack(
+          children: [
+            avatarWidget,
+            if (_isUploadingImage)
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  ),
+                ),
+              )
+            else
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.blue,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                  child: const Icon(
+                    Icons.camera_alt,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+    
+    return avatarWidget;
   }
 
   Widget _buildBase64Image(String base64String) {
@@ -252,6 +317,10 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
   }
 
   void _enterEditMode() {
+    if (_isEditing || _isSaving) {
+      return;
+    }
+    
     if (!_canEditUser()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -263,19 +332,33 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
       return;
     }
     
+    if (!mounted) return;
+    
     setState(() {
       _isEditing = true;
     });
   }
 
   void _cancelEdit() {
+    if (_isSaving) {
+      return;
+    }
+    
+    if (!mounted) return;
+    
     setState(() {
       _isEditing = false;
       _initializeControllers();
+      _newImageData = null;
+      _newResumeData = null;
     });
   }
 
   Future<void> _saveUserInfo() async {
+    if (_isSaving) {
+      return;
+    }
+    
     if (!_canEditUser()) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -291,6 +374,8 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
       }
       return;
     }
+
+    if (!mounted) return;
 
     setState(() {
       _isSaving = true;
@@ -317,9 +402,14 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
         gender: _selectedGender,
         latitude: _latitude,
         longitude: _longitude,
+        image: _newImageData,
+        resume: _newResumeData,
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        _isSaving = false;
+        return;
+      }
 
       if (result['success'] == true) {
         final userDoc = await FirebaseFirestore.instance
@@ -327,13 +417,18 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
             .doc(_user.id)
             .get();
         
-        if (userDoc.exists) {
+        if (userDoc.exists && mounted) {
           setState(() {
             _user = UserModel.fromJson(userDoc.data()!, userDoc.id);
             _isEditing = false;
             _isSaving = false;
+            _newImageData = null;
+            _newResumeData = null;
           });
           _initializeControllers();
+        } else if (!mounted) {
+          _isSaving = false;
+          return;
         }
 
         if (mounted) {
@@ -347,10 +442,10 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
           Navigator.pop(context, true);
         }
       } else {
-        setState(() {
-          _isSaving = false;
-        });
         if (mounted) {
+          setState(() {
+            _isSaving = false;
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Error updating user: ${result['error']}'),
@@ -358,13 +453,15 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
               behavior: SnackBarBehavior.floating,
             ),
           );
+        } else {
+          _isSaving = false;
         }
       }
     } catch (e) {
-      setState(() {
-        _isSaving = false;
-      });
       if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error updating user: $e'),
@@ -372,6 +469,8 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
             behavior: SnackBarBehavior.floating,
           ),
         );
+      } else {
+        _isSaving = false;
       }
     }
   }
@@ -535,7 +634,7 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
           ] else if (_canEditUser())
             IconButton(
               icon: const Icon(Icons.edit),
-              onPressed: _enterEditMode,
+              onPressed: (_isEditing || _isSaving) ? null : _enterEditMode,
               tooltip: 'Edit',
             ),
         ],
@@ -585,6 +684,11 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
                 if (user.tags != null && user.tags!.isNotEmpty)
                   _buildTagsCard(),
                 if (user.tags != null && user.tags!.isNotEmpty)
+                  const SizedBox(height: 20),
+
+                if ((user.resume != null || _newResumeData != null) || _isEditing)
+                  _buildResumeCard(),
+                if ((user.resume != null || _newResumeData != null) || _isEditing)
                   const SizedBox(height: 20),
 
                 if (!_isEditing && _canAccessAccountManagement())
@@ -1129,6 +1233,181 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
     );
   }
 
+  Widget _buildResumeCard() {
+    final resumeData = _newResumeData ?? user.resume;
+    final attachment = resumeData != null ? ResumeAttachment.fromMap(resumeData) : null;
+    
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.description_outlined, color: Colors.blue[700]),
+                const SizedBox(width: 8),
+                Text(
+                  'Resume',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.blue[700],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (_isEditing && _canEditUser()) ...[
+              if (attachment != null) ...[
+                Row(
+                  children: [
+                    Icon(Icons.insert_drive_file, color: Colors.grey[600]),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            attachment.fileName,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            '${attachment.fileType.toUpperCase()} • ${resumeData != null ? _formatResumeUploadDate(resumeData) : 'Unknown date'}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (!_isUploadingResume)
+                      IconButton(
+                        icon: const Icon(Icons.visibility),
+                        onPressed: _viewResume,
+                        tooltip: 'View Resume',
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+              ],
+              ElevatedButton.icon(
+                onPressed: _isUploadingResume || _isSaving ? null : _pickResume,
+                icon: _isUploadingResume
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.upload_file),
+                label: Text(_isUploadingResume
+                    ? 'Uploading...'
+                    : attachment != null
+                        ? 'Change Resume'
+                        : 'Upload Resume'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue[700],
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ] else if (attachment != null) ...[
+              InkWell(
+                onTap: _viewResume,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.blue[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue[200]!),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue[700],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.description,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              attachment.fileName,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${attachment.fileType.toUpperCase()} • ${resumeData != null ? _formatResumeUploadDate(resumeData) : 'Unknown date'}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right,
+                        color: Colors.grey[600],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ] else ...[
+              Text(
+                'No resume uploaded',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+  
+  String _formatResumeUploadDate(Map<String, dynamic> resumeData) {
+    try {
+      final uploadedAt = resumeData['uploadedAt'];
+      if (uploadedAt == null) return 'Unknown date';
+      
+      if (uploadedAt is String) {
+        final date = DateTime.tryParse(uploadedAt);
+        if (date != null) {
+          return _formatDate(date);
+        }
+      } else if (uploadedAt is Timestamp) {
+        return _formatDate(uploadedAt.toDate());
+      }
+      
+      return 'Unknown date';
+    } catch (e) {
+      return 'Unknown date';
+    }
+  }
+  
   Widget _buildTagsCard() {
     if (user.tags == null || user.tags!.isEmpty) {
       return const SizedBox.shrink();
@@ -1214,6 +1493,199 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
     );
   }
 
+  Future<void> _pickProfileImage() async {
+    if (!_canEditUser()) return;
+    
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Choose from Gallery'),
+              onTap: () async {
+                Navigator.pop(context);
+                await _selectImageFromGallery();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Take Photo'),
+              onTap: () async {
+                Navigator.pop(context);
+                await _selectImageFromCamera();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Future<void> _selectImageFromGallery() async {
+    try {
+      setState(() => _isUploadingImage = true);
+      
+      final result = await _profilePicService.pickImageBase64(fromCamera: false);
+      
+      if (result != null && mounted) {
+        setState(() {
+          _newImageData = {
+            'base64': result['base64'],
+            'fileType': result['fileType'],
+            'uploadedAt': DateTime.now().toIso8601String(),
+          };
+          _isUploadingImage = false;
+        });
+      } else {
+        if (mounted) {
+          setState(() => _isUploadingImage = false);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUploadingImage = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error selecting image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+  
+  Future<void> _selectImageFromCamera() async {
+    try {
+      setState(() => _isUploadingImage = true);
+      
+      final result = await _profilePicService.pickImageBase64(fromCamera: true);
+      
+      if (result != null && mounted) {
+        setState(() {
+          _newImageData = {
+            'base64': result['base64'],
+            'fileType': result['fileType'],
+            'uploadedAt': DateTime.now().toIso8601String(),
+          };
+          _isUploadingImage = false;
+        });
+      } else {
+        if (mounted) {
+          setState(() => _isUploadingImage = false);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUploadingImage = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error taking photo: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+  
+  Future<void> _pickResume() async {
+    if (!_canEditUser()) return;
+    
+    try {
+      setState(() => _isUploadingResume = true);
+      
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        withData: true,
+      );
+      
+      if (result == null || result.files.isEmpty) {
+        setState(() => _isUploadingResume = false);
+        return;
+      }
+      
+      final file = result.files.single;
+      if (file.bytes == null) {
+        setState(() => _isUploadingResume = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to read file'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      
+      const int maxOriginalSize = 650 * 1024;
+      if (file.bytes!.length > maxOriginalSize) {
+        setState(() => _isUploadingResume = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('File is too large (${(file.bytes!.length / 1024 / 1024).toStringAsFixed(2)}MB). Maximum size is 650KB.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      
+      final base64String = base64Encode(file.bytes!);
+      String fileName = file.name.trim();
+      if (fileName.isEmpty) {
+        fileName = 'Resume.pdf';
+      }
+      
+      if (mounted) {
+        setState(() {
+          _newResumeData = {
+            'base64': base64String,
+            'fileName': fileName,
+            'fileType': 'pdf',
+            'uploadedAt': DateTime.now().toIso8601String(),
+          };
+          _isUploadingResume = false;
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Resume selected successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUploadingResume = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error selecting resume: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+  
+  Future<void> _viewResume() async {
+    final resumeData = _newResumeData ?? user.resume;
+    if (resumeData == null) return;
+    
+    final attachment = ResumeAttachment.fromMap(resumeData);
+    if (attachment == null) return;
+    
+    final success = await openResumeAttachment(attachment);
+    if (!success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to open resume file'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
+  }
+  
   String _getTagCategoryName(String categoryId, List<dynamic> tagsList) {
     if (tagsList.isEmpty) return 'Tags';
     

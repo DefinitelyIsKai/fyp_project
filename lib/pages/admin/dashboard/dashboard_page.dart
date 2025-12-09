@@ -447,12 +447,6 @@ class _DashboardPageState extends State<DashboardPage> {
                       'Role',
                       admin.role.toUpperCase(),
                     ),
-                    const SizedBox(height: 20),
-                    _buildProfileRow(
-                      Icons.shield_outlined,
-                      'Permissions',
-                      '${admin.permissions.length} permission(s)',
-                    ),
                     if (admin.lastLoginAt != null) ...[
                       const SizedBox(height: 20),
                       _buildProfileRow(
