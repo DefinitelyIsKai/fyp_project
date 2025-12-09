@@ -41,7 +41,7 @@ class LocationAutocompleteService {
     }
   }
 
-  //formatted addressplace ID
+ 
   static Future<String?> getPlaceDetails(String placeId) async {
     try {
       final url = Uri.parse(

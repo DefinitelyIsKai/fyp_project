@@ -60,7 +60,6 @@ class NotificationService {
     }
   }
 
-  //Stream notifications   real-time 
   Stream<List<AppNotification>> streamNewNotifications({int limit = 1}) {
     if (_auth.currentUser == null) {
       return Stream.value(<AppNotification>[]);

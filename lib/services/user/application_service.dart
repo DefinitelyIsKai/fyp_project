@@ -126,7 +126,6 @@ class ApplicationService {
   //applications jobseeker 
   Stream<List<Application>> streamMyApplications() {
     final jobseekerId = _authService.currentUserId;
-    //check
     checkAndAutoRejectApplications();
     _processHeldCreditsForApplications(jobseekerId);
     return _col.where('jobseekerId', isEqualTo: jobseekerId).snapshots().map((
@@ -185,7 +184,6 @@ class ApplicationService {
             }
           }
 
-          //succeeded then boolean true
           if (processed) {
             await appDoc.reference.set({
               'creditsProcessed': true,
@@ -219,7 +217,6 @@ class ApplicationService {
     });
   }
 
-  //check applied
   Future<bool> hasApplied(String postId) async {
     final jobseekerId = _authService.currentUserId;
     final result = await _col
@@ -262,7 +259,6 @@ class ApplicationService {
         });
   }
 
-  //approval
   Future<void> approveApplication(String applicationId) async {
     final docRef = _col.doc(applicationId);
     final snapshot = await docRef.get();
@@ -396,7 +392,6 @@ class ApplicationService {
     }
   }
 
-  //reject application
   Future<void> rejectApplication(String applicationId) async {
     final docRef = _col.doc(applicationId);
     final snapshot = await docRef.get();
@@ -453,7 +448,6 @@ class ApplicationService {
       
         await docRef.set({'creditsProcessed': true}, SetOptions(merge: true));
         
-        //notification 
         if (success) {
           try {
             await _notificationService.notifyWalletCredit(
@@ -484,7 +478,7 @@ class ApplicationService {
     }
   }
 
-  // Check if application is approved (for messaging permission)
+
   Future<bool> isApplicationApproved(String postId, String jobseekerId) async {
     final result = await _col
         .where('postId', isEqualTo: postId)
@@ -495,9 +489,6 @@ class ApplicationService {
     return result.docs.isNotEmpty;
   }
 
-  // Get count of approved applications for a post
-  // Reads from post document for efficiency and to allow jobseekers to check quota
-  // If field is missing (old posts), initializes it by calculating from applications
   Future<int> getApprovedApplicationsCount(String postId) async {
     try {
       final postDoc = await _firestore.collection('posts').doc(postId).get();
@@ -506,7 +497,7 @@ class ApplicationService {
       }
       final postData = postDoc.data();
 
-      // Helper to safely parse int from Firestore (handles int, double, num)
+    
       int? _parseInt(dynamic value) {
         if (value == null) return null;
         if (value is int) return value;
@@ -516,35 +507,27 @@ class ApplicationService {
         return null;
       }
 
-      // Check if approvedApplicants field exists
       if (postData?.containsKey('approvedApplicants') == true) {
-        // Field exists, return the value
         final approvedCount = _parseInt(postData?['approvedApplicants']) ?? 0;
         return approvedCount;
       }
 
-      // Field is missing (old post) - need to initialize it
-      // Get post owner to query applications
       final ownerId = postData?['ownerId'] as String?;
       if (ownerId == null || ownerId.isEmpty) {
         return 0;
       }
 
-      // Calculate approved count from applications
-      // Only works if current user is the recruiter (due to security rules)
+
       final currentUserId = _authService.currentUserId;
       if (currentUserId != ownerId) {
-        // Jobseeker viewing - can't query by recruiterId
-        // Try to initialize asynchronously (fire and forget) by checking if we can access
-        // For now, return a safe default - the field will be initialized when recruiter views
-        // This means jobseekers might see incorrect status until recruiter initializes it
+       
         _initializeApprovedApplicantsIfMissing(postId, ownerId).catchError((e) {
           debugPrint('Background initialization failed: $e');
         });
-        return 0; // Safe default for jobseekers until field is initialized
+        return 0; 
       }
 
-      // Recruiter can query - calculate and initialize the field
+
       try {
         final approvedApplications = await _col
             .where('postId', isEqualTo: postId)
@@ -554,7 +537,6 @@ class ApplicationService {
 
         final approvedCount = approvedApplications.docs.length;
 
-        // Initialize the field in post document for future reads
         await _firestore.collection('posts').doc(postId).update({
           'approvedApplicants': approvedCount,
         });
@@ -580,8 +562,6 @@ class ApplicationService {
     }
   }
 
-  // Get all applications for a post (for notifications, etc.)
-  // Requires recruiterId to comply with Firestore security rules
   Future<List<Application>> getApplicationsByPostId({
     required String postId,
     required String recruiterId,
@@ -691,7 +671,7 @@ class ApplicationService {
             eventStartDate.day,
           );
 
-          // Only auto-reject if event starts today or has already passed
+          //auto-reject event starts today or has already passed
           if (eventStartDateOnly.isAtSameMomentAs(today) || eventStartDateOnly.isBefore(today)) {
             for (final appDoc in applications) {
               final appData = appDoc.data() as Map<String, dynamic>?;
@@ -786,7 +766,7 @@ class ApplicationService {
         eventStartDate.day,
       );
 
-      // Only auto-reject if event starts today or has already passed
+      //auto-reject if event starts today or has already passed
       if (eventStartDateOnly.isAtSameMomentAs(today) || eventStartDateOnly.isBefore(today)) {
         await appDoc.reference.update({
           'status': 'rejected',

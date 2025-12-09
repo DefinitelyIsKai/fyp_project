@@ -3,36 +3,30 @@ import 'package:flutter/material.dart';
 import '../../services/user/storage_service.dart';
 import '../../utils/user/dialog_utils.dart';
 
-/// A reusable image upload section widget
-/// 
-/// Displays a grid of uploaded images with the ability to add and remove images.
-/// Used for post attachments, profile images, etc.
+
 class ImageUploadSection extends StatefulWidget {
-  /// The list of image URLs to display
+
   final List<String> images;
   
-  /// Callback when images are added
+
   final Function(List<String> newUrls) onImagesAdded;
-  
-  /// Callback when an image is removed
+
   final Function(int index) onImageRemoved;
   
-  /// The title/header text
+ 
   final String title;
   
-  /// Optional description text
   final String? description;
   
-  /// The storage service to use for uploading
+
   final StorageService storageService;
   
-  /// The ID to use for organizing uploads (e.g., postId, userId)
+ 
   final String uploadId;
   
-  /// Whether the section is disabled (e.g., during save)
+ 
   final bool disabled;
   
-  /// Maximum number of images allowed (null for unlimited)
   final int? maxImages;
 
   const ImageUploadSection({
@@ -55,16 +49,15 @@ class ImageUploadSection extends StatefulWidget {
 class _ImageUploadSectionState extends State<ImageUploadSection> {
   bool _isUploading = false;
 
-  /// Build widget to display base64 image
+ 
   Widget _buildBase64Image(String base64String) {
     try {
-      // Clean the base64 string - remove any whitespace
+     
       final cleanBase64 = base64String.trim().replaceAll(RegExp(r'\s+'), '');
       
-      // Decode base64 to bytes
+      //decode
       final bytes = base64Decode(cleanBase64);
       
-      // Use Image.memory to display the image
       return Image.memory(
         bytes,
         fit: BoxFit.cover,
@@ -81,7 +74,6 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
     } catch (e) {
       print('Error decoding base64 image: $e');
       print('Base64 string length: ${base64String.length}');
-      // Try as data URI as fallback
       try {
         return _buildDataUriImage('data:image/jpeg;base64,$base64String');
       } catch (e2) {
@@ -103,11 +95,10 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
     }
   }
 
-  /// Build widget to display data URI image
+
   Widget _buildDataUriImage(String dataUri) {
     try {
-      // Extract base64 part from data URI
-      // Format: data:image/jpeg;base64,{base64String}
+      //extract base64 part from data URL
       final base64String = dataUri.split(',').length > 1 
           ? dataUri.split(',')[1] 
           : dataUri;
@@ -124,7 +115,6 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
       );
     } catch (e) {
       print('Error decoding data URI image: $e');
-      // Fallback to Image.network
       return Image.network(
         dataUri,
         fit: BoxFit.cover,
@@ -141,7 +131,6 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
   Future<void> _pickAndUploadImages() async {
     if (widget.disabled || _isUploading) return;
     
-    // Check if we've reached the maximum number of images
     if (widget.maxImages != null && widget.images.length >= widget.maxImages!) {
       if (mounted) {
         DialogUtils.showWarningMessage(
@@ -153,7 +142,6 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
       return;
     }
     
-    // Set uploading state
     if (mounted) {
       setState(() {
         _isUploading = true;
@@ -161,18 +149,17 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
     }
     
     try {
-      // Only pick images and convert to base64, don't upload to Firestore yet
+
       final urls = await widget.storageService.pickPostImages();
       
       if (urls.isNotEmpty && mounted) {
-        // Limit the number of images to add based on maxImages
         if (widget.maxImages != null) {
           final remainingSlots = widget.maxImages! - widget.images.length;
           if (remainingSlots > 0) {
             final imagesToAdd = urls.take(remainingSlots).toList();
             widget.onImagesAdded(imagesToAdd);
             
-            // If user selected more images than allowed, show a message
+          
             if (urls.length > remainingSlots && mounted) {
               DialogUtils.showWarningMessage(
                 context: context,
@@ -193,19 +180,24 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
           widget.onImagesAdded(urls);
         }
       }
-      // Note: If urls.isEmpty, user likely cancelled the selection - this is not an error
-      // Only show error in catch block for actual exceptions
+     
     } catch (e) {
-      // Show error message to user
+  
       if (mounted) {
+        String errorMessage = e.toString();
+       
+        if (errorMessage.startsWith('Exception: ')) {
+          errorMessage = errorMessage.substring(11);
+        }
+        
         DialogUtils.showWarningMessage(
           context: context,
-          message: 'Error uploading images: ${e.toString()}',
-          duration: const Duration(seconds: 4),
+          message: errorMessage,
+          duration: const Duration(seconds: 5),
         );
       }
     } finally {
-      // Reset uploading state
+   
       if (mounted) {
         setState(() {
           _isUploading = false;
@@ -322,13 +314,9 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
             itemBuilder: (context, index) {
               final imageData = widget.images[index];
               
-              // Check if it's a base64 string, HTTP URL, or data URI
+
               final bool isHttpUrl = imageData.startsWith('http://') || imageData.startsWith('https://');
               final bool isDataUri = imageData.startsWith('data:image/');
-              
-              // Base64 strings are typically long (hundreds to thousands of characters)
-              // and contain only base64 characters: A-Z, a-z, 0-9, +, /, =
-              // They don't start with http:// or data:
               final bool looksLikeBase64 = imageData.length > 100 && 
                   !isHttpUrl && 
                   !isDataUri &&

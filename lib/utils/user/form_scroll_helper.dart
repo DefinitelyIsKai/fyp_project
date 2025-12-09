@@ -6,7 +6,7 @@ class FormValidationHelper {
     final formState = formKey.currentState;
     if (formState == null) return false;
     
-    // Validate the form
+    // validate the form
     final isValid = formState.validate();
     
     if (!isValid) {

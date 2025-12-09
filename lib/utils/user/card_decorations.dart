@@ -82,7 +82,6 @@ class CardDecorations {
     );
   }
 
-  /// Card decoration for unread/active items
   static BoxDecoration unread({
     double? borderRadius,
   }) {
@@ -103,7 +102,6 @@ class CardDecorations {
     );
   }
 
-  /// Card decoration for read/inactive items
   static BoxDecoration read({
     double? borderRadius,
   }) {

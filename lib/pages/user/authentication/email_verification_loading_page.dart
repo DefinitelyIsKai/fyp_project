@@ -19,7 +19,7 @@ class _EmailVerificationLoadingPageState extends State<EmailVerificationLoadingP
   Timer? _cooldownTimer;
   bool _checking = false;
   bool _resending = false;
-  int _resendCooldown = 0; // Cooldown in seconds
+  int _resendCooldown = 0; 
 
   @override
   void initState() {
@@ -76,7 +76,7 @@ class _EmailVerificationLoadingPageState extends State<EmailVerificationLoadingP
         context: context,
         message: 'Verification email resent. Please check your inbox.',
       );
-      // Start cooldown after successful resend (60 seconds)
+      //after successful resend 1min
       if (mounted) {
         setState(() {
           _resendCooldown = 60;
@@ -89,7 +89,7 @@ class _EmailVerificationLoadingPageState extends State<EmailVerificationLoadingP
       
       if (e.code == 'too-many-requests') {
         errorMessage = 'Too many requests. Please wait a few minutes before trying again.';
-        // Set longer cooldown for rate limit errors (5 minutes = 300 seconds)
+        //5min delay
         if (mounted) {
           setState(() {
             _resendCooldown = 300;

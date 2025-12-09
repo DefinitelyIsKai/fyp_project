@@ -45,7 +45,6 @@ class TagSelectionSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: tagCategoriesWithTags.entries
           .where((entry) {
-            // Only show categories that have at least one active tag
             final activeTags = entry.value.where((tag) => tag.isActive).toList();
             return activeTags.isNotEmpty;
           })

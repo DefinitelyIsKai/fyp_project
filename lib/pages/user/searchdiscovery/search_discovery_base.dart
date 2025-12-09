@@ -12,7 +12,6 @@ import '../../../widgets/user/search_discovery_widgets.dart';
 import '../../../widgets/admin/dialogs/user_dialogs/search_filter_dialog.dart';
 import 'dart:async';
 
-/// Base class for shared search/discovery functionality
 abstract class SearchDiscoveryBase extends StatefulWidget {
   const SearchDiscoveryBase({super.key, this.initialSelectedEvents});
 
@@ -52,18 +51,16 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
   List<Post>? _lastPosts;
   static const int _itemsPerPage = 10;
 
-  // Cache for posts stream to avoid multiple stream creation
   Stream<List<Post>>? _cachedPostsStream;
 
   Future<void> refreshData() async {
     setState(() {
-      // Clear cached stream to force refresh
+
       _cachedPostsStream = null;
       _lastPosts = null;
       _pages = [];
       _currentPage = 0;
     });
-    // Re-fetch location if needed
     _getCurrentLocation();
     await Future.delayed(const Duration(milliseconds: 100));
   }
@@ -71,19 +68,17 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
   @override
   void initState() {
     super.initState();
-    // Clear any cached data when widget is recreated (e.g., role switch)
     _cachedPostsStream = null;
     _lastPosts = null;
     _pages = [];
     _currentPage = 0;
     
-    // Apply initial filters if provided
     if (widget.initialSelectedEvents != null &&
         widget.initialSelectedEvents!.isNotEmpty) {
       _selectedEvents = List<String>.from(widget.initialSelectedEvents!);
     }
     
-    // Add listener for real-time search updates
+    //listener 
     _searchController.addListener(_onSearchTextChanged);
     
     _getCurrentLocation();
@@ -100,7 +95,7 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
     super.dispose();
   }
 
-  // Getters for subclasses
+  //getter
   String? get searchQuery => _searchQuery;
   String? get locationFilter => _locationFilter;
   double? get minBudget => _minBudget;
@@ -124,7 +119,7 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
   CategoryService get categoryService => _categoryService;
   TextEditingController get searchController => _searchController;
 
-  // Setters for subclasses
+  //setter
   void setMapView(bool value) {
     setState(() {
       _isMapView = value;
@@ -318,7 +313,7 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
         _cachedPostsStream = null;
       });
 
-      // Center map on user location if map view is active
+      //center map 
       if (_isMapView && _mapController != null && mounted && _mapChannelReady) {
         final success = await MapHelper.safeCameraOperation(
           _mapController!,
@@ -327,7 +322,6 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
           ),
         );
         if (!success) {
-          // Try moveCamera as fallback
           await MapHelper.safeCameraOperation(
             _mapController!,
             () => _mapController!.moveCamera(
@@ -514,7 +508,7 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
                   circleId: const CircleId('user_radius'),
                   center: _userLocation!,
                   radius: _searchRadius! * 1000, //km
-                  fillColor: const Color(0x3300C8A0), //
+                  fillColor: const Color(0x3300C8A0), 
                   strokeColor: const Color(0xFF00C8A0),
                   strokeWidth: 2,
                 ),
@@ -691,7 +685,7 @@ abstract class SearchDiscoveryBaseState<T extends SearchDiscoveryBase>
   Widget buildMapView() {
     LatLng initialTarget =
         _userLocation ??
-        const LatLng(2.7456, 101.7072); // Default to Malaysia center
+        const LatLng(2.7456, 101.7072); //Mly center
     double initialZoom = _userLocation != null ? 12 : 5;
 
     Set<Marker> allMarkers = _showJobMarkers

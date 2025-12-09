@@ -383,24 +383,22 @@ class EmailService {
     ''';
   }
 
-  /// Send OTP email for admin login verification
   Future<void> sendOtpEmail({
     required String recipientEmail,
     required String recipientName,
     required String otp,
   }) async {
     try {
-      // Create SMTP server configuration
+
       final smtpServer = SmtpServer(
         _smtpHost,
         port: _smtpPort,
-        ssl: false, // Use STARTTLS, not SSL
+        ssl: false, 
         allowInsecure: false,
         username: _senderEmail,
         password: _senderPassword,
       );
 
-      // Create email message
       final message = Message()
         ..from = Address(_senderEmail, 'JobSeek Admin Portal')
         ..recipients.add(recipientEmail)
@@ -414,7 +412,6 @@ class EmailService {
           otp: otp,
         );
 
-      // Send email
       debugPrint('Attempting to send OTP email via SMTP...');
       debugPrint('SMTP Host: $_smtpHost');
       debugPrint('SMTP Port: $_smtpPort');

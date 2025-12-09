@@ -27,12 +27,11 @@ class CategoryService {
           .map((doc) => Category.fromFirestore(doc))
           .toList();
       
-      //sort alphabetically
+      //sort alphabe
       categories.sort((a, b) => a.name.compareTo(b.name));
       
       return categories;
     } catch (e) {
-      //return empty list 
       return [];
     }
   }
@@ -53,7 +52,6 @@ class CategoryService {
         });
   }
 
-  //fetch a single category by ID
   Future<Category?> getById(String id) async {
     try {
       final doc = await _col.doc(id).get();
@@ -163,7 +161,6 @@ class CategoryService {
         });
   }
 
-  //category by name 
   Future<Category?> findByName(String name) async {
     try {
       final snapshot = await _col
@@ -183,7 +180,6 @@ class CategoryService {
     }
   }
 
-  //increment jobCount 
   Future<void> incrementJobCount(String categoryName) async {
     try {
       final category = await findByName(categoryName);

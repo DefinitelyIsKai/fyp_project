@@ -119,7 +119,6 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Header
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -195,7 +194,7 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
           ),
         ),
 
-        //Pull to refresh
+        //refresh
         Expanded(
           child: RefreshIndicator(
             onRefresh: _refreshData,
@@ -289,8 +288,6 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
 
                       final slots = snapshot.data ?? [];
                       final processed = _processSlots(slots);
-
-                      //get pending dates - use StreamBuilder for real-time updates
                       return StreamBuilder<Set<String>>(
                         stream: _availabilityService
                             .streamRequestedSlotIdsForRecruiter(
@@ -404,14 +401,13 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
                           );
                         }
 
-                        // validate pending requests - use StreamBuilder for real-time updates
+
                         return StreamBuilder<Set<String>>(
                           stream: _availabilityService
                               .streamRequestedSlotIdsForRecruiter(
                                 _authService.currentUserId,
                               ),
                           builder: (context, requestedSnapshot) {
-                            // Show loading while requestedSlotIds is being fetched
                             if (requestedSnapshot.connectionState == ConnectionState.waiting) {
                               return const Center(
                                 child: Padding(

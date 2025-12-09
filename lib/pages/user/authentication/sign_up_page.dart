@@ -35,12 +35,10 @@ class _SignUpPageState extends State<SignUpPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _submitting = true);
     try {
-      // Check email status (exists and verified)
       final emailStatus = await _authService.checkEmailStatus(_emailController.text);
       
       if (emailStatus['exists'] == true) {
         if (emailStatus['verified'] == true) {
-          // Email exists and is verified
           if (!mounted) return;
           DialogUtils.showWarningMessage(
             context: context,
@@ -48,31 +46,29 @@ class _SignUpPageState extends State<SignUpPage> {
           );
           return;
         } else {
-          // Email exists but not verified - try to login and resend verification
+          //not verified resend 
           try {
             final credential = await _authService.signIn(
               email: _emailController.text,
               password: _passwordController.text,
             );
             
-            // Check if email is still not verified
+            //still not 
             await credential.user?.reload();
             if (!(credential.user?.emailVerified ?? false)) {
-              // Resend verification email
               await _authService.resendVerificationEmail();
               if (!mounted) return;
               DialogUtils.showSuccessMessage(
                 context: context,
                 message: 'Verification email resent. Please check your inbox.',
               );
-              // Navigate to verification page
+        
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(builder: (_) => const EmailVerificationLoadingPage()),
               );
               return;
             } else {
-              // Email is now verified, proceed to login
               if (!mounted) return;
               DialogUtils.showSuccessMessage(
                 context: context,
@@ -81,7 +77,6 @@ class _SignUpPageState extends State<SignUpPage> {
               return;
             }
           } on FirebaseAuthException catch (authError) {
-            // Wrong password or other auth error
             if (!mounted) return;
             if (authError.code == 'wrong-password' || authError.code == 'user-not-found') {
               DialogUtils.showWarningMessage(
@@ -99,7 +94,7 @@ class _SignUpPageState extends State<SignUpPage> {
         }
       }
       
-      // Email doesn't exist, proceed with registration
+    
       await _authService.registerUser(
         fullName: _nameController.text,
         email: _emailController.text,
@@ -114,8 +109,6 @@ class _SignUpPageState extends State<SignUpPage> {
       if (!mounted) return;
       String message = e.message ?? 'Sign up failed';
       if (e.code == 'email-already-in-use') {
-        // This means email exists in Firebase Auth but might not be in Firestore
-        // Try to handle it by attempting login
         try {
           final credential = await _authService.signIn(
             email: _emailController.text,
@@ -136,7 +129,7 @@ class _SignUpPageState extends State<SignUpPage> {
             return;
           }
         } catch (_) {
-          // Login failed, show original error
+          
         }
         message = 'Email already in use. Please login instead.';
       }

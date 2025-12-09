@@ -39,13 +39,12 @@ class JobseekerSlotsList extends StatefulWidget {
 }
 
 class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
-  bool _hasNotifiedLoaded = false; //track if already notified head
-  DateTime? _lastNotifiedDate; //track last notified 
+  bool _hasNotifiedLoaded = false; 
+  DateTime? _lastNotifiedDate; 
 
   @override
   void didUpdateWidget(JobseekerSlotsList oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Reset notification state if date changed
     final oldDate = DateTime(oldWidget.selectedDate.year, oldWidget.selectedDate.month, oldWidget.selectedDate.day);
     final newDate = DateTime(widget.selectedDate.year, widget.selectedDate.month, widget.selectedDate.day);
     if (oldDate != newDate) {
@@ -83,7 +82,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
           if (approvedRecruiterIdsSet.contains(widget.selectedRecruiterId!)) {
             approvedRecruiterIds = {widget.selectedRecruiterId!};
           } else {
-            // Selected recruiter doesn't have an approved application
             approvedRecruiterIds = {};
           }
         } else {
@@ -149,7 +147,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                   widget.selectedDate.day,
                 );
                 
-                // Always notify if date changed, or if we haven't notified yet
                 if (_lastNotifiedDate == null || 
                     _lastNotifiedDate!.year != currentDate.year ||
                     _lastNotifiedDate!.month != currentDate.month ||
@@ -161,7 +158,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                     widget.onSlotsLoaded?.call();
                   });
                 } else if (!_hasNotifiedLoaded) {
-                  // If same date but haven't notified yet, notify now
                   _hasNotifiedLoaded = true;
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     widget.onSlotsLoaded?.call();
@@ -204,11 +200,10 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                 final application = applicationToUse!;
                 final applicationId = application.id;
                 
-                // First, check post data to filter by eventEndDate BEFORE displaying slots
+              
                 return StreamBuilder<Post?>(
                   stream: widget.postService.streamPostById(application.postId),
                   builder: (context, postSnapshot) {
-                    // Show loading while post data is being fetched
                     if (postSnapshot.connectionState == ConnectionState.waiting) {
                       return const Center(
                         child: CircularProgressIndicator(
@@ -219,7 +214,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                     
                     final post = postSnapshot.data;
                     
-                    // Filter slots by eventEndDate BEFORE any other processing
                     final dateFilteredSlots = recruiterSlots.where((slot) {
                       if (post != null && post.eventEndDate != null) {
                         final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
@@ -230,7 +224,7 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                         );
                         
                         if (slotDateOnly.isAfter(eventEndDateOnly)) {
-                          return false; // Don't show slots after event end date
+                          return false;
                         }
                       }
                       return true;
@@ -267,7 +261,7 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                         break; 
                       }
                     }
-                    // Use post from the outer StreamBuilder to check completion status
+
                     final isPostCompleted = post?.status == PostStatus.completed;
                     
                     return StreamBuilder<Set<String>>(
@@ -279,8 +273,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                         final requestedSlotIds = (requestedSnapshot.data ?? <String>{});
 
                         final filteredSlots = dateFilteredSlots.where((slot) {
-                          // Post eventEndDate filtering already done above
-                          // Now filter by booking status
                           if (slot.bookedBy != null && slot.matchId == applicationId) {
                             return true; 
                           }
@@ -349,7 +341,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                                       ),
                                     ),
                                     const SizedBox(width: 12),
-                                    // Time range text
                                     Expanded(
                                       child: Text(
                                         slot.timeDisplay,
@@ -360,7 +351,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                                         ),
                                       ),
                                     ),
-                                    // Request button or status
                                     if (isBooked)
                                       Container(
                                         padding: const EdgeInsets.symmetric(
@@ -458,7 +448,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                   },
                 );
               } else {
-                // No application selected
                 if (recruiterSlots.isEmpty) {
                   return Padding(
                     padding: const EdgeInsets.all(32.0),
@@ -528,11 +517,11 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
               }
             }
 
-            //group slots by recruiter (when no specific recruiter selected)
+            //group slots by recruiter 
             final jobseekerId = widget.authService.currentUserId;
             final applicationId = widget.selectedApplication?.id;
             
-            // First check if we have a selected application and get post data
+
             if (widget.selectedApplication == null) {
               return const SizedBox.shrink();
             }
@@ -540,7 +529,7 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
             return StreamBuilder<Post?>(
               stream: widget.postService.streamPostById(widget.selectedApplication!.postId),
               builder: (context, postSnapshot) {
-                // Show loading while post data is being fetched
+                //loading 
                 if (postSnapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: CircularProgressIndicator(
@@ -551,7 +540,7 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                 
                 final post = postSnapshot.data;
                 
-                // Filter slots by eventEndDate BEFORE grouping by recruiter
+
                 final allDateFilteredSlots = slots.where((slot) {
                   if (post != null && post.eventEndDate != null) {
                     final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
@@ -562,19 +551,18 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                     );
                     
                     if (slotDateOnly.isAfter(eventEndDateOnly)) {
-                      return false; // Don't show slots after event end date
+                      return false; 
                     }
                   }
                   return true;
                 }).toList();
                 
-                // Now group filtered slots by recruiter
+               
                 final slotsByRecruiter = <String, List<AvailabilitySlot>>{};
                 for (final slot in allDateFilteredSlots) {
                   slotsByRecruiter.putIfAbsent(slot.recruiterId, () => []).add(slot);
                 }
                  
-                 // Use post from the outer StreamBuilder to check completion status
                  final isPostCompleted = post?.status == PostStatus.completed;
                  
                  return StreamBuilder<Set<String>>(
@@ -601,13 +589,13 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                          final currentApplication = application!;
                          final matchApplicationId = currentApplication.id;
 
-                         // Slots are already filtered by eventEndDate above
+  
                          final dateFilteredSlots = recruiterSlots;
 
                          final unavailableSlots = <String>{};
                          for (int i = 0; i < dateFilteredSlots.length; i++) {
                            if (dateFilteredSlots[i].bookedBy != null) {
-                             // Mark all subsequent slots as unavailable
+      
                              for (int j = i + 1; j < dateFilteredSlots.length; j++) {
                                unavailableSlots.add(dateFilteredSlots[j].id);
                              }
@@ -704,7 +692,7 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                                                  ),
                                                ),
                                                const SizedBox(width: 12),
-                                               // Time range text
+                                      
                                                Expanded(
                                                  child: Text(
                                                    slot.timeDisplay,
@@ -715,7 +703,7 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                                                    ),
                                                  ),
                                                ),
-                                               // Request button or status
+                                  
                                                if (isBooked)
                                                  Container(
                                                    padding: const EdgeInsets.symmetric(

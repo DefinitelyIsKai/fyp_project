@@ -271,7 +271,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                         final applicantQuota = currentPost.applicantQuota;
                         final isQuotaReached = applicantQuota != null && approvedCount >= applicantQuota;
                         
-                        // Check if event starts today or has already passed
                         bool isEventStartingSoon = false;
                         if (currentPost.eventStartDate != null) {
                           final now = DateTime.now();
@@ -282,7 +281,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                             eventStartDate.month,
                             eventStartDate.day,
                           );
-                          // Only block if event starts today or has already passed
                           isEventStartingSoon = eventStartDateOnly.isAtSameMomentAs(today) || eventStartDateOnly.isBefore(today);
                         }
                         
@@ -361,7 +359,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
               if (data != null) {
                 try {
                   currentPost = Post.fromMap({...data, 'id': widget.post.id});
-                  // Update current post status for AppBar
                   if (mounted && _currentPostStatus != currentPost.status) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (mounted) {
@@ -1468,7 +1465,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
         eventStartDate.month,
         eventStartDate.day,
       );
-      // Only block if event starts today or has already passed
       if (eventStartDateOnly.isAtSameMomentAs(today) || 
           eventStartDateOnly.isBefore(today)) {
         if (!mounted) return;

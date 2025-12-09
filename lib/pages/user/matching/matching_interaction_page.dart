@@ -43,7 +43,6 @@ class _MatchingInteractionPageState extends State<MatchingInteractionPage>
     try {
       final userDoc = await _authService.getUserDoc();
       if (!mounted) return;
-      // Defer setState to avoid calling during build
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           setState(() {
@@ -53,7 +52,6 @@ class _MatchingInteractionPageState extends State<MatchingInteractionPage>
       });
     } catch (e) {
       if (!mounted) return;
-      // Defer setState to avoid calling during build
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           setState(() {
@@ -129,7 +127,7 @@ class _MatchesTabState extends State<_MatchesTab> {
   final MatchingService _matchingService = MatchingService();
   bool _recomputing = false;
   
-//refresh by updating state
+//refresh 
   Future<void> _refreshData() async {
     setState(() {
       
@@ -142,7 +140,6 @@ class _MatchesTabState extends State<_MatchesTab> {
     setState(() => _recomputing = true);
     try {
       if (widget.isRecruiter) {
-        // For recruiters, clear cache first then run the matching algorithm
         MatchingService.clearWeightsCache();
         await _matchingService.recomputeMatches(
           role: 'recruiter',
@@ -153,10 +150,8 @@ class _MatchesTabState extends State<_MatchesTab> {
           message: 'Matching engine refreshed (cache cleared)',
         );
       } else {
-        // For jobseekers, clear cache and trigger stream refresh
         MatchingService.clearWeightsCache();
         _matchingService.refreshComputedMatches();
-        // Small delay to show refresh state
         await Future.delayed(const Duration(milliseconds: 500));
         if (!mounted) return;
         DialogUtils.showSuccessMessage(
@@ -177,10 +172,6 @@ class _MatchesTabState extends State<_MatchesTab> {
     }
   }
 
-
-  /// Removed strategy selector - Recruiter now only uses ANN (embeddingsAnn)
-
-  /// Build matches for jobseekers using real-time computation
   Widget _buildJobseekerMatches() {
     return StreamBuilder<List<ComputedMatch>>(
       stream: _matchingService.streamComputedMatches(),
@@ -226,7 +217,7 @@ class _MatchesTabState extends State<_MatchesTab> {
 
         return Column(
           children: [
-            // Refresh button for jobseekers
+            //refresh button jobseekers
             if (!widget.isRecruiter)
               Padding(
                 padding: const EdgeInsets.all(16),
@@ -259,7 +250,6 @@ class _MatchesTabState extends State<_MatchesTab> {
                   ),
                 ),
               ),
-            // Matches list or empty state
             Expanded(
               child: matches.isEmpty
                   ? EmptyState.noMatches(
@@ -302,7 +292,6 @@ class _MatchesTabState extends State<_MatchesTab> {
     );
   }
 
-  /// Build matches for recruiters - shows job post list first
   Widget _buildRecruiterMatches() {
     final postService = PostService();
     return StreamBuilder<List<Post>>(
@@ -346,26 +335,20 @@ class _MatchesTabState extends State<_MatchesTab> {
         }
 
         final posts = snapshot.data ?? [];
-        // Filter to only show active posts
         final now = DateTime.now();
         final today = DateTime(now.year, now.month, now.day);
         
         final activePosts = posts.where((post) {
-          // Must be active
           if (post.status != PostStatus.active) return false;
-          
-          // Exclude drafts
+        
           if (post.isDraft == true) return false;
           
-          // Only show posts where event hasn't started yet (eventStartDate is null or in the future)
-          // Exclude posts where event has already started (eventStartDate is today or in the past)
           if (post.eventStartDate != null) {
             final eventStartDate = DateTime(
               post.eventStartDate!.year,
               post.eventStartDate!.month,
               post.eventStartDate!.day,
             );
-            // Exclude if event has already started (today or past)
             if (eventStartDate.compareTo(today) <= 0) {
               return false;
             }
@@ -414,12 +397,10 @@ class _MatchesTabState extends State<_MatchesTab> {
     );
   }
 
-  /// Show applicant matches for a specific post
   Future<void> _showApplicantMatches(BuildContext context, Post post) async {
     final recruiterId = AuthService().currentUserId;
     if (recruiterId.isEmpty) return;
 
-    // Show loading dialog
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -437,9 +418,8 @@ class _MatchesTabState extends State<_MatchesTab> {
       );
 
       if (!context.mounted) return;
-      Navigator.pop(context); // Close loading dialog
+      Navigator.pop(context); 
 
-      // Show matches in a bottom sheet or dialog
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
@@ -451,7 +431,7 @@ class _MatchesTabState extends State<_MatchesTab> {
       );
     } catch (e) {
       if (!context.mounted) return;
-      Navigator.pop(context); // Close loading dialog
+      Navigator.pop(context);
       DialogUtils.showWarningMessage(
         context: context,
         message: 'Unable to load applicant matches: ${e.toString()}',
@@ -590,9 +570,6 @@ class _MatchesTabState extends State<_MatchesTab> {
   }
 }
 
-// Removed _JobMatchCard - no longer used (replaced by _ComputedMatchCard and _ApplicantMatchCard)
-
-/// Card widget for displaying computed matches (real-time, not stored)
 class _ComputedMatchCard extends StatelessWidget {
   final ComputedMatch match;
   final String Function(DateTime) formatTimeAgo;
@@ -760,7 +737,6 @@ class _ComputedMatchCard extends StatelessWidget {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () {
-                  // Navigate to post details page
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -802,9 +778,6 @@ class _ComputedMatchCard extends StatelessWidget {
   }
 }
 
-/// Removed _StrategyOption widget - Recruiter no longer needs strategy selection
-
-/// Card widget for displaying recruiter's job posts
 class _RecruiterPostCard extends StatelessWidget {
   final Post post;
   final VoidCallback onTap;
@@ -925,7 +898,6 @@ class _RecruiterPostCard extends StatelessWidget {
   }
 }
 
-/// Bottom sheet showing applicant matches for a post
 class _ApplicantMatchesSheet extends StatelessWidget {
   final Post post;
   final List<RecruiterMatch> matches;
@@ -945,7 +917,6 @@ class _ApplicantMatchesSheet extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Header
           Padding(
             padding: const EdgeInsets.all(20),
             child: Row(
@@ -981,7 +952,6 @@ class _ApplicantMatchesSheet extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
-          // Matches list
           Expanded(
             child: matches.isEmpty
                 ? Center(
@@ -1012,7 +982,6 @@ class _ApplicantMatchesSheet extends StatelessWidget {
                       return _ApplicantMatchCard(
                         match: match,
                         onStatusChanged: () {
-                          // Status changed - could refresh if needed
                         },
                       );
                     },
@@ -1024,7 +993,6 @@ class _ApplicantMatchesSheet extends StatelessWidget {
   }
 }
 
-/// Card widget for displaying a matched applicant
 class _ApplicantMatchCard extends StatefulWidget {
   final RecruiterMatch match;
   final VoidCallback? onStatusChanged;
@@ -1083,7 +1051,6 @@ class _ApplicantMatchCardState extends State<_ApplicantMatchCard> {
         message: 'Application approved successfully!',
       );
 
-      // Notify parent to refresh if needed
       widget.onStatusChanged?.call();
     } catch (e) {
       if (!mounted) return;
@@ -1128,7 +1095,6 @@ class _ApplicantMatchCardState extends State<_ApplicantMatchCard> {
         message: 'Application rejected successfully!',
       );
 
-      // Notify parent to refresh if needed
       widget.onStatusChanged?.call();
     } catch (e) {
       if (!mounted) return;
@@ -1149,7 +1115,6 @@ class _ApplicantMatchCardState extends State<_ApplicantMatchCard> {
       decoration: CardDecorations.standard(),
       child: InkWell(
         onTap: () {
-          // Navigate to applicant's public profile when card is tapped
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -1275,10 +1240,8 @@ class _ApplicantMatchCardState extends State<_ApplicantMatchCard> {
               ],
             ),
             const SizedBox(height: 12),
-            // Action buttons
             Row(
               children: [
-                // View Profile button
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () {
@@ -1303,12 +1266,10 @@ class _ApplicantMatchCardState extends State<_ApplicantMatchCard> {
                 ),
               ],
             ),
-            // Approve/Reject buttons (only show if pending)
             if (_currentStatus == ApplicationStatus.pending) ...[
               const SizedBox(height: 12),
               Row(
                 children: [
-                  // Approve button
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: _isProcessing ? null : _handleApprove,
@@ -1335,7 +1296,6 @@ class _ApplicantMatchCardState extends State<_ApplicantMatchCard> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  // Reject button
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: _isProcessing ? null : _handleReject,

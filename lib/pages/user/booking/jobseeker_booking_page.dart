@@ -44,13 +44,11 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
   }
 
   void _onDateSelected(DateTime date) {
-    // Only set loading if date actually changed
     final dateOnly = DateTime(date.year, date.month, date.day);
     final selectedDateOnly = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
     
     setState(() {
       _selectedDate = date;
-      // Only show loading if date actually changed
       if (dateOnly != selectedDateOnly) {
         _isLoadingSlots = true;
       }
@@ -67,7 +65,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
   }
 
   void _onSlotsLoaded() {
-    //clear the loading state here
+    //clearloading state
     if (mounted && _isLoadingSlots) {
       setState(() {
         _isLoadingSlots = false;
@@ -75,15 +73,14 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     }
   }
 
-  // Helper function to normalize dates for comparison (removes time component)
   static DateTime _normalizeDate(DateTime date) {
     return DateTime(date.year, date.month, date.day);
   }
 
-  // Check if post's event end date has passed
+  //pos event end date has passed
   bool _isEventEndDatePassed(Post? post) {
     if (post == null || post.eventEndDate == null) {
-      return false; // No event end date means it's still valid
+      return false; 
     }
     final today = DateTime.now();
     final todayOnly = DateTime(today.year, today.month, today.day);
@@ -95,23 +92,19 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     return todayOnly.isAfter(eventEndDateOnly);
   }
 
-  // Check if post is valid for booking (not completed and event end date not passed)
   bool _isPostValidForBooking(Post? post) {
     if (post == null) {
-      return false; // No post means invalid
+      return false; 
     }
-    // Don't show if status is completed
     if (post.status == PostStatus.completed) {
       return false;
     }
-    // Don't show if event end date has passed
     if (_isEventEndDatePassed(post)) {
       return false;
     }
     return true;
   }
 
-  // normalized date from slot
   static DateTime _slotDate(AvailabilitySlot slot) {
     return _normalizeDate(slot.date);
   }
@@ -161,7 +154,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
         canPop: false,
         onPopInvoked: (didPop) {
           if (!didPop) {
-            // Clear cached futures
             setState(() {
               _selectedRecruiterId = null;
             });
@@ -342,7 +334,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                           final applicationId = _selectedApplication?.id;
                           final filteredSlots = applicationId != null
                               ? slots.where((slot) {
-                                  // Show available slots (no matchId yet)
                                   if (slot.isAvailable && slot.bookedBy == null) {
                                     return true;
                                   }
@@ -356,7 +347,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                           //filter slots of post event date range - use stream for real-time updates
                           final postId = _selectedApplication?.postId;
                           if (postId == null) {
-                            // No post, show all slots
+                            //show all slots
                             final processed = _processSlots(filteredSlots);
                             final monthRange = _getMonthRange(_currentMonth);
                             return StreamBuilder<Set<DateTime>>(
@@ -397,7 +388,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                           return StreamBuilder<Post?>(
                             stream: _postService.streamPostById(postId),
                             builder: (context, postSnapshot) {
-                              // Show loading while post data is being fetched to prevent showing all slots
                               if (postSnapshot.connectionState == ConnectionState.waiting) {
                                 return const Center(
                                   child: CircularProgressIndicator(
@@ -408,12 +398,11 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                               
                               final post = postSnapshot.data;
                               
-                              // Update cache when post data arrives
                               if (post != null) {
                                 _postCache[postId] = post;
                               }
 
-                              //filter slots by post event end date (allow booking before event starts)
+                         
                               final dateFilteredSlots = filteredSlots.where((slot) {
                                 //checking slot
                                 if (post != null && post.eventEndDate != null) {
@@ -428,13 +417,11 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                                     return false;
                                   }
                                 }
-                                //show all slots if no event
                                 return true;
                               }).toList();
 
                               final processed = _processSlots(dateFilteredSlots);
 
-                              //get booked dates jobseeker application - use stream for real-time updates
                               final monthRange = _getMonthRange(_currentMonth);
 
                               return StreamBuilder<Set<DateTime>>(
@@ -445,7 +432,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                                   matchId: applicationId,
                                 ),
                                 builder: (context, bookedSnapshot) {
-                                  // Get pending dates for jobseeker for this specific application - use stream for real-time updates
                                   return StreamBuilder<Set<String>>(
                                     stream: _availabilityService.streamRequestedSlotIdsForJobseeker(
                                       userId,
@@ -490,7 +476,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                         ),
-                        // Show loading indicator overlay when date is clicked and slots are loading
                         Stack(
                           children: [
                             JobseekerSlotsList(
@@ -532,7 +517,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
   Widget _buildRecruiterList() {
     return Column(
       children: [
-        // Header
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -626,13 +610,11 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                   final postsMap = data['posts'] as Map<String, Post>? ?? {};
                   final recruitersMap = data['recruiters'] as Map<String, Map<String, dynamic>>? ?? {};
 
-                  // Filter out recruiters whose all applications have expired event end dates or completed status
-                  // Also calculate valid application counts for each recruiter
+                  
                   final validRecruiters = <String>[];
                   final validApplicationCounts = <String, int>{};
                   for (final recruiterId in recruiterApplications.keys) {
                     final recruiterApps = recruiterApplications[recruiterId]!;
-                    // Count valid applications (non-expired, non-completed)
                     int validCount = 0;
                     for (final app in recruiterApps) {
                       final post = postsMap[app.postId];
@@ -640,7 +622,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                         validCount++;
                       }
                     }
-                    // Only add recruiter if they have at least one valid application
+
                     if (validCount > 0) {
                       validRecruiters.add(recruiterId);
                       validApplicationCounts[recruiterId] = validCount;
@@ -677,7 +659,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                     separatorBuilder: (context, index) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final recruiterId = uniqueRecruiters[index];
-                      // Use valid application count instead of all applications
                       final count = validApplicationCounts[recruiterId] ?? 0;
 
                       final recruiterData = recruitersMap[recruiterId] ?? {};
@@ -867,7 +848,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                   final postsMap = data['posts'] as Map<String, Post>? ?? {};
                   final recruitersMap = data['recruiters'] as Map<String, Map<String, dynamic>>? ?? {};
 
-                  // Filter out applications with expired event end dates or completed status
+                  
                   final validApplications = approvedApplicationsForRecruiter.where((application) {
                     final post = postsMap[application.postId];
                     return _isPostValidForBooking(post);
@@ -1049,7 +1030,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     return {'posts': postsMap, 'recruiters': recruitersMap};
   }
 
-  // Stream posts and recruiters for real-time updates
   Stream<Map<String, dynamic>> _streamPostsAndRecruitersForApplications(List<Application> applications) {
     if (applications.isEmpty) {
       return Stream.value({'posts': <String, Post>{}, 'recruiters': <String, Map<String, dynamic>>{}});
@@ -1058,20 +1038,18 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     final Set<String> postIds = applications.map((app) => app.postId).toSet();
     final Set<String> recruiterIds = applications.map((app) => app.recruiterId).toSet();
 
-    // Create maps to store current values
+
     final Map<String, Post> postsMap = {};
     final Map<String, Map<String, dynamic>> recruitersMap = {};
-    
-    // Track which streams have emitted at least once
+
     final Set<String> postsReceived = {};
     final Set<String> recruitersReceived = {};
 
-    // Create a stream controller to combine all streams
+
     final controller = StreamController<Map<String, dynamic>>();
     final List<StreamSubscription> subscriptions = [];
 
     void emitIfReady() {
-      // Emit when we have at least initial data from all streams
       if ((postIds.isEmpty || postsReceived.length == postIds.length) &&
           (recruiterIds.isEmpty || recruitersReceived.length == recruiterIds.length)) {
         if (!controller.isClosed) {
@@ -1083,12 +1061,11 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
       }
     }
 
-    // Stream all posts
     for (final postId in postIds) {
       final subscription = _postService.streamPostById(postId).listen((post) {
         if (post != null) {
           postsMap[postId] = post;
-          _postCache[postId] = post; // Update cache
+          _postCache[postId] = post; 
         }
         postsReceived.add(postId);
         emitIfReady();
@@ -1100,7 +1077,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
       subscriptions.add(subscription);
     }
 
-    // Stream recruiters (users collection)
+   
     final firestore = FirebaseFirestore.instance;
     for (final recruiterId in recruiterIds) {
       final subscription = firestore.collection('users').doc(recruiterId).snapshots().listen((doc) {
@@ -1123,12 +1100,12 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
       subscriptions.add(subscription);
     }
 
-    // If no posts or recruiters, emit immediately
+
     if (postIds.isEmpty && recruiterIds.isEmpty) {
       emitIfReady();
     }
 
-    // Clean up subscriptions when stream is cancelled
+    //clean
     controller.onCancel = () {
       for (final subscription in subscriptions) {
         subscription.cancel();
@@ -1138,7 +1115,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     return controller.stream;
   }
 
-  //load selected application of recruiter name and job title
+  //load selected application 
   Future<Map<String, dynamic>> _loadApplicationDisplayData(Application application) async {
     String? fullName = _recruiterNameCache[application.recruiterId];
     if (fullName == null) {

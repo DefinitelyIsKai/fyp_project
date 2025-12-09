@@ -105,8 +105,8 @@ class MessagingService {
         return;
       }
 
-      // Filter out conversations with no messages 
-      // Sort in memory lastmessagetime 
+      //filter out conversations with no messages 
+      //sort in memory lastmessagetime 
       final conversations = conversationMap.values
           .where((conv) => conv.lastMessage.isNotEmpty)
           .toList();
@@ -217,7 +217,6 @@ class MessagingService {
         return;
       }
 
-      //realtime listener
       try {
         await for (final snapshot in _firestore
             .collection('conversations')

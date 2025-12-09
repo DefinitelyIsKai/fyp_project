@@ -15,8 +15,6 @@ class UserModel {
 
   final bool profileCompleted;
   final bool acceptedTerms;
-  final String? photoUrl;
-  final String? cvUrl;
 
   final String professionalSummary;
   final String professionalProfile;
@@ -56,8 +54,6 @@ class UserModel {
     required this.seeking,
     required this.reportCount,
     required this.createdAt,
-    this.photoUrl,
-    this.cvUrl,
     this.image,
     this.resume,
     this.age,
@@ -98,9 +94,6 @@ class UserModel {
       profileCompleted: json['profileCompleted'] ?? false,
       acceptedTerms: json['acceptedTerms'] ?? false,
 
-      photoUrl: json['photoUrl'],
-      cvUrl: json['cvUrl'],
-
       professionalSummary: json['professionalSummary'] ?? '',
       professionalProfile: json['professionalProfile'] ?? '',
       workExperience: json['workExperience'] ?? '',
@@ -133,9 +126,6 @@ class UserModel {
 
       'profileCompleted': profileCompleted,
       'acceptedTerms': acceptedTerms,
-
-      'photoUrl': photoUrl,
-      'cvUrl': cvUrl,
 
       'professionalSummary': professionalSummary,
       'professionalProfile': professionalProfile,

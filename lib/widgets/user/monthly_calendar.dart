@@ -118,8 +118,7 @@ class MonthlyCalendar extends StatelessWidget {
     double? borderWidth;
     List<Widget> cornerIndicators = [];
 
-    //background and text colors
-    //booked then pending then available then selected then addedslot then past
+
     if (isBooked) {
       backgroundColor = isSelected ? Colors.red[600] : Colors.red[50];
       textColor = isSelected ? Colors.white : Colors.red[800];
@@ -186,7 +185,7 @@ class MonthlyCalendar extends StatelessWidget {
         ),
       );
     } else if (indicatorColors.length > 1) {
-      //multiple indicators
+      //mult indicators
       double startRight = 1;
       for (int i = 0; i < indicatorColors.length; i++) {
         cornerIndicators.add(

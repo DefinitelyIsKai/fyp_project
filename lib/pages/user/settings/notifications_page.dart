@@ -84,7 +84,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
       _isLoadingMore = false;
     });
 
-    // Reset page controller to first page
     if (_pageController.hasClients) {
       await _pageController.animateToPage(0, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
     }
@@ -172,12 +171,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   void _handleNotificationTap(AppNotification notification) {
-    // Mark as read if not already read
     if (!notification.isRead) {
       _handleMarkAsRead(notification);
     }
 
-    // Show notification detail dialog
     showDialog(
       context: context,
       builder: (context) => NotificationDetailDialog(notification: notification),

@@ -46,10 +46,8 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
   static const int _itemsPerPage = 10;
   static const int _initialStreamLimit = 50; //load50
   
-  // Cache the stream to avoid recreating it on every rebuild
   Stream<List<_UnifiedTransaction>>? _cachedUnifiedStream;
   
-  // Scroll controller for balance card shrink effect
   final ScrollController _scrollController = ScrollController();
   bool _isCardShrunk = false;
 
@@ -70,7 +68,7 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
     _pageController.dispose();
     _scrollController.dispose();
     _currentPageNotifier.dispose();
-    _cachedUnifiedStream = null; // Clear cached stream
+    _cachedUnifiedStream = null; 
     super.dispose();
   }
   
@@ -368,7 +366,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
       //close 
       Navigator.of(context).pop();
       
-      // Refresh pending payments
       await _refreshPendingPayments();
       
       DialogUtils.showSuccessMessage(
@@ -693,7 +690,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
             },
                 ),
                 
-                // Balance Card
                 GestureDetector(
                   onTap: _toggleCardShrink,
                   child: AnimatedContainer(
@@ -1109,7 +1105,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
                 _filteredPages = filteredPages;
                 _hasMore = allTransactions.length >= _initialStreamLimit;
                 _lastFilter = _selectedFilter;
-                //go first page when changed
                 if (filterChanged) {
                   _currentPage = 0;
                   _currentPageNotifier.value = 0;

@@ -18,7 +18,6 @@ class TagService {
 
   Future<Map<TagCategory, List<Tag>>> getActiveTagCategoriesWithTags() async {
     try {
-      // Fetch active tag categories
       final categoriesSnapshot = await _tagCategoriesCol
           .where('isActive', isEqualTo: true)
           .get();
@@ -54,7 +53,6 @@ class TagService {
   }
 
   Stream<Map<TagCategory, List<Tag>>> streamActiveTagCategoriesWithTags() {
-    // Stream both categories and tags for real-time updates
     final categoriesStream = _tagCategoriesCol
         .where('isActive', isEqualTo: true)
         .snapshots();
@@ -63,7 +61,6 @@ class TagService {
         .where('isActive', isEqualTo: true)
         .snapshots();
 
-    // Combine both streams - emit when either changes
     final controller = StreamController<Map<TagCategory, List<Tag>>>();
     QuerySnapshot<Map<String, dynamic>>? lastCategoriesSnapshot;
     QuerySnapshot<Map<String, dynamic>>? lastTagsSnapshot;
@@ -124,7 +121,7 @@ class TagService {
     return controller.stream;
   }
 
-  //fetch a single tag category by ID
+
   Future<TagCategory?> getTagCategoryById(String id) async {
     try {
       final doc = await _tagCategoriesCol.doc(id).get();
@@ -135,7 +132,6 @@ class TagService {
     }
   }
 
-  //fetch all tag in specific category
   Future<List<Tag>> getTagsByCategoryId(String categoryId) async {
     try {
       final snapshot = await _tagsCol
