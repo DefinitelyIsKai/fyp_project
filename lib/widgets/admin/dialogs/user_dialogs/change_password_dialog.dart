@@ -137,11 +137,19 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final dialogWidth = (screenWidth > 600 ? 500.0 : screenWidth * 0.9);
+    
     return Dialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
       ),
       child: Container(
+        width: dialogWidth,
+        constraints: BoxConstraints(
+          maxWidth: 500,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -149,9 +157,10 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
         ),
         child: Form(
           key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
               
               Container(
                 width: 60,
@@ -288,7 +297,8 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
                     ),
                   ],
                 ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
