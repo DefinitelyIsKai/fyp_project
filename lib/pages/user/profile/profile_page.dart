@@ -9,6 +9,7 @@ import '../../../services/user/storage_service.dart';
 import '../../../services/user/notification_service.dart';
 import '../../../utils/user/dialog_utils.dart';
 import 'edit_profile_page.dart';
+import 'verification_page.dart';
 import '../settings/settings_page.dart';
 import '../settings/notifications_page.dart';
 import '../settings/help_support_page.dart';
@@ -76,6 +77,7 @@ class _ProfilePageState extends State<ProfilePage> {
           final bool isRecruiter = (data?['role'] as String?)?.toLowerCase() == 'recruiter';
           final String? userStatus = _getUserStatus(data);
           final bool isSuspended = _isSuspended(userStatus);
+          final bool isVerified = (data?['isVerified'] as bool? ?? false);
           final Map<String, dynamic>? imageData = (data?['image'] as Map<String, dynamic>?);
           final String? base64Image = (imageData?['base64'] as String?);
           final Uint8List? imageBytes = _decodeBase64(base64Image);
@@ -262,6 +264,35 @@ class _ProfilePageState extends State<ProfilePage> {
                                         ),
                                 ),
                               ),
+                              if (isVerified)
+                                Positioned(
+                                  top: 0,
+                                  right: 0,
+                                  child: Container(
+                                    width: 28,
+                                    height: 28,
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue[700],
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 3,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.blue.withOpacity(0.3),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Icon(
+                                      Icons.check,
+                                      color: Colors.white,
+                                      size: 16,
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -287,6 +318,72 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                         const SizedBox(height: 16),
                         
+                        // Verify Account Button
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: (_uploadingPhoto || isSuspended || isVerified)
+                                ? () {
+                                    if (_uploadingPhoto) {
+                                      DialogUtils.showInfoMessage(
+                                        context: context,
+                                        message: 'Please wait for photo upload to complete.',
+                                      );
+                                    } else if (isSuspended) {
+                                      DialogUtils.showWarningMessage(
+                                        context: context,
+                                        message: 'Your account has been suspended. You can only access your profile page.',
+                                      );
+                                    } else if (isVerified) {
+                                      DialogUtils.showInfoMessage(
+                                        context: context,
+                                        message: 'Your account is already verified.',
+                                      );
+                                    }
+                                  }
+                                : () async {
+                                    final changed = await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const VerificationPage(),
+                                      ),
+                                    );
+                                    if (!mounted) return;
+                                    if (changed == true) {
+                                      setState(() {
+                                        _userFuture = _authService.getUserDoc();
+                                      });
+                                    }
+                                  },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isVerified 
+                                  ? Colors.grey[400] 
+                                  : Colors.blue[700],
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 0,
+                              disabledBackgroundColor: Colors.grey[400],
+                              disabledForegroundColor: Colors.white,
+                            ),
+                            icon: Icon(
+                              isVerified ? Icons.verified : Icons.verified_user, 
+                              size: 18,
+                            ),
+                            label: Text(
+                              isVerified ? 'Account Verified' : 'Verify Account',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        
+                        // Edit Profile Button
                         SizedBox(
                           width: double.infinity,
                           child: OutlinedButton.icon(

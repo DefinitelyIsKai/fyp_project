@@ -11,6 +11,7 @@ class PostsList extends StatelessWidget {
   final void Function(JobPostModel)? onReopen;
   final void Function(JobPostModel) onView;
   final String Function(String?) getUserName;
+  final String Function(String?) getUserEmail;
   final Set<String> processingPostIds;
   final Future<void> Function()? onRefresh;
 
@@ -24,6 +25,7 @@ class PostsList extends StatelessWidget {
     this.onReopen,
     required this.onView,
     required this.getUserName,
+    required this.getUserEmail,
     required this.processingPostIds,
     this.onRefresh,
   });
@@ -71,6 +73,7 @@ class PostsList extends StatelessWidget {
                     onReopen: onReopen,
                     onView: onView,
                     getUserName: getUserName,
+                    getUserEmail: getUserEmail,
                     isProcessing: processingPostIds.contains(post.id),
                   );
                 },

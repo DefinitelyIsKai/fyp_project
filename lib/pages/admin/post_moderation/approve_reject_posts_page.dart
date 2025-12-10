@@ -31,7 +31,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
   List<JobPostModel> _rejectedPosts = [];
   bool _isLoading = true;
   
-  final Map<String, String> _userNameCache = {};
+  final Map<String, Map<String, String>> _userInfoCache = {};
   final Set<String> _processingPostIds = {};
   bool _isProcessingGlobal = false;
   Timer? _searchDebounce;
@@ -310,7 +310,16 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
 
   String _getUserName(String? ownerId) {
     if (ownerId == null || ownerId.isEmpty) return 'Unknown User';
-    return _userNameCache[ownerId] ?? 'Loading...';
+    final userInfo = _userInfoCache[ownerId];
+    if (userInfo == null) return 'Loading...';
+    return userInfo['name'] ?? 'Unknown User';
+  }
+
+  String _getUserEmail(String? ownerId) {
+    if (ownerId == null || ownerId.isEmpty) return '';
+    final userInfo = _userInfoCache[ownerId];
+    if (userInfo == null) return '';
+    return userInfo['email'] ?? '';
   }
 
   void _handlePostsUpdate(List<JobPostModel> posts) {
@@ -381,7 +390,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
       final ownerId = post.ownerId ?? post.submitterName;
       if (ownerId != null && 
           ownerId.isNotEmpty && 
-          !_userNameCache.containsKey(ownerId)) {
+          !_userInfoCache.containsKey(ownerId)) {
         uncachedIds.add(ownerId);
       }
     }
@@ -401,19 +410,26 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                 .doc(id)
                 .get();
             if (userDoc.exists) {
-              return MapEntry(id, userDoc.data()?['fullName'] ?? 'Unknown User');
+              final data = userDoc.data();
+              return MapEntry(id, {
+                'name': (data?['fullName'] as String?) ?? 'Unknown User',
+                'email': (data?['email'] as String?) ?? '',
+              });
             }
           } catch (e) {
-            debugPrint('Error fetching user name for $id: $e');
+            debugPrint('Error fetching user info for $id: $e');
           }
-          return MapEntry(id, 'Unknown User');
+          return MapEntry(id, {
+            'name': 'Unknown User',
+            'email': '',
+          });
         });
         
         final results = await Future.wait(futures);
         if (mounted) {
           setState(() {
             for (final entry in results) {
-              _userNameCache[entry.key] = entry.value;
+              _userInfoCache[entry.key] = entry.value;
             }
           });
         }
@@ -423,7 +439,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
         }
       }
     } catch (e) {
-      debugPrint('Error batch fetching user names: $e');
+      debugPrint('Error batch fetching user info: $e');
     }
   }
 
@@ -586,6 +602,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                       onReopen: null,
                       onView: _viewPost,
                       getUserName: _getUserName,
+                      getUserEmail: _getUserEmail,
                       processingPostIds: _processingPostIds,
                       onRefresh: _refreshAllPosts,
                     ),
@@ -598,6 +615,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                       onReopen: null,
                       onView: _viewPost,
                       getUserName: _getUserName,
+                      getUserEmail: _getUserEmail,
                       processingPostIds: _processingPostIds,
                       onRefresh: _refreshAllPosts,
                     ),
@@ -610,6 +628,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                       onReopen: null,
                       onView: _viewPost,
                       getUserName: _getUserName,
+                      getUserEmail: _getUserEmail,
                       processingPostIds: _processingPostIds,
                       onRefresh: _refreshAllPosts,
                     ),
@@ -622,6 +641,7 @@ class _ApproveRejectPostsPageState extends State<ApproveRejectPostsPage> {
                       onReopen: null,
                       onView: _viewPost,
                       getUserName: _getUserName,
+                      getUserEmail: _getUserEmail,
                       processingPostIds: _processingPostIds,
                       onRefresh: _refreshAllPosts,
                     ),

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:fyp_project/models/admin/user_model.dart';
@@ -657,10 +658,23 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                   final status = _getStatusText(user);
                   final statusColor = _getStatusColor(user);
 
-                  return FutureBuilder<int>(
-                    future: _userService.getStrikeCount(user.id),
+                  return FutureBuilder<Map<String, dynamic>>(
+                    future: Future.wait([
+                      _userService.getStrikeCount(user.id),
+                      FirebaseFirestore.instance.collection('users').doc(user.id).get(),
+                    ]).then((results) {
+                      final strikeCount = results[0] as int;
+                      final docSnapshot = results[1] as DocumentSnapshot;
+                      final userData = docSnapshot.data() as Map<String, dynamic>?;
+                      final isVerified = userData?['isVerified'] ?? false;
+                      return {
+                        'strikeCount': strikeCount,
+                        'isVerified': isVerified,
+                      };
+                    }),
                     builder: (context, snapshot) {
-                      final strikeCount = snapshot.data ?? 0;
+                      final strikeCount = snapshot.data?['strikeCount'] ?? 0;
+                      final isVerified = snapshot.data?['isVerified'] ?? false;
 
                       return Container(
                         margin: const EdgeInsets.symmetric(
@@ -714,6 +728,27 @@ class _ViewUsersPageState extends State<ViewUsersPage> {
                                             ),
                                           ),
                                         ),
+                                        if (isVerified) ...[
+                                          const SizedBox(height: 4),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.blue[100],
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              'Verified',
+                                              style: TextStyle(
+                                                color: Colors.blue[800],
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                         if (strikeCount > 0 && !user.isSuspended) ...[
                                           const SizedBox(height: 4),
                                           Container(

@@ -405,6 +405,38 @@ class NotificationService {
     );
   }
 
+  Future<void> notifyVerificationApproved({
+    required String userId,
+  }) async {
+    await _createNotification(
+      userId: userId,
+      category: NotificationCategory.system,
+      title: 'Account Verification Approved',
+      body: 'Your account verification has been approved. Your account is now verified.',
+      metadata: {
+        'type': 'verification_approved',
+      },
+    );
+  }
+
+  Future<void> notifyVerificationRejected({
+    required String userId,
+    String? rejectionReason,
+  }) async {
+    await _createNotification(
+      userId: userId,
+      category: NotificationCategory.system,
+      title: 'Account Verification Rejected',
+      body: rejectionReason != null && rejectionReason.isNotEmpty
+          ? 'Your account verification was rejected. Reason: $rejectionReason. Please submit a new verification request with clearer photos.'
+          : 'Your account verification was rejected. Please submit a new verification request with clearer photos.',
+      metadata: {
+        'type': 'verification_rejected',
+        if (rejectionReason != null) 'rejectionReason': rejectionReason,
+      },
+    );
+  }
+
   Future<void> notifySlotDeletedToRecruiter({
     required String recruiterId,
     required String slotTimeDisplay,

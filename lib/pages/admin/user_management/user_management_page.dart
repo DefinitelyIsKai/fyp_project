@@ -96,18 +96,15 @@ class UserManagementPage extends StatelessWidget {
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('users')
-                  .where(
-                'status',
-                isEqualTo: 'Active',
-              )
+                  .where('verificationStatus', isEqualTo: 'pending')
                   .snapshots(),
               builder: (context, snapshot) {
                 int count = snapshot.hasData ? snapshot.data!.docs.length : 0;
                 return _StatCard(
-                  title: 'Active Today',
+                  title: 'Pending Verify',
                   value: count.toString(),
-                  icon: Icons.online_prediction,
-                  color: Colors.green,
+                  icon: Icons.verified_user_outlined,
+                  color: Colors.orange,
                 );
               },
             ),

@@ -33,6 +33,8 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
     'admin_face_verification_failed',
     'report_resolved',
     'user_info_updated',
+    'user_verification_approved',
+    'user_verification_rejected',
   ];
 
   @override
@@ -832,6 +834,18 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
           'icon': Icons.edit,
           'color': Colors.blue,
         };
+      case 'user_verification_approved':
+        return {
+          'name': 'User Verification Approved',
+          'icon': Icons.verified,
+          'color': Colors.green,
+        };
+      case 'user_verification_rejected':
+        return {
+          'name': 'User Verification Rejected',
+          'icon': Icons.cancel,
+          'color': Colors.red,
+        };
       default:
         return {
           'name': 'Unknown Action',
@@ -1049,6 +1063,10 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
         return 'Report Resolved';
       case 'user_info_updated':
         return 'User Info Updated';
+      case 'user_verification_approved':
+        return 'User Verification Approved';
+      case 'user_verification_rejected':
+        return 'User Verification Rejected';
       default:
         return actionType;
     }

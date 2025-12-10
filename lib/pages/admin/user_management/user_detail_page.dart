@@ -1136,6 +1136,22 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
               icon: Icons.check_circle,
               valueColor: user.profileCompleted ? Colors.green : Colors.orange,
             ),
+            FutureBuilder<bool>(
+              future: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(user.id)
+                  .get()
+                  .then((doc) => doc.data()?['isVerified'] ?? false),
+              builder: (context, snapshot) {
+                final isVerified = snapshot.data ?? false;
+                return UserDetailRow(
+                  label: 'Verify Info',
+                  value: isVerified ? 'Yes' : 'No',
+                  icon: Icons.verified_user,
+                  valueColor: isVerified ? Colors.green : Colors.orange,
+                );
+              },
+            ),
             UserDetailRow(
               label: 'Accepted Terms',
               value: user.acceptedTerms ? 'Yes' : 'No',

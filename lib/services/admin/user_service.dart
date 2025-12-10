@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fyp_project/models/admin/user_model.dart';
 import 'package:fyp_project/models/admin/admin_model.dart';
 import 'package:fyp_project/services/admin/auth_service.dart';
+import 'package:fyp_project/services/user/notification_service.dart';
 
 class UserService {
   UserService()
@@ -60,6 +61,137 @@ class UserService {
     final users = _mapUsers(snap);
     users.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return users;
+  }
+
+  Future<List<UserModel>> getPendingVerificationUsers() async {
+    final snap = await _usersRef
+        .where('verificationStatus', isEqualTo: 'pending')
+        .get();
+    final users = _mapUsers(snap);
+    users.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return users;
+  }
+
+  Future<Map<String, dynamic>?> getVerificationRequest(String userId) async {
+    try {
+      final userDoc = await _usersRef.doc(userId).get();
+      final userData = userDoc.data();
+      if (userData == null) return null;
+      
+      final verificationData = userData['verificationRequest'] as Map<String, dynamic>?;
+      return verificationData;
+    } catch (e) {
+      print('Error getting verification request: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>> approveUserVerification(String userId) async {
+    try {
+      final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
+      final userDoc = await _usersRef.doc(userId).get();
+      final userData = userDoc.data();
+      if (userData == null) {
+        throw Exception('User not found');
+      }
+
+      final userName = userData['fullName'] ?? 'User';
+      
+      await _usersRef.doc(userId).update({
+        'verificationStatus': 'approved',
+        'isVerified': true,
+        'verifiedAt': FieldValue.serverTimestamp(),
+        'verifiedBy': currentAdminId,
+      });
+
+      try {
+        await _logsRef.add({
+          'actionType': 'user_verification_approved',
+          'userId': userId,
+          'userName': userName,
+          'createdAt': FieldValue.serverTimestamp(),
+          'createdBy': currentAdminId,
+        });
+      } catch (logError) {
+        print('Error creating verification approval log entry: $logError');
+      }
+
+      try {
+        final notificationService = NotificationService();
+        await notificationService.notifyVerificationApproved(userId: userId);
+      } catch (notifError) {
+        print('Error sending verification approval notification: $notifError');
+      }
+
+      return {
+        'success': true,
+        'userName': userName,
+      };
+    } catch (e) {
+      print('Error approving user verification: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> rejectUserVerification(
+    String userId, {
+    String? rejectionReason,
+  }) async {
+    try {
+      final currentAdminId = FirebaseAuth.instance.currentUser?.uid;
+      final userDoc = await _usersRef.doc(userId).get();
+      final userData = userDoc.data();
+      if (userData == null) {
+        throw Exception('User not found');
+      }
+
+      final userName = userData['fullName'] ?? 'User';
+      
+      await _usersRef.doc(userId).update({
+        'verificationStatus': 'rejected',
+        'isVerified': false,
+        'verificationRejectedAt': FieldValue.serverTimestamp(),
+        'verificationRejectedBy': currentAdminId,
+        'verificationRejectionReason': rejectionReason,
+      });
+
+      try {
+        await _logsRef.add({
+          'actionType': 'user_verification_rejected',
+          'userId': userId,
+          'userName': userName,
+          'rejectionReason': rejectionReason,
+          'createdAt': FieldValue.serverTimestamp(),
+          'createdBy': currentAdminId,
+        });
+      } catch (logError) {
+        print('Error creating verification rejection log entry: $logError');
+      }
+
+      try {
+        final notificationService = NotificationService();
+        await notificationService.notifyVerificationRejected(
+          userId: userId,
+          rejectionReason: rejectionReason,
+        );
+      } catch (notifError) {
+        print('Error sending verification rejection notification: $notifError');
+      }
+
+      return {
+        'success': true,
+        'userName': userName,
+      };
+    } catch (e) {
+      print('Error rejecting user verification: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
   }
 
   Future<List<UserModel>> getReportedUsers() async {

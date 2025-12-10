@@ -9,6 +9,7 @@ class PostCard extends StatelessWidget {
   final void Function(JobPostModel)? onReopen;
   final void Function(JobPostModel) onView;
   final String Function(String?) getUserName;
+  final String Function(String?) getUserEmail;
   final bool isProcessing;
 
   const PostCard({
@@ -20,6 +21,7 @@ class PostCard extends StatelessWidget {
     this.onReopen,
     required this.onView,
     required this.getUserName,
+    required this.getUserEmail,
     this.isProcessing = false,
   });
 
@@ -303,6 +305,7 @@ class PostCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
                       padding: const EdgeInsets.all(4),
@@ -314,14 +317,33 @@ class PostCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        getUserName(post.ownerId ?? post.submitterName),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[700],
-                          fontWeight: FontWeight.w500,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            getUserName(post.ownerId ?? post.submitterName),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[700],
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                          if (getUserEmail(post.ownerId ?? post.submitterName).isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              getUserEmail(post.ownerId ?? post.submitterName),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey[600],
+                                fontWeight: FontWeight.w400,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                     const SizedBox(width: 8),

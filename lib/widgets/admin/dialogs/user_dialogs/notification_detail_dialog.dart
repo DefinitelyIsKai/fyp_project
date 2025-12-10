@@ -10,7 +10,14 @@ class NotificationDetailDialog extends StatelessWidget {
     required this.notification,
   });
 
-  IconData _iconFor(NotificationCategory category) {
+  IconData _iconFor(NotificationCategory category, {Map<String, dynamic>? metadata}) {
+    // Check for verification approved notification
+    if (category == NotificationCategory.system && 
+        metadata != null && 
+        metadata['type'] == 'verification_approved') {
+      return Icons.verified_user;
+    }
+    
     switch (category) {
       case NotificationCategory.message:
         return Icons.chat_bubble_outline_rounded;
@@ -39,7 +46,14 @@ class NotificationDetailDialog extends StatelessWidget {
     }
   }
 
-  Color _getIconBackgroundColor(NotificationCategory category) {
+  Color _getIconBackgroundColor(NotificationCategory category, {Map<String, dynamic>? metadata}) {
+    // Check for verification approved notification
+    if (category == NotificationCategory.system && 
+        metadata != null && 
+        metadata['type'] == 'verification_approved') {
+      return Colors.blue.withOpacity(0.1);
+    }
+    
     switch (category) {
       case NotificationCategory.message:
         return const Color(0xFF00C8A0).withOpacity(0.1);
@@ -68,7 +82,14 @@ class NotificationDetailDialog extends StatelessWidget {
     }
   }
 
-  Color _getIconColor(NotificationCategory category) {
+  Color _getIconColor(NotificationCategory category, {Map<String, dynamic>? metadata}) {
+    // Check for verification approved notification
+    if (category == NotificationCategory.system && 
+        metadata != null && 
+        metadata['type'] == 'verification_approved') {
+      return Colors.blue[700]!;
+    }
+    
     switch (category) {
       case NotificationCategory.message:
         return const Color(0xFF00C8A0);
@@ -140,7 +161,7 @@ class NotificationDetailDialog extends StatelessWidget {
                   width: 64,
                   height: 64,
                   decoration: BoxDecoration(
-                    color: _getIconBackgroundColor(notification.category),
+                    color: _getIconBackgroundColor(notification.category, metadata: notification.metadata),
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
@@ -151,8 +172,8 @@ class NotificationDetailDialog extends StatelessWidget {
                     ],
                   ),
                   child: Icon(
-                    _iconFor(notification.category),
-                    color: _getIconColor(notification.category),
+                    _iconFor(notification.category, metadata: notification.metadata),
+                    color: _getIconColor(notification.category, metadata: notification.metadata),
                     size: 32,
                   ),
                 ),

@@ -252,6 +252,51 @@ class StorageService {
   }
 
  
+  Future<Uint8List?> pickImageBytes({required bool fromCamera}) async {
+    try {
+      final bool useImagePicker = kIsWeb ||
+          (!kIsWeb && (Platform.isAndroid || Platform.isIOS || Platform.isMacOS));
+
+      late Uint8List bytes;
+
+      if (useImagePicker) {
+        if (fromCamera && !kIsWeb && !(Platform.isAndroid || Platform.isIOS)) {
+          return null;
+        }
+
+        final ImagePicker picker = ImagePicker();
+        final XFile? x = fromCamera
+            ? await picker.pickImage(source: ImageSource.camera, imageQuality: 80)
+            : await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+
+        if (x == null) return null;
+
+        bytes = await x.readAsBytes();
+      } else {
+        if (fromCamera) return null;
+        final result = await FilePicker.platform.pickFiles(
+          allowMultiple: false,
+          type: FileType.image,
+          withData: true,
+        );
+        if (result == null || result.files.isEmpty) return null;
+        final file = result.files.single;
+        bytes = file.bytes ?? await File(file.path!).readAsBytes();
+      }
+
+      const int maxOriginalSize = 500 * 1024; // 500KB
+      if (bytes.length > maxOriginalSize) {
+        throw Exception('Image is too large (${(bytes.length / 1024).toStringAsFixed(0)}KB). '
+            'Maximum size is 500KB. Please try taking the photo again or select a smaller image.');
+      }
+
+      return bytes;
+    } catch (e) {
+      print('Error picking image: $e');
+      rethrow;
+    }
+  }
+
   Future<String?> pickAndUploadImage({required bool fromCamera}) async {
     try {
       final bool useImagePicker = kIsWeb ||
