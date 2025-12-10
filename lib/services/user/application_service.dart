@@ -18,6 +18,15 @@ class ApplicationService {
     required String recruiterId,
   }) async {
     final jobseekerId = _authService.currentUserId;
+    
+    // Check if user is verified
+    final userDoc = await _authService.getUserDoc();
+    final userData = userDoc.data();
+    final isVerified = userData?['isVerified'] as bool? ?? false;
+    if (!isVerified) {
+      throw StateError('USER_NOT_VERIFIED');
+    }
+    
     final postSnap = await _firestore.collection('posts').doc(postId).get();
     final postData = postSnap.data();
     final String status = postData?['status'] as String? ?? 'active';

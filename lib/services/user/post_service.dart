@@ -551,7 +551,6 @@ class PostService {
         
           posts = posts.where((post) => 
             post.status != PostStatus.pending && 
-            post.status != PostStatus.completed &&
             post.status != PostStatus.deleted &&
             post.status != PostStatus.rejected
           ).toList();

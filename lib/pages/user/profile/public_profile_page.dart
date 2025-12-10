@@ -2,7 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../../models/user/resume_attachment.dart';
 import '../../../models/user/tag_category.dart';
+import '../../../models/user/review.dart';
 import '../../../services/user/tag_service.dart';
+import '../../../services/user/review_service.dart';
 import '../../../utils/user/resume_utils.dart';
 import '../../../utils/user/tag_definitions.dart';
 import '../../../utils/user/dialog_utils.dart';
@@ -19,6 +21,7 @@ class PublicProfilePage extends StatefulWidget {
 class _PublicProfilePageState extends State<PublicProfilePage> {
   bool _previewingResume = false;
   final _tagService = TagService();
+  final _reviewService = ReviewService();
   Map<String, TagCategory> _categoryMap = {};
   bool _tagsLoaded = false;
 
@@ -119,11 +122,15 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
               physics: const AlwaysScrollableScrollPhysics(),
             child: Column(
               children: [
-                _buildHeader(name, role),
+                _buildHeader(name, role, roleRaw),
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
+                      if (roleRaw == 'jobseeker') ...[
+                        _buildReputationCard(widget.userId),
+                        const SizedBox(height: 16),
+                      ],
                       _buildContactCard(email, phone, location, gender),
                       const SizedBox(height: 16),
                       _buildProfessionalDetailsCard(professionalProfile, workExperience, roleRaw),
@@ -148,7 +155,7 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
     );
   }
 
-  Widget _buildHeader(String name, String role) {
+  Widget _buildHeader(String name, String role, String roleRaw) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(32),
@@ -218,7 +225,181 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
               ),
             ),
           ),
+          if (roleRaw == 'jobseeker') ...[
+            const SizedBox(height: 16),
+            StreamBuilder<List<Review>>(
+              stream: _reviewService.streamReviewsForUser(widget.userId),
+              builder: (context, reviewSnap) {
+                final reviews = reviewSnap.data ?? [];
+                final avg = reviews.isEmpty
+                    ? 0.0
+                    : reviews.map((r) => r.rating.toDouble()).reduce((a, b) => a + b) / reviews.length;
+                final reviewCount = reviews.length;
+                
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.stars_rounded,
+                        color: Colors.amber,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.baseline,
+                            textBaseline: TextBaseline.alphabetic,
+                            children: [
+                              Text(
+                                avg == 0.0 ? '—' : '${avg.toStringAsFixed(1)}',
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '/ 5.0',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.white.withOpacity(0.9),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            reviewCount == 0 
+                                ? 'No reviews yet'
+                                : reviewCount == 1 
+                                    ? '1 review'
+                                    : '$reviewCount reviews',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white.withOpacity(0.9),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildReputationCard(String userId) {
+    return _SectionCard(
+      icon: Icons.stars_rounded,
+      title: 'Reputation Score',
+      child: StreamBuilder<List<Review>>(
+        stream: _reviewService.streamReviewsForUser(userId),
+        builder: (context, reviewSnap) {
+          if (reviewSnap.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16.0),
+                child: CircularProgressIndicator(),
+              ),
+            );
+          }
+          
+          final reviews = reviewSnap.data ?? [];
+          final avg = reviews.isEmpty
+              ? 0.0
+              : reviews.map((r) => r.rating.toDouble()).reduce((a, b) => a + b) / reviews.length;
+          final reviewCount = reviews.length;
+          
+          if (reviewCount == 0) {
+            return Column(
+              children: [
+                Text(
+                  'No reviews yet',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Your reputation score will appear here once you receive reviews',
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 13,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            );
+          }
+          
+          return Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    avg.toStringAsFixed(1),
+                    style: const TextStyle(
+                      fontSize: 48,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF00C8A0),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '/ 5.0',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        '$reviewCount ${reviewCount == 1 ? 'review' : 'reviews'}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (index) {
+                  return Icon(
+                    index < avg.round() ? Icons.star_rounded : Icons.star_outline_rounded,
+                    color: Colors.amber,
+                    size: 32,
+                  );
+                }),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

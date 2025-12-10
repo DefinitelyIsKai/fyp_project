@@ -449,15 +449,18 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
       final bool insufficient = e.toString().contains('INSUFFICIENT_FUNDS');
       final bool alreadyExists = e.toString().contains('already exists');
       final bool postCompleted = e.toString().contains('POST_COMPLETED');
+      final bool notVerified = e.toString().contains('USER_NOT_VERIFIED');
       DialogUtils.showWarningMessage(
         context: context,
-        message: insufficient
-            ? 'Insufficient credits. You need 100 points to apply.'
-            : alreadyExists
-                ? 'You have already applied to this job.'
-                : postCompleted
-                    ? 'This post has been completed. Applications are no longer being accepted.'
-                    : 'Could not process application: $e',
+        message: notVerified
+            ? 'Your account must be verified before you can apply for jobs. Please complete the verification process in your profile.'
+            : insufficient
+                ? 'Insufficient credits. You need 100 points to apply.'
+                : alreadyExists
+                    ? 'You have already applied to this job.'
+                    : postCompleted
+                        ? 'This post has been completed. Applications are no longer being accepted.'
+                        : 'Could not process application: $e',
       );
     } finally {
       if (mounted) {
@@ -687,12 +690,28 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                       );
                       final hasApplied = application.postId == widget.post.id;
                       
+                      // Check if currentUserId is valid before querying Firestore
+                      final bool hasValidUserId = widget.currentUserId != null && widget.currentUserId!.isNotEmpty;
+                      
                       return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                        stream: FirebaseFirestore.instance
-                            .collection('posts')
-                            .doc(widget.post.id)
-                            .snapshots(),
-                        builder: (context, postSnapshot) {
+                        stream: hasValidUserId
+                            ? FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(widget.currentUserId!)
+                                .snapshots()
+                            : Stream<DocumentSnapshot<Map<String, dynamic>>>.empty(),
+                        builder: (context, userSnapshot) {
+                          // If no valid userId, default to not verified
+                          final isVerified = hasValidUserId && userSnapshot.hasData
+                              ? (userSnapshot.data?.data()?['isVerified'] as bool? ?? false)
+                              : false;
+                          
+                          return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                            stream: FirebaseFirestore.instance
+                                .collection('posts')
+                                .doc(widget.post.id)
+                                .snapshots(),
+                            builder: (context, postSnapshot) {
                           int? _parseInt(dynamic value) {
                             if (value == null) return null;
                             if (value is int) return value;
@@ -726,7 +745,7 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                             isEventStartingSoon = eventStartDateOnly.isAtSameMomentAs(today) || eventStartDateOnly.isBefore(today);
                           }
                           
-                          final bool isDisabled = hasApplied ||_isApplying ||widget.post.status == PostStatus.completed ||widget.post.status == PostStatus.pending ||isOwnPost ||isQuotaReached ||isEventStartingSoon;
+                          final bool isDisabled = hasApplied ||_isApplying ||widget.post.status == PostStatus.completed ||widget.post.status == PostStatus.pending ||isOwnPost ||isQuotaReached ||isEventStartingSoon || !isVerified;
                           
                           
                           String buttonText = 'Apply (100 pts)'; 
@@ -747,6 +766,8 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                                 buttonText = 'Applied';
                                 break;
                             }
+                          } else if (!isVerified) {
+                            buttonText = 'Verify to Apply';
                           } else if (widget.post.status == PostStatus.completed) {
                             buttonText = 'Closed';
                           } else if (widget.post.status == PostStatus.pending) {
@@ -768,7 +789,8 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                                           widget.post.status == PostStatus.pending ||
                                           isOwnPost ||
                                           isQuotaReached ||
-                                          isEventStartingSoon)
+                                          isEventStartingSoon ||
+                                          !isVerified)
                                       ? Colors.grey
                                       : const Color(0xFF00C8A0),
                               foregroundColor: Colors.white,
@@ -796,6 +818,8 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
+                          );
+                            },
                           );
                         },
                       );

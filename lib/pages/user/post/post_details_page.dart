@@ -1518,15 +1518,18 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
       final bool insufficient = e.toString().contains('INSUFFICIENT_FUNDS');
       final bool alreadyExists = e.toString().contains('already exists');
       final bool postCompleted = e.toString().contains('POST_COMPLETED');
+      final bool notVerified = e.toString().contains('USER_NOT_VERIFIED');
       DialogUtils.showWarningMessage(
         context: context,
-        message: insufficient
-            ? 'Insufficient credits. You need 100 points to apply.'
-            : alreadyExists
-                ? 'You have already applied to this job.'
-                : postCompleted
-                    ? 'This post has been completed. Applications are no longer being accepted.'
-                    : 'Error processing application. Please try again.',
+        message: notVerified
+            ? 'Your account must be verified before you can apply for jobs. Please complete the verification process in your profile.'
+            : insufficient
+                ? 'Insufficient credits. You need 100 points to apply.'
+                : alreadyExists
+                    ? 'You have already applied to this job.'
+                    : postCompleted
+                        ? 'This post has been completed. Applications are no longer being accepted.'
+                        : 'Error processing application. Please try again.',
       );
     } finally {
       if (mounted) {
