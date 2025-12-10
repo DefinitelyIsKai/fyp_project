@@ -473,16 +473,67 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                         return null;
                       }
                       final views = _parseInt(data?['views']) ?? widget.post.views;
-                      return Row(
-                        children: [
-                          Icon(Icons.remove_red_eye, size: 16, color: Colors.grey[500]),
-                          const SizedBox(width: 4),
-                          Text('$views views', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-                          const SizedBox(width: 16),
-                          Icon(Icons.people_alt, size: 16, color: Colors.grey[500]),
-                          const SizedBox(width: 4),
-                          Text('${widget.post.applicants} applicants', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-                        ],
+                      return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        stream: FirebaseFirestore.instance
+                            .collection('applications')
+                            .where('postId', isEqualTo: currentPost.id)
+                            .snapshots(),
+                        builder: (context, appsSnapshot) {
+                          final applications = appsSnapshot.data?.docs ?? [];
+                          int totalLikes = 0;
+                          int totalDislikes = 0;
+                          
+                          for (final doc in applications) {
+                            final data = doc.data();
+                            final likes = List<String>.from(data['likes'] as List? ?? []);
+                            final dislikes = List<String>.from(data['dislikes'] as List? ?? []);
+                            totalLikes += likes.length;
+                            totalDislikes += dislikes.length;
+                          }
+                          
+                          return Wrap(
+                            spacing: 16,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.remove_red_eye, size: 16, color: Colors.grey[500]),
+                                  const SizedBox(width: 4),
+                                  Text('$views views', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                                ],
+                              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.people_alt, size: 16, color: Colors.grey[500]),
+                                  const SizedBox(width: 4),
+                                  Text('${widget.post.applicants} applicants', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                                ],
+                              ),
+                              // Always show likes and dislikes if there are applications
+                              if (applications.isNotEmpty) ...[
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.thumb_up_outlined, size: 16, color: Colors.grey[500]),
+                                    const SizedBox(width: 4),
+                                    Text('$totalLikes likes', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                                  ],
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.thumb_down_outlined, size: 16, color: Colors.grey[500]),
+                                    const SizedBox(width: 4),
+                                    Text('$totalDislikes dislikes', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          );
+                        },
                       );
                     },
                   ),

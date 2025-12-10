@@ -27,6 +27,7 @@ class _PostManagementPageState extends State<PostManagementPage> {
   final PageController _pageController = PageController();
 
   late Future<DocumentSnapshot<Map<String, dynamic>>> _userFuture;
+  String? _currentUserId;
   
   List<List<Post>> _pages = [];
   int _currentPage = 0;
@@ -38,6 +39,24 @@ class _PostManagementPageState extends State<PostManagementPage> {
   void initState() {
     super.initState();
     _userFuture = _authService.getUserDoc();
+    _loadCurrentUserId();
+  }
+
+  Future<void> _loadCurrentUserId() async {
+    try {
+      final userDoc = await _authService.getUserDoc();
+      if (mounted) {
+        setState(() {
+          _currentUserId = userDoc.id;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _currentUserId = null;
+        });
+      }
+    }
   }
 
   @override
@@ -491,7 +510,115 @@ class _PostManagementPageState extends State<PostManagementPage> {
                                         child: const Text('View Details'),
                                       ),
                                       const Spacer(),
-                                      if (post != null && !isPostDeleted && post.status == PostStatus.completed)
+                                      // Show like/dislike buttons only if approved and completed
+                                      if (app.status == ApplicationStatus.approved && 
+                                          post != null && 
+                                          !isPostDeleted && 
+                                          post.status == PostStatus.completed)
+                                        StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                                          stream: FirebaseFirestore.instance
+                                              .collection('applications')
+                                              .doc(app.id)
+                                              .snapshots(),
+                                          builder: (context, appSnapshot) {
+                                            final appData = appSnapshot.data?.data();
+                                            final likes = List<String>.from(appData?['likes'] as List? ?? []);
+                                            final dislikes = List<String>.from(appData?['dislikes'] as List? ?? []);
+                                            final hasLiked = _currentUserId != null && likes.contains(_currentUserId);
+                                            final hasDisliked = _currentUserId != null && dislikes.contains(_currentUserId);
+                                            
+                                            return Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                // Like button
+                                                Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    IconButton(
+                                                      tooltip: 'Like',
+                                                      icon: Icon(
+                                                        hasLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
+                                                        size: 20,
+                                                        color: hasLiked ? const Color(0xFF00C8A0) : Colors.grey[600],
+                                                      ),
+                                                      onPressed: () async {
+                                                        try {
+                                                          await _applicationService.toggleLikeApplication(app.id);
+                                                        } catch (e) {
+                                                          if (mounted) {
+                                                            DialogUtils.showWarningMessage(
+                                                              context: context,
+                                                              message: 'Failed to update like: $e',
+                                                            );
+                                                          }
+                                                        }
+                                                      },
+                                                      padding: EdgeInsets.zero,
+                                                      constraints: const BoxConstraints(),
+                                                      visualDensity: VisualDensity.compact,
+                                                      style: IconButton.styleFrom(
+                                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                      ),
+                                                    ),
+                                                    if (likes.isNotEmpty)
+                                                      Text(
+                                                        '${likes.length}',
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          color: Colors.grey[600],
+                                                          fontWeight: FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
+                                                const SizedBox(width: 8),
+                                                // Dislike button
+                                                Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    IconButton(
+                                                      tooltip: 'Dislike',
+                                                      icon: Icon(
+                                                        hasDisliked ? Icons.thumb_down : Icons.thumb_down_outlined,
+                                                        size: 20,
+                                                        color: hasDisliked ? Colors.red : Colors.grey[600],
+                                                      ),
+                                                      onPressed: () async {
+                                                        try {
+                                                          await _applicationService.toggleDislikeApplication(app.id);
+                                                        } catch (e) {
+                                                          if (mounted) {
+                                                            DialogUtils.showWarningMessage(
+                                                              context: context,
+                                                              message: 'Failed to update dislike: $e',
+                                                            );
+                                                          }
+                                                        }
+                                                      },
+                                                      padding: EdgeInsets.zero,
+                                                      constraints: const BoxConstraints(),
+                                                      visualDensity: VisualDensity.compact,
+                                                      style: IconButton.styleFrom(
+                                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                      ),
+                                                    ),
+                                                    if (dislikes.isNotEmpty)
+                                                      Text(
+                                                        '${dislikes.length}',
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          color: Colors.grey[600],
+                                                          fontWeight: FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
+                                                const SizedBox(width: 8),
+                                              ],
+                                            );
+                                          },
+                                        ),
+                                      if (post != null && !isPostDeleted && post.status == PostStatus.completed && app.status != ApplicationStatus.approved)
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                           decoration: BoxDecoration(

@@ -15,6 +15,8 @@ class Application {
   final ApplicationStatus status;
   final DateTime createdAt;
   final DateTime? updatedAt;
+  final List<String> likes;
+  final List<String> dislikes;
 
   Application({
     required this.id,
@@ -24,7 +26,10 @@ class Application {
     required this.status,
     required this.createdAt,
     this.updatedAt,
-  });
+    List<String>? likes,
+    List<String>? dislikes,
+  }) : likes = likes ?? <String>[],
+       dislikes = dislikes ?? <String>[];
 
   factory Application.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
@@ -36,6 +41,8 @@ class Application {
       status: _statusFromString(data['status'] as String? ?? 'pending'),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      likes: (data['likes'] as List?)?.cast<String>() ?? <String>[],
+      dislikes: (data['dislikes'] as List?)?.cast<String>() ?? <String>[],
     );
   }
 
@@ -47,6 +54,8 @@ class Application {
       'status': _statusToString(status),
       'createdAt': Timestamp.fromDate(createdAt),
       if (updatedAt != null) 'updatedAt': Timestamp.fromDate(updatedAt!),
+      'likes': likes,
+      'dislikes': dislikes,
     };
   }
 

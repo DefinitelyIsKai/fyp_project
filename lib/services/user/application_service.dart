@@ -54,6 +54,8 @@ class ApplicationService {
       recruiterId: recruiterId,
       status: ApplicationStatus.pending,
       createdAt: DateTime.now(),
+      likes: [],
+      dislikes: [],
     );
 
     final docRef = await _col.add(application.toFirestore());
@@ -487,6 +489,54 @@ class ApplicationService {
     }
   }
 
+
+  Future<void> toggleLikeApplication(String applicationId) async {
+    final userId = _authService.currentUserId;
+    final docRef = _col.doc(applicationId);
+    final doc = await docRef.get();
+    if (!doc.exists) throw StateError('Application not found');
+    
+    final data = doc.data();
+    List<String> likes = List<String>.from(data?['likes'] as List? ?? []);
+    List<String> dislikes = List<String>.from(data?['dislikes'] as List? ?? []);
+    
+    if (likes.contains(userId)) {
+      likes.remove(userId);
+    } else {
+      likes.add(userId);
+      dislikes.remove(userId); // Remove if previously disliked
+    }
+    
+    await docRef.update({
+      'likes': likes,
+      'dislikes': dislikes,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> toggleDislikeApplication(String applicationId) async {
+    final userId = _authService.currentUserId;
+    final docRef = _col.doc(applicationId);
+    final doc = await docRef.get();
+    if (!doc.exists) throw StateError('Application not found');
+    
+    final data = doc.data();
+    List<String> likes = List<String>.from(data?['likes'] as List? ?? []);
+    List<String> dislikes = List<String>.from(data?['dislikes'] as List? ?? []);
+    
+    if (dislikes.contains(userId)) {
+      dislikes.remove(userId);
+    } else {
+      dislikes.add(userId);
+      likes.remove(userId); // Remove if previously liked
+    }
+    
+    await docRef.update({
+      'likes': likes,
+      'dislikes': dislikes,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
 
   Future<bool> isApplicationApproved(String postId, String jobseekerId) async {
     final result = await _col
