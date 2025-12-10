@@ -302,7 +302,7 @@ class HybridMatchingEngine {
         .map(
           (job) => _JobVector.fromPost(
             job,
-            recruiterLabels[job.ownerId] ?? 'Hiring Company',
+            recruiterLabels[job.ownerId] ?? 'Recruiter',
           ),
         )
         .toList();
@@ -481,7 +481,7 @@ class HybridMatchingEngine {
         .map(
           (job) => _JobVector.fromPost(
             job,
-            recruiterLabels[job.ownerId] ?? 'Hiring Company',
+            recruiterLabels[job.ownerId] ?? 'Recruiter',
           ),
         )
         .toList();
@@ -583,7 +583,7 @@ class HybridMatchingEngine {
     final jobPreferenceCategoryIds = await _getJobPreferenceCategoryIds();
     final locationCategoryIds = await _getLocationCategoryIds();
     final recruiterLabels = await _fetchUserLabels({recruiterId});
-    final recruiterLabel = recruiterLabels[recruiterId] ?? 'Hiring Company';
+    final recruiterLabel = recruiterLabels[recruiterId] ?? 'Recruiter';
 
     //job vector
     final jobVector = _JobVector.fromPost(post, recruiterLabel);
@@ -1160,7 +1160,7 @@ class HybridMatchingEngine {
         final label =
             (data['fullName'] as String?) ??
             (data['professionalProfile'] as String?) ??
-            'Hiring Company';
+            'Recruiter';
         result[doc.id] = label;
       }
     }
@@ -1463,7 +1463,7 @@ double _calculateDistance(
   return Geolocator.distanceBetween(lat1, lon1, lat2, lon2) / 1000; //km
 }
 
-//calculate distance score (0-1, where 1 is closest and 0 is farthest)
+//calculate distance score 
 double _calculateDistanceScore(
   double distanceKm, {
   double maxDistanceKm = 50.0,
