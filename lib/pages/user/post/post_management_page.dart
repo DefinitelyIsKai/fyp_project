@@ -528,33 +528,45 @@ class _PostManagementPageState extends State<PostManagementPage> {
                                       const SizedBox(width: 8),
                                       // Attendance button - only show for approved applications
                                       if (app.status == ApplicationStatus.approved && post != null && !isPostDeleted)
-                                        OutlinedButton(
-                                          onPressed: () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (_) => AttendancePage(
-                                                  applicationId: app.id,
-                                                  postId: app.postId,
-                                                  recruiterId: app.recruiterId,
-                                                ),
+                                        StreamBuilder(
+                                          stream: _attendanceService.streamAttendanceByApplicationId(app.id),
+                                          builder: (context, attendanceSnapshot) {
+                                            int uploadedCount = 0;
+                                            if (attendanceSnapshot.hasData && attendanceSnapshot.data != null) {
+                                              final attendance = attendanceSnapshot.data;
+                                              if (attendance?.hasStartImage ?? false) uploadedCount++;
+                                              if (attendance?.hasEndImage ?? false) uploadedCount++;
+                                            }
+                                            
+                                            return OutlinedButton(
+                                              onPressed: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (_) => AttendancePage(
+                                                      applicationId: app.id,
+                                                      postId: app.postId,
+                                                      recruiterId: app.recruiterId,
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                              style: OutlinedButton.styleFrom(
+                                                foregroundColor: const Color(0xFF00C8A0),
+                                                side: const BorderSide(color: Color(0xFF00C8A0)),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(Icons.camera_alt, size: 16),
+                                                  const SizedBox(width: 4),
+                                                  Text('Attendance ($uploadedCount/2)'),
+                                                ],
                                               ),
                                             );
                                           },
-                                          style: OutlinedButton.styleFrom(
-                                            foregroundColor: const Color(0xFF00C8A0),
-                                            side: const BorderSide(color: Color(0xFF00C8A0)),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                          ),
-                                          child: const Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(Icons.camera_alt, size: 16),
-                                              SizedBox(width: 4),
-                                              Text('Attendance'),
-                                            ],
-                                          ),
                                         ),
                                       const Spacer(),
                                       // Show like/dislike buttons only if approved and completed

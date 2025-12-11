@@ -8,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
 import '../../models/user/resume_attachment.dart';
 
 class StorageService {
@@ -43,13 +44,44 @@ class StorageService {
         throw Exception('Unable to read file: both bytes and path are null');
       }
       
-      // Base64 encoding increases size by ~33%, and we need space for other fields
-      const int maxOriginalSize = 650 * 1024; // 650KB original ≈ 870KB base64 + metadata
-      if (bytes.length > maxOriginalSize) {
-        final fileSizeMB = (bytes.length / 1024 / 1024).toStringAsFixed(2);
-        throw Exception('File is too large (${fileSizeMB}MB / ${(bytes.length / 1024).toStringAsFixed(0)}KB). '
-            'Maximum allowed size is 650KB. '
-            'Please select a smaller file or compress your resume before uploading.');
+      // Get file extension to determine if it's an image
+      String ext = (file.extension?.toLowerCase() ?? 'unknown').trim();
+      ext = ext.replaceAll(RegExp(r'[^a-z0-9]'), '').toLowerCase();
+      if (ext == 'jpeg') ext = 'jpg';
+      
+      // Compress images (PNG, JPG, JPEG) but not PDF
+      final isImage = ['png', 'jpg', 'jpeg'].contains(ext);
+      if (isImage) {
+        // Compress image to reduce file size
+        bytes = await _compressImage(bytes, maxWidth: 1920, maxHeight: 1920, quality: 75);
+        
+        // If still too large, try more aggressive compression
+        const int maxOriginalSize = 650 * 1024; // 650KB original ≈ 870KB base64 + metadata
+        if (bytes.length > maxOriginalSize) {
+          bytes = await _compressImage(bytes, maxWidth: 1280, maxHeight: 1280, quality: 60);
+          
+          if (bytes.length > maxOriginalSize) {
+            // Try even more aggressive compression
+            bytes = await _compressImage(bytes, maxWidth: 1024, maxHeight: 1024, quality: 30);
+            
+            if (bytes.length > maxOriginalSize) {
+              final fileSizeMB = (bytes.length / 1024 / 1024).toStringAsFixed(2);
+              throw Exception('Image is too large (${fileSizeMB}MB / ${(bytes.length / 1024).toStringAsFixed(0)}KB). '
+                  'Maximum allowed size is 650KB. '
+                  'Please select a smaller image or try taking a photo with lower resolution.');
+            }
+          }
+        }
+      } else {
+        // For PDF files, check size without compression
+        // Base64 encoding increases size by ~33%, and we need space for other fields
+        const int maxOriginalSize = 650 * 1024; // 650KB original ≈ 870KB base64 + metadata
+        if (bytes.length > maxOriginalSize) {
+          final fileSizeMB = (bytes.length / 1024 / 1024).toStringAsFixed(2);
+          throw Exception('File is too large (${fileSizeMB}MB / ${(bytes.length / 1024).toStringAsFixed(0)}KB). '
+              'Maximum allowed size is 650KB. '
+              'Please select a smaller file or compress your resume before uploading.');
+        }
       }
       
       final base64String = base64Encode(bytes);
@@ -68,13 +100,7 @@ class StorageService {
             'Please select a smaller file or compress your resume before uploading.');
       }
       
-      //validate and sanitize 
-      String ext = (file.extension?.toLowerCase() ?? 'unknown').trim();
-      //remove invalid characters
-      ext = ext.replaceAll(RegExp(r'[^a-z0-9]'), '').toLowerCase();
-      //common formats
-      if (ext == 'jpeg') ext = 'jpg';
-      //validate extension 
+      //validate and sanitize extension (already processed above, but ensure it's valid)
       if (ext.isEmpty || !['pdf', 'png', 'jpg', 'jpeg'].contains(ext)) {
         ext = 'pdf'; 
       }
@@ -252,7 +278,41 @@ class StorageService {
   }
 
  
-  Future<Uint8List?> pickImageBytes({required bool fromCamera}) async {
+  //compress resize image 
+  Future<Uint8List> _compressImage(Uint8List imageBytes, {int maxWidth = 1920, int maxHeight = 1920, int quality = 85}) async {
+    try {
+      //decode 
+      img.Image? image = img.decodeImage(imageBytes);
+      if (image == null) return imageBytes;
+
+      //calculate new dimensions
+      int width = image.width;
+      int height = image.height;
+      
+      if (width > maxWidth || height > maxHeight) {
+        double aspectRatio = width / height;
+        if (width > height) {
+          width = maxWidth;
+          height = (maxWidth / aspectRatio).round();
+        } else {
+          height = maxHeight;
+          width = (maxHeight * aspectRatio).round();
+        }
+        
+        //resize 
+        image = img.copyResize(image, width: width, height: height);
+      }
+
+      //encode JPEG 
+      final compressedBytes = img.encodeJpg(image, quality: quality);
+      return Uint8List.fromList(compressedBytes);
+    } catch (e) {
+      print('Error compressing image: $e');
+      return imageBytes;
+    }
+  }
+
+  Future<Uint8List?> pickImageBytes({required bool fromCamera, String? preferredCamera}) async {
     try {
       final bool useImagePicker = kIsWeb ||
           (!kIsWeb && (Platform.isAndroid || Platform.isIOS || Platform.isMacOS));
@@ -264,14 +324,17 @@ class StorageService {
           return null;
         }
 
+      
         final ImagePicker picker = ImagePicker();
         final XFile? x = fromCamera
-            ? await picker.pickImage(source: ImageSource.camera, imageQuality: 80)
-            : await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+            ? await picker.pickImage(source: ImageSource.camera, imageQuality: 30)
+            : await picker.pickImage(source: ImageSource.gallery, imageQuality: 40);
 
         if (x == null) return null;
-
         bytes = await x.readAsBytes();
+
+        //compress the image more
+        bytes = await _compressImage(bytes, maxWidth: 1920, maxHeight: 1920, quality: 75);
       } else {
         if (fromCamera) return null;
         final result = await FilePicker.platform.pickFiles(
@@ -282,12 +345,17 @@ class StorageService {
         if (result == null || result.files.isEmpty) return null;
         final file = result.files.single;
         bytes = file.bytes ?? await File(file.path!).readAsBytes();
+        bytes = await _compressImage(bytes, maxWidth: 1920, maxHeight: 1920, quality: 75);
       }
 
       const int maxOriginalSize = 500 * 1024; // 500KB
       if (bytes.length > maxOriginalSize) {
-        throw Exception('Image is too large (${(bytes.length / 1024).toStringAsFixed(0)}KB). '
-            'Maximum size is 500KB. Please try taking the photo again or select a smaller image.');
+        bytes = await _compressImage(bytes, maxWidth: 1280, maxHeight: 1280, quality: 60);
+        
+        if (bytes.length > maxOriginalSize) {
+          throw Exception('Image is too large (${(bytes.length / 1024).toStringAsFixed(0)}KB). '
+              'Maximum size is 500KB. Please try taking the photo again or select a smaller image.');
+        }
       }
 
       return bytes;
@@ -296,6 +364,7 @@ class StorageService {
       rethrow;
     }
   }
+
 
   Future<String?> pickAndUploadImage({required bool fromCamera}) async {
     try {

@@ -81,10 +81,14 @@ class AttendanceService {
   Future<void> uploadStartImage({
     required String attendanceId,
     required bool fromCamera,
+    String? preferredCamera, 
   }) async {
     try {
       // Pick and get image as base64
-      final imageBytes = await _storageService.pickImageBytes(fromCamera: fromCamera);
+      final imageBytes = await _storageService.pickImageBytes(
+        fromCamera: fromCamera,
+        preferredCamera: preferredCamera,
+      );
       if (imageBytes == null) {
         throw StateError('No image selected');
       }
@@ -114,10 +118,13 @@ class AttendanceService {
   Future<void> uploadEndImage({
     required String attendanceId,
     required bool fromCamera,
+    String? preferredCamera, 
   }) async {
     try {
-      // Pick and get image as base64
-      final imageBytes = await _storageService.pickImageBytes(fromCamera: fromCamera);
+      final imageBytes = await _storageService.pickImageBytes(
+        fromCamera: fromCamera,
+        preferredCamera: preferredCamera,
+      );
       if (imageBytes == null) {
         throw StateError('No image selected');
       }
@@ -126,7 +133,7 @@ class AttendanceService {
       final base64String = base64Encode(imageBytes);
       
       // Check size limit
-      const int maxBase64Size = 900 * 1024; // 900KB to leave room for other fields
+      const int maxBase64Size = 900 * 1024; // 900KB 
       if (base64String.length > maxBase64Size) {
         throw StateError('Image is too large. Please try taking the photo again with lower resolution.');
       }
@@ -161,6 +168,32 @@ class AttendanceService {
         });
   }
 
+  Future<void> removeStartImage({required String attendanceId}) async {
+    try {
+      await _col.doc(attendanceId).update({
+        'startImageUrl': FieldValue.delete(),
+        'startTime': FieldValue.delete(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('Error removing start image: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> removeEndImage({required String attendanceId}) async {
+    try {
+      await _col.doc(attendanceId).update({
+        'endImageUrl': FieldValue.delete(),
+        'endTime': FieldValue.delete(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('Error removing end image: $e');
+      rethrow;
+    }
+  }
+
   // Get all attendances for a specific post (for recruiter to view)
   Stream<List<Attendance>> streamAttendancesByPostId(String postId) {
     return _col
@@ -178,4 +211,3 @@ class AttendanceService {
         });
   }
 }
-

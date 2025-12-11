@@ -491,43 +491,146 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                             totalDislikes += dislikes.length;
                           }
                           
-                          return Wrap(
-                            spacing: 16,
-                            runSpacing: 8,
-                            crossAxisAlignment: WrapCrossAlignment.center,
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
+                              // First row: views and applicants
+                              Wrap(
+                                spacing: 16,
+                                runSpacing: 8,
+                                crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
-                                  Icon(Icons.remove_red_eye, size: 16, color: Colors.grey[500]),
-                                  const SizedBox(width: 4),
-                                  Text('$views views', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.remove_red_eye, size: 16, color: Colors.grey[500]),
+                                      const SizedBox(width: 4),
+                                      Text('$views views', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                                    ],
+                                  ),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.people_alt, size: 16, color: Colors.grey[500]),
+                                      const SizedBox(width: 4),
+                                      Text('${widget.post.applicants} applicants', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                                    ],
+                                  ),
                                 ],
                               ),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.people_alt, size: 16, color: Colors.grey[500]),
-                                  const SizedBox(width: 4),
-                                  Text('${widget.post.applicants} applicants', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-                                ],
-                              ),
-                              // Always show likes and dislikes if there are applications
+                              // Second row: likes and dislikes in the same row
                               if (applications.isNotEmpty) ...[
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 12,
+                                  runSpacing: 8,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
-                                    Icon(Icons.thumb_up_outlined, size: 16, color: Colors.grey[500]),
-                                    const SizedBox(width: 4),
-                                    Text('$totalLikes likes', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-                                  ],
-                                ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.thumb_down_outlined, size: 16, color: Colors.grey[500]),
-                                    const SizedBox(width: 4),
-                                    Text('$totalDislikes dislikes', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                                    // Like display with enhanced styling
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF00C8A0).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                          color: const Color(0xFF00C8A0).withOpacity(0.3),
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.thumb_up,
+                                            size: 16,
+                                            color: totalLikes > 0 ? const Color(0xFF00C8A0) : Colors.grey[500],
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            '$totalLikes',
+                                            style: TextStyle(
+                                              color: totalLikes > 0 ? const Color(0xFF00C8A0) : Colors.grey[600],
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          if (totalLikes != 1) ...[
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              'likes',
+                                              style: TextStyle(
+                                                color: totalLikes > 0 ? const Color(0xFF00C8A0) : Colors.grey[600],
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ] else ...[
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              'like',
+                                              style: TextStyle(
+                                                color: totalLikes > 0 ? const Color(0xFF00C8A0) : Colors.grey[600],
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    // Dislike display with enhanced styling
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                          color: Colors.red.withOpacity(0.3),
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.thumb_down,
+                                            size: 16,
+                                            color: totalDislikes > 0 ? Colors.red : Colors.grey[500],
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            '$totalDislikes',
+                                            style: TextStyle(
+                                              color: totalDislikes > 0 ? Colors.red : Colors.grey[600],
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          if (totalDislikes != 1) ...[
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              'dislikes',
+                                              style: TextStyle(
+                                                color: totalDislikes > 0 ? Colors.red : Colors.grey[600],
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ] else ...[
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              'dislike',
+                                              style: TextStyle(
+                                                color: totalDislikes > 0 ? Colors.red : Colors.grey[600],
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ],

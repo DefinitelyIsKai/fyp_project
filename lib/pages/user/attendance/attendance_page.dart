@@ -57,7 +57,7 @@ class _AttendancePageState extends State<AttendancePage> {
     }
   }
 
-  Future<void> _uploadStartImage({required bool fromCamera}) async {
+  Future<void> _uploadStartImage({required bool fromCamera, String? preferredCamera}) async {
     if (_attendance == null) return;
 
     try {
@@ -65,6 +65,7 @@ class _AttendancePageState extends State<AttendancePage> {
       await _attendanceService.uploadStartImage(
         attendanceId: _attendance!.id,
         fromCamera: fromCamera,
+        preferredCamera: preferredCamera,
       );
       
       if (mounted) {
@@ -75,10 +76,16 @@ class _AttendancePageState extends State<AttendancePage> {
         await _loadAttendance();
       }
     } catch (e) {
+      // Silently ignore if user cancelled image selection
+      final errorMessage = e.toString();
+      if (errorMessage.contains('No image selected')) {
+        // User cancelled - don't show any message
+        return;
+      }
       if (mounted) {
         DialogUtils.showWarningMessage(
           context: context,
-          message: 'Failed to upload start image: ${e.toString().replaceAll('Exception: ', '').replaceAll('StateError: ', '')}',
+          message: 'Failed to upload start image: ${errorMessage.replaceAll('Exception: ', '').replaceAll('StateError: ', '')}',
         );
       }
     } finally {
@@ -88,7 +95,7 @@ class _AttendancePageState extends State<AttendancePage> {
     }
   }
 
-  Future<void> _uploadEndImage({required bool fromCamera}) async {
+  Future<void> _uploadEndImage({required bool fromCamera, String? preferredCamera}) async {
     if (_attendance == null) return;
 
     try {
@@ -96,6 +103,7 @@ class _AttendancePageState extends State<AttendancePage> {
       await _attendanceService.uploadEndImage(
         attendanceId: _attendance!.id,
         fromCamera: fromCamera,
+        preferredCamera: preferredCamera,
       );
       
       if (mounted) {
@@ -106,10 +114,16 @@ class _AttendancePageState extends State<AttendancePage> {
         await _loadAttendance();
       }
     } catch (e) {
+      // Silently ignore if user cancelled image selection
+      final errorMessage = e.toString();
+      if (errorMessage.contains('No image selected')) {
+        // User cancelled - don't show any message
+        return;
+      }
       if (mounted) {
         DialogUtils.showWarningMessage(
           context: context,
-          message: 'Failed to upload end image: ${e.toString().replaceAll('Exception: ', '').replaceAll('StateError: ', '')}',
+          message: 'Failed to upload end image: ${errorMessage.replaceAll('Exception: ', '').replaceAll('StateError: ', '')}',
         );
       }
     } finally {
@@ -120,6 +134,10 @@ class _AttendancePageState extends State<AttendancePage> {
   }
 
   Future<void> _showImageSourceDialog({required bool isStart}) async {
+    final hasImage = isStart 
+        ? (_attendance?.hasStartImage ?? false)
+        : (_attendance?.hasEndImage ?? false);
+
     final source = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -154,6 +172,14 @@ class _AttendancePageState extends State<AttendancePage> {
                 title: const Text('Choose from gallery'),
                 onTap: () => Navigator.pop(context, 'gallery'),
               ),
+              if (hasImage) ...[
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.delete_outline, color: Colors.red),
+                  title: const Text('Remove photo'),
+                  onTap: () => Navigator.pop(context, 'remove'),
+                ),
+              ],
               const SizedBox(height: 16),
             ],
           ),
@@ -163,10 +189,68 @@ class _AttendancePageState extends State<AttendancePage> {
 
     if (source == null) return;
 
-    if (isStart) {
-      _uploadStartImage(fromCamera: source == 'camera');
+    if (source == 'remove') {
+      _removeImage(isStart: isStart);
+    } else if (source == 'camera') {
+      if (isStart) {
+        _uploadStartImage(fromCamera: true);
+      } else {
+        _uploadEndImage(fromCamera: true);
+      }
     } else {
-      _uploadEndImage(fromCamera: source == 'camera');
+      if (isStart) {
+        _uploadStartImage(fromCamera: false);
+      } else {
+        _uploadEndImage(fromCamera: false);
+      }
+    }
+  }
+
+  Future<void> _removeImage({required bool isStart}) async {
+    if (_attendance == null) return;
+
+    final confirmed = await DialogUtils.showConfirmationDialog(
+      context: context,
+      title: isStart ? 'Remove Start Image' : 'Remove End Image',
+      message: 'Are you sure you want to remove this image? This action cannot be undone.',
+      icon: Icons.delete_outline,
+      confirmText: 'Remove',
+      cancelText: 'Cancel',
+      isDestructive: true,
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      if (isStart) {
+        setState(() => _isUploadingStart = true);
+        await _attendanceService.removeStartImage(attendanceId: _attendance!.id);
+      } else {
+        setState(() => _isUploadingEnd = true);
+        await _attendanceService.removeEndImage(attendanceId: _attendance!.id);
+      }
+      
+      if (mounted) {
+        DialogUtils.showSuccessMessage(
+          context: context,
+          message: isStart ? 'Start image removed successfully' : 'End image removed successfully',
+        );
+        await _loadAttendance();
+      }
+    } catch (e) {
+      if (mounted) {
+        DialogUtils.showWarningMessage(
+          context: context,
+          message: 'Failed to remove image: ${e.toString().replaceAll('Exception: ', '').replaceAll('StateError: ', '')}',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploadingStart = false;
+          _isUploadingEnd = false;
+        });
+      }
     }
   }
 
@@ -268,6 +352,38 @@ class _AttendancePageState extends State<AttendancePage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00C8A0).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: const Color(0xFF00C8A0).withOpacity(0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              color: const Color(0xFF00C8A0),
+                              size: 24,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Please upload your start and end images to record your attendance',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey[800],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
                       // Start Image Section
                       Text(
                         'Start Image',
@@ -287,7 +403,7 @@ class _AttendancePageState extends State<AttendancePage> {
                       if (_attendance!.startTime != null) ...[
                         const SizedBox(height: 8),
                         Text(
-                          'Start Time: ${_formatDateTime(_attendance!.startTime!)}',
+                          'Upload Time: ${_formatDateTime(_attendance!.startTime!)}',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey[600],
@@ -314,7 +430,7 @@ class _AttendancePageState extends State<AttendancePage> {
                       if (_attendance!.endTime != null) ...[
                         const SizedBox(height: 8),
                         Text(
-                          'End Time: ${_formatDateTime(_attendance!.endTime!)}',
+                          'Upload Time: ${_formatDateTime(_attendance!.endTime!)}',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey[600],
@@ -365,4 +481,3 @@ class _AttendancePageState extends State<AttendancePage> {
         '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 }
-
