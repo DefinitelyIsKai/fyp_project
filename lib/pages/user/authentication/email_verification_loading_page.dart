@@ -76,7 +76,7 @@ class _EmailVerificationLoadingPageState extends State<EmailVerificationLoadingP
         context: context,
         message: 'Verification email resent. Please check your inbox.',
       );
-      //after successful resend 1min
+      //resend 1min
       if (mounted) {
         setState(() {
           _resendCooldown = 60;

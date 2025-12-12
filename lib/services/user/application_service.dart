@@ -18,8 +18,6 @@ class ApplicationService {
     required String recruiterId,
   }) async {
     final jobseekerId = _authService.currentUserId;
-    
-    // Check if user is verified
     final userDoc = await _authService.getUserDoc();
     final userData = userDoc.data();
     final isVerified = userData?['isVerified'] as bool? ?? false;
@@ -504,7 +502,7 @@ class ApplicationService {
       likes.remove(userId);
     } else {
       likes.add(userId);
-      dislikes.remove(userId); // Remove if previously disliked
+      dislikes.remove(userId); 
     }
     
     await docRef.update({
@@ -528,7 +526,7 @@ class ApplicationService {
       dislikes.remove(userId);
     } else {
       dislikes.add(userId);
-      likes.remove(userId); // Remove if previously liked
+      likes.remove(userId); 
     }
     
     await docRef.update({
@@ -671,7 +669,6 @@ class ApplicationService {
     }
   }
 
-  //auto-reject pending applications
   Future<void> checkAndAutoRejectApplications() async {
     try {
       final now = DateTime.now();
@@ -825,7 +822,7 @@ class ApplicationService {
         eventStartDate.day,
       );
 
-      //auto-reject if event starts today or has already passed
+      //auto-reject if event starts today/ already passed
       if (eventStartDateOnly.isAtSameMomentAs(today) || eventStartDateOnly.isBefore(today)) {
         await appDoc.reference.update({
           'status': 'rejected',

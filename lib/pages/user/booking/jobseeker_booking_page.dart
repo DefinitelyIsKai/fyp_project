@@ -344,7 +344,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                                 }).toList()
                               : slots;
 
-                          //filter slots of post event date range - use stream for real-time updates
+                          //filter slots post event date range 
                           final postId = _selectedApplication?.postId;
                           if (postId == null) {
                             //show all slots

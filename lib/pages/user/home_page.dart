@@ -890,10 +890,10 @@ class _HomeTabState extends State<_HomeTab> {
                                       const SizedBox(width: 4),
                                       Text(
                                         post.budgetMin != null && post.budgetMax != null
-                                            ? '\$${post.budgetMin!.toStringAsFixed(0)} - \$${post.budgetMax!.toStringAsFixed(0)}'
+                                            ? 'RM ${post.budgetMin!.toStringAsFixed(0)} - RM ${post.budgetMax!.toStringAsFixed(0)}'
                                             : post.budgetMin != null
-                                                ? 'From \$${post.budgetMin!.toStringAsFixed(0)}'
-                                                : 'Up to \$${post.budgetMax!.toStringAsFixed(0)}',
+                                                ? 'From RM ${post.budgetMin!.toStringAsFixed(0)}'
+                                                : 'Up to RM ${post.budgetMax!.toStringAsFixed(0)}',
                                         style: const TextStyle(
                                           color: Colors.black87,
                                           fontWeight: FontWeight.w600,

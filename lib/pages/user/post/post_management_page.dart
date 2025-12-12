@@ -4,14 +4,17 @@ import '../../../models/user/post.dart';
 import 'post_create_page.dart';
 import 'post_details_page.dart';
 import 'completed_posts_rating_page.dart';
+import '../attendance/attendance_page.dart';
 import '../../../services/user/post_service.dart';
 import '../../../services/user/auth_service.dart';
 import '../../../services/user/application_service.dart';
+import '../../../services/user/attendance_service.dart';
 import '../../../models/user/application.dart';
 import '../../../utils/user/dialog_utils.dart';
 import '../../../utils/user/card_decorations.dart';
 import '../../../widgets/user/empty_state.dart';
 import '../../../widgets/user/pagination_dots_widget.dart';
+import '../../../widgets/user/attendance_view_dialog.dart';
 
 class PostManagementPage extends StatefulWidget {
   const PostManagementPage({super.key});
@@ -24,6 +27,7 @@ class _PostManagementPageState extends State<PostManagementPage> {
   final PostService _service = PostService();
   final AuthService _authService = AuthService();
   final ApplicationService _applicationService = ApplicationService();
+  final AttendanceService _attendanceService = AttendanceService();
   final PageController _pageController = PageController();
 
   late Future<DocumentSnapshot<Map<String, dynamic>>> _userFuture;
@@ -220,10 +224,22 @@ class _PostManagementPageState extends State<PostManagementPage> {
                       for (final post in pagePosts)
                         _PostCard(
                           post: post,
+                          applicationService: _applicationService,
+                          attendanceService: _attendanceService,
                           onView: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(builder: (_) => PostDetailsPage(post: post)),
+                            );
+                          },
+                          onCheckAttendance: () {
+                            showDialog(
+                              context: context,
+                              builder: (context) => AttendanceViewDialog(
+                                postId: post.id,
+                                applicationService: _applicationService,
+                                attendanceService: _attendanceService,
+                              ),
                             );
                           },
                           onEdit: () async {
@@ -509,8 +525,49 @@ class _PostManagementPageState extends State<PostManagementPage> {
                                         ),
                                         child: const Text('View Details'),
                                       ),
+                                      const SizedBox(width: 8),
+                                      if (app.status == ApplicationStatus.approved && post != null && !isPostDeleted)
+                                        StreamBuilder(
+                                          stream: _attendanceService.streamAttendanceByApplicationId(app.id),
+                                          builder: (context, attendanceSnapshot) {
+                                            int uploadedCount = 0;
+                                            if (attendanceSnapshot.hasData && attendanceSnapshot.data != null) {
+                                              final attendance = attendanceSnapshot.data;
+                                              if (attendance?.hasStartImage ?? false) uploadedCount++;
+                                              if (attendance?.hasEndImage ?? false) uploadedCount++;
+                                            }
+                                            
+                                            return OutlinedButton(
+                                              onPressed: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (_) => AttendancePage(
+                                                      applicationId: app.id,
+                                                      postId: app.postId,
+                                                      recruiterId: app.recruiterId,
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                              style: OutlinedButton.styleFrom(
+                                                foregroundColor: const Color(0xFF00C8A0),
+                                                side: const BorderSide(color: Color(0xFF00C8A0)),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(Icons.camera_alt, size: 16),
+                                                  const SizedBox(width: 4),
+                                                  Text('Attendance ($uploadedCount/2)'),
+                                                ],
+                                              ),
+                                            );
+                                          },
+                                        ),
                                       const Spacer(),
-                                      // Show like/dislike buttons only if approved and completed
                                       if (app.status == ApplicationStatus.approved && 
                                           post != null && 
                                           !isPostDeleted && 
@@ -530,7 +587,6 @@ class _PostManagementPageState extends State<PostManagementPage> {
                                             return Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                // Like button
                                                 Row(
                                                   mainAxisSize: MainAxisSize.min,
                                                   children: [
@@ -572,7 +628,6 @@ class _PostManagementPageState extends State<PostManagementPage> {
                                                   ],
                                                 ),
                                                 const SizedBox(width: 8),
-                                                // Dislike button
                                                 Row(
                                                   mainAxisSize: MainAxisSize.min,
                                                   children: [
@@ -760,13 +815,19 @@ class _ApplicationStatusChip extends StatelessWidget {
 class _PostCard extends StatelessWidget {
   const _PostCard({
     required this.post,
+    required this.applicationService,
+    required this.attendanceService,
     required this.onView,
+    required this.onCheckAttendance,
     required this.onEdit,
     required this.onDelete,
   });
 
   final Post post;
+  final ApplicationService applicationService;
+  final AttendanceService attendanceService;
   final VoidCallback onView;
+  final VoidCallback onCheckAttendance;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -864,6 +925,25 @@ class _PostCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     ),
                     child: const Text('View'),
+                  ),
+                //att
+                if (!post.isDraft && post.status == PostStatus.completed)
+                  OutlinedButton(
+                    onPressed: onCheckAttendance,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF00C8A0),
+                      side: const BorderSide(color: Color(0xFF00C8A0)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.camera_alt, size: 16),
+                        SizedBox(width: 4),
+                        Text('Check Attendance'),
+                      ],
+                    ),
                   ),
                 if (canEdit)
                   OutlinedButton(

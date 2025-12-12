@@ -8,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
 import '../../models/user/resume_attachment.dart';
 
 class StorageService {
@@ -42,24 +43,45 @@ class StorageService {
       } else {
         throw Exception('Unable to read file: both bytes and path are null');
       }
+
+      String ext = (file.extension?.toLowerCase() ?? 'unknown').trim();
+      ext = ext.replaceAll(RegExp(r'[^a-z0-9]'), '').toLowerCase();
+      if (ext == 'jpeg') ext = 'jpg';
       
-      // Base64 encoding increases size by ~33%, and we need space for other fields
-      const int maxOriginalSize = 650 * 1024; // 650KB original ≈ 870KB base64 + metadata
-      if (bytes.length > maxOriginalSize) {
-        final fileSizeMB = (bytes.length / 1024 / 1024).toStringAsFixed(2);
-        throw Exception('File is too large (${fileSizeMB}MB / ${(bytes.length / 1024).toStringAsFixed(0)}KB). '
-            'Maximum allowed size is 650KB. '
-            'Please select a smaller file or compress your resume before uploading.');
+      final isImage = ['png', 'jpg', 'jpeg'].contains(ext);
+      if (isImage) {
+        bytes = await _compressImage(bytes, maxWidth: 1920, maxHeight: 1920, quality: 75);
+        
+        const int maxOriginalSize = 650 * 1024;
+        if (bytes.length > maxOriginalSize) {
+          bytes = await _compressImage(bytes, maxWidth: 1280, maxHeight: 1280, quality: 60);
+          
+          if (bytes.length > maxOriginalSize) {
+            bytes = await _compressImage(bytes, maxWidth: 1024, maxHeight: 1024, quality: 30);
+            
+            if (bytes.length > maxOriginalSize) {
+              final fileSizeMB = (bytes.length / 1024 / 1024).toStringAsFixed(2);
+              throw Exception('Image is too large (${fileSizeMB}MB / ${(bytes.length / 1024).toStringAsFixed(0)}KB). '
+                  'Maximum allowed size is 650KB. '
+                  'Please select a smaller image or try taking a photo with lower resolution.');
+            }
+          }
+        }
+      } else {
+        const int maxOriginalSize = 650 * 1024; 
+        if (bytes.length > maxOriginalSize) {
+          final fileSizeMB = (bytes.length / 1024 / 1024).toStringAsFixed(2);
+          throw Exception('File is too large (${fileSizeMB}MB / ${(bytes.length / 1024).toStringAsFixed(0)}KB). '
+              'Maximum allowed size is 650KB. '
+              'Please select a smaller file or compress your resume before uploading.');
+        }
       }
       
       final base64String = base64Encode(bytes);
-      
-      // Estimate total document size (base64 + metadata fields)
-      // Metadata: fileName (~100 bytes), fileType (~10 bytes), uploadedAt (~30 bytes)
       const int estimatedMetadataSize = 200; // bytes
       final int estimatedTotalSize = base64String.length + estimatedMetadataSize;
       
-      const int maxDocumentSize = 1000 * 1024; // 1000KB - leave some margin
+      const int maxDocumentSize = 1000 * 1024; 
       if (estimatedTotalSize > maxDocumentSize) {
         final base64SizeMB = (base64String.length / 1024 / 1024).toStringAsFixed(2);
         final totalSizeMB = (estimatedTotalSize / 1024 / 1024).toStringAsFixed(2);
@@ -68,18 +90,10 @@ class StorageService {
             'Please select a smaller file or compress your resume before uploading.');
       }
       
-      //validate and sanitize 
-      String ext = (file.extension?.toLowerCase() ?? 'unknown').trim();
-      //remove invalid characters
-      ext = ext.replaceAll(RegExp(r'[^a-z0-9]'), '').toLowerCase();
-      //common formats
-      if (ext == 'jpeg') ext = 'jpg';
-      //validate extension 
       if (ext.isEmpty || !['pdf', 'png', 'jpg', 'jpeg'].contains(ext)) {
         ext = 'pdf'; 
       }
       
-      //sanitize file name 
       String fileName = file.name.trim();
       if (fileName.isEmpty) {
         fileName = 'Resume.$ext';
@@ -89,11 +103,9 @@ class StorageService {
         fileName = '${fileName.substring(0, 250)}.$ext';
       }
 
-      //not empty and contains valid base64 characters
       if (base64String.isEmpty) {
         throw Exception('Failed to encode file: base64 string is empty');
       }
-      //valid characters 
       if (!RegExp(r'^[A-Za-z0-9+/=]+$').hasMatch(base64String)) {
         throw Exception('Invalid base64 string: contains invalid characters');
       }
@@ -135,7 +147,7 @@ class StorageService {
         }
       }
 
-      //Calculate actual size
+      //calculate actual size
       final actualBase64Length = (resumeData['base64'] as String).length;
       final estimatedFirestoreSize = actualBase64Length + 
           (resumeData['fileName'] as String).length +
@@ -147,7 +159,7 @@ class StorageService {
           'base64 length: ${(actualBase64Length / 1024).toStringAsFixed(1)}KB, '
           'estimated total: ${(estimatedFirestoreSize / 1024).toStringAsFixed(1)}KB');
       
-      const int maxFirestoreDocumentSize = 1024 * 1024; //1mb
+      const int maxFirestoreDocumentSize = 1024 * 1024;
       if (estimatedFirestoreSize > maxFirestoreDocumentSize) {
         throw Exception('File is too large for Firestore (${(estimatedFirestoreSize / 1024 / 1024).toStringAsFixed(2)}MB). '
             'Maximum document size is 1MB. '
@@ -183,18 +195,12 @@ class StorageService {
               }
             }
             
-            // Don't clean up image when uploading resume - image and resume are independent
-            // Only clean up resume base64 data to save space
-            // Image cleanup should only happen when uploading a new image
           }
         }
       } catch (cleanupError) {
-        // Log but don't fail - cleanup is best effort
         print('Warning: Failed to cleanup existing base64 data: $cleanupError');
       }
 
-      // Estimate total document size with new resume data
-      // Calculate size of existing document (without resume)
       int existingSize = 0;
       if (existingData != null) {
         final tempData = Map<String, dynamic>.from(existingData);
@@ -205,11 +211,10 @@ class StorageService {
       //calculate size new resume data
       final newResumeSize = _estimateDocumentSize({'resume': resumeData});
       
-      // totalestimated size
+      //totalestimated size
       final totalEstimatedSize = existingSize + newResumeSize;
       const int maxDocSize = 1024 * 1024; 
       
-      // If total size would exceed limit, don't save base64 data
       Map<String, dynamic> resumeDataToSave = Map<String, dynamic>.from(resumeData);
       if (totalEstimatedSize > maxDocSize) {
         print('Warning: Document would exceed 1MB limit. Removing base64 data from resume.');
@@ -240,7 +245,7 @@ class StorageService {
           fileName: attachment.fileName,
           fileType: attachment.fileType,
           downloadUrl: attachment.downloadUrl,
-          base64Data: null, //not saved
+          base64Data: null, 
         );
       }
 
@@ -251,8 +256,38 @@ class StorageService {
     }
   }
 
- 
-  Future<Uint8List?> pickImageBytes({required bool fromCamera}) async {
+  Future<Uint8List> _compressImage(Uint8List imageBytes, {int maxWidth = 1920, int maxHeight = 1920, int quality = 85}) async {
+    try {
+      img.Image? image = img.decodeImage(imageBytes);
+      if (image == null) return imageBytes;
+
+      //calculate new dimensions
+      int width = image.width;
+      int height = image.height;
+      
+      if (width > maxWidth || height > maxHeight) {
+        double aspectRatio = width / height;
+        if (width > height) {
+          width = maxWidth;
+          height = (maxWidth / aspectRatio).round();
+        } else {
+          height = maxHeight;
+          width = (maxHeight * aspectRatio).round();
+        }
+        
+        //resize 
+        image = img.copyResize(image, width: width, height: height);
+      }
+
+      final compressedBytes = img.encodeJpg(image, quality: quality);
+      return Uint8List.fromList(compressedBytes);
+    } catch (e) {
+      print('Error compressing image: $e');
+      return imageBytes;
+    }
+  }
+
+  Future<Uint8List?> pickImageBytes({required bool fromCamera, String? preferredCamera}) async {
     try {
       final bool useImagePicker = kIsWeb ||
           (!kIsWeb && (Platform.isAndroid || Platform.isIOS || Platform.isMacOS));
@@ -264,14 +299,16 @@ class StorageService {
           return null;
         }
 
+      
         final ImagePicker picker = ImagePicker();
         final XFile? x = fromCamera
-            ? await picker.pickImage(source: ImageSource.camera, imageQuality: 80)
-            : await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+            ? await picker.pickImage(source: ImageSource.camera, imageQuality: 30)
+            : await picker.pickImage(source: ImageSource.gallery, imageQuality: 40);
 
         if (x == null) return null;
-
         bytes = await x.readAsBytes();
+
+        bytes = await _compressImage(bytes, maxWidth: 1920, maxHeight: 1920, quality: 75);
       } else {
         if (fromCamera) return null;
         final result = await FilePicker.platform.pickFiles(
@@ -282,12 +319,17 @@ class StorageService {
         if (result == null || result.files.isEmpty) return null;
         final file = result.files.single;
         bytes = file.bytes ?? await File(file.path!).readAsBytes();
+        bytes = await _compressImage(bytes, maxWidth: 1920, maxHeight: 1920, quality: 75);
       }
 
-      const int maxOriginalSize = 500 * 1024; // 500KB
+      const int maxOriginalSize = 500 * 1024;
       if (bytes.length > maxOriginalSize) {
-        throw Exception('Image is too large (${(bytes.length / 1024).toStringAsFixed(0)}KB). '
-            'Maximum size is 500KB. Please try taking the photo again or select a smaller image.');
+        bytes = await _compressImage(bytes, maxWidth: 1280, maxHeight: 1280, quality: 60);
+        
+        if (bytes.length > maxOriginalSize) {
+          throw Exception('Image is too large (${(bytes.length / 1024).toStringAsFixed(0)}KB). '
+              'Maximum size is 500KB. Please try taking the photo again or select a smaller image.');
+        }
       }
 
       return bytes;
@@ -296,6 +338,7 @@ class StorageService {
       rethrow;
     }
   }
+
 
   Future<String?> pickAndUploadImage({required bool fromCamera}) async {
     try {
@@ -320,11 +363,10 @@ class StorageService {
         if (x == null) return null;
 
         bytes = await x.readAsBytes();
-        
-        //get extension MIME type  
+        bytes = await _compressImage(bytes, maxWidth: 1024, maxHeight: 1024, quality: 75);
+         
         String? mimeType = x.mimeType;
         if (mimeType != null) {
-          //extract extension
           final mimeParts = mimeType.split('/');
           if (mimeParts.length == 2 && mimeParts[0] == 'image') {
             ext = mimeParts[1].toLowerCase();
@@ -358,18 +400,38 @@ class StorageService {
         if (result == null || result.files.isEmpty) return null;
         final file = result.files.single;
         bytes = file.bytes ?? await File(file.path!).readAsBytes();
+        bytes = await _compressImage(bytes, maxWidth: 1024, maxHeight: 1024, quality: 75);
         ext = file.extension?.toLowerCase() ?? 'jpg';
       }
 
-     
-      const int maxOriginalSize = 400 * 1024; 
+
+      const int maxBase64Size = 250 * 1024; 
+      const int maxOriginalSize = 300 * 1024; 
       
       if (bytes.length > maxOriginalSize) {
-        throw Exception('Image is too large (${(bytes.length / 1024).toStringAsFixed(0)}KB). '
-            'Maximum size is 400KB. Please try taking the photo again or select a smaller image.');
+        bytes = await _compressImage(bytes, maxWidth: 800, maxHeight: 800, quality: 60);
       }
       
-      final base64String = base64Encode(bytes);
+      String base64String = base64Encode(bytes);
+      
+      int compressionAttempts = 0;
+      while (base64String.length > maxBase64Size && compressionAttempts < 3) {
+        if (compressionAttempts == 0) {
+          bytes = await _compressImage(bytes, maxWidth: 800, maxHeight: 800, quality: 50);
+        } else if (compressionAttempts == 1) {
+          bytes = await _compressImage(bytes, maxWidth: 600, maxHeight: 600, quality: 45);
+        } else {
+          bytes = await _compressImage(bytes, maxWidth: 512, maxHeight: 512, quality: 40);
+        }
+        base64String = base64Encode(bytes);
+        compressionAttempts++;
+      }
+      
+      if (base64String.length > maxBase64Size) {
+        final base64SizeKB = (base64String.length / 1024).toStringAsFixed(1);
+        throw Exception('Image is too large (${base64SizeKB}KB base64). '
+            'Maximum size is 250KB. Please try taking the photo again with lower resolution or select a smaller image.');
+      }
       
       
       Map<String, dynamic>? existingData;
@@ -393,10 +455,6 @@ class StorageService {
                 }
               }
             }
-            
-            // Don't clean up resume when uploading image - image and resume are independent
-            // Only clean up image base64 data to save space
-            // Resume cleanup should only happen when uploading a new resume
           }
         }
       } catch (cleanupError) {
@@ -445,18 +503,14 @@ class StorageService {
         ext = 'jpg';
       }
 
-      // Debug: Print values before upload
       print('Uploading image - fileType: "$ext", base64 length: ${base64String.length}, bytes: ${bytes.length}, uid: $_uid');
       print('Extension after processing: "$ext"');
-
-      // Prepare the image data map - ensure all field names are valid
       final imageData = <String, dynamic>{
         'fileType': ext,
         'base64': base64String,
         'uploadedAt': FieldValue.serverTimestamp(),
       };
 
-      // Validate field names are not empty and don't contain invalid characters
       for (final key in imageData.keys) {
         if (key.isEmpty) {
           throw Exception('Invalid field name: empty string');
@@ -565,16 +619,11 @@ class StorageService {
         }
       }
 
-      // If we have errors and no successful images, throw an exception
       if (errorMessages.isNotEmpty && base64Strings.isEmpty) {
         throw Exception(errorMessages.join('\n\n'));
       }
       
-      // If we have some errors but also some successful images, we'll return the successful ones
-      // but the error messages will be handled by the caller if needed
-      // For now, we'll throw if there are any errors to ensure user sees them
       if (errorMessages.isNotEmpty) {
-        // Combine successful count with error messages
         final successCount = base64Strings.length;
         final errorCount = errorMessages.length;
         final combinedMessage = errorMessages.join('\n\n') + 
@@ -617,8 +666,8 @@ class StorageService {
     if (value is Map) {
       int mapSize = 0;
       for (final entry in value.entries) {
-        mapSize += (entry.key as String).length; // Key size
-        mapSize += _estimateValueSize(entry.value); // Value size
+        mapSize += (entry.key as String).length;
+        mapSize += _estimateValueSize(entry.value); 
       }
       return mapSize;
     }

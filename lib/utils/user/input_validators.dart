@@ -25,7 +25,6 @@ class InputValidators {
     return null;
   }
 
-  //email
   static String? requiredEmail(String? value, {String? errorMessage}) {
     final requiredError = required(value);
     if (requiredError != null) {
@@ -34,7 +33,6 @@ class InputValidators {
     return email(value, errorMessage: errorMessage);
   }
 
-  //pass 
   static String? password(String? value, {int minLength = 6, String? errorMessage}) {
     if (value == null || value.isEmpty) {
       return errorMessage ?? 'Please enter your password';
@@ -47,7 +45,6 @@ class InputValidators {
     return null;
   }
 
-  //int
   static String? integer(String? value, {String? errorMessage, bool allowEmpty = false}) {
     if (value == null || value.trim().isEmpty) {
       return allowEmpty ? null : (errorMessage ?? 'This field is required');
@@ -60,7 +57,6 @@ class InputValidators {
     return null;
   }
 
-  //double
   static String? decimal(String? value, {String? errorMessage, bool allowEmpty = false}) {
     if (value == null || value.trim().isEmpty) {
       return allowEmpty ? null : (errorMessage ?? 'This field is required');
@@ -73,7 +69,6 @@ class InputValidators {
     return null;
   }
 
-  //min length
   static String? minLength(String? value, int minLength, {String? errorMessage}) {
     if (value == null || value.trim().isEmpty) {
       return errorMessage ?? 'This field is required';
@@ -86,10 +81,10 @@ class InputValidators {
     return null;
   }
 
-  //max length
+
   static String? maxLength(String? value, int maxLength, {String? errorMessage}) {
     if (value == null || value.trim().isEmpty) {
-      return null; // Empty is valid for maxLength, use required() if needed
+      return null; 
     }
     
     if (value.trim().length > maxLength) {
@@ -99,7 +94,6 @@ class InputValidators {
     return null;
   }
 
-  //length rnage
   static String? lengthRange(String? value, int minLength, int maxLength, {String? errorMessage}) {
     if (value == null || value.trim().isEmpty) {
       return errorMessage ?? 'This field is required';
@@ -113,7 +107,6 @@ class InputValidators {
     return null;
   }
 
-  //numeric range int
   static String? integerRange(String? value, int min, int max, {String? errorMessage, bool allowEmpty = false}) {
     if (value == null || value.trim().isEmpty) {
       return allowEmpty ? null : (errorMessage ?? 'This field is required');
@@ -131,7 +124,6 @@ class InputValidators {
     return null;
   }
 
-  //decimal range
   static String? decimalRange(String? value, double min, double max, {String? errorMessage, bool allowEmpty = false}) {
     if (value == null || value.trim().isEmpty) {
       return allowEmpty ? null : (errorMessage ?? 'This field is required');
@@ -149,7 +141,6 @@ class InputValidators {
     return null;
   }
 
-  //phone 
   static String? phoneNumber(String? value, {String? errorMessage, bool allowEmpty = false}) {
     if (value == null || value.trim().isEmpty) {
       return allowEmpty ? null : (errorMessage ?? 'Please enter a phone number');

@@ -77,7 +77,9 @@ class _ProfilePageState extends State<ProfilePage> {
           final bool isRecruiter = (data?['role'] as String?)?.toLowerCase() == 'recruiter';
           final String? userStatus = _getUserStatus(data);
           final bool isSuspended = _isSuspended(userStatus);
-          final bool isVerified = (data?['isVerified'] as bool? ?? false);
+          final bool isVerified = data != null && (data['isVerified'] as bool? ?? false);
+          final String? verificationStatus = data?['verificationStatus'] as String?;
+          final bool isPending = verificationStatus?.toLowerCase() == 'pending';
           final Map<String, dynamic>? imageData = (data?['image'] as Map<String, dynamic>?);
           final String? base64Image = (imageData?['base64'] as String?);
           final Uint8List? imageBytes = _decodeBase64(base64Image);
@@ -318,29 +320,12 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                         const SizedBox(height: 16),
                         
-                        // Verify Account Button
+                        //veributton
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
-                            onPressed: (_uploadingPhoto || isSuspended || isVerified)
-                                ? () {
-                                    if (_uploadingPhoto) {
-                                      DialogUtils.showInfoMessage(
-                                        context: context,
-                                        message: 'Please wait for photo upload to complete.',
-                                      );
-                                    } else if (isSuspended) {
-                                      DialogUtils.showWarningMessage(
-                                        context: context,
-                                        message: 'Your account has been suspended. You can only access your profile page.',
-                                      );
-                                    } else if (isVerified) {
-                                      DialogUtils.showInfoMessage(
-                                        context: context,
-                                        message: 'Your account is already verified.',
-                                      );
-                                    }
-                                  }
+                            onPressed: (isLoading || _uploadingPhoto || isSuspended || isVerified || isPending)
+                                ? null  
                                 : () async {
                                     final changed = await Navigator.push(
                                       context,
@@ -358,22 +343,34 @@ class _ProfilePageState extends State<ProfilePage> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: isVerified 
                                   ? Colors.grey[400] 
-                                  : Colors.blue[700],
+                                  : isPending
+                                      ? Colors.orange[700]
+                                      : Colors.blue[700],
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               elevation: 0,
-                              disabledBackgroundColor: Colors.grey[400],
+                              disabledBackgroundColor: isPending 
+                                  ? Colors.orange[400] 
+                                  : Colors.grey[400],
                               disabledForegroundColor: Colors.white,
                             ),
                             icon: Icon(
-                              isVerified ? Icons.verified : Icons.verified_user, 
+                              isVerified 
+                                  ? Icons.verified 
+                                  : isPending
+                                      ? Icons.pending
+                                      : Icons.verified_user, 
                               size: 18,
                             ),
                             label: Text(
-                              isVerified ? 'Account Verified' : 'Verify Account',
+                              isVerified 
+                                  ? 'Account Verified' 
+                                  : isPending
+                                      ? 'Pending Review'
+                                      : 'Verify Account',
                               style: const TextStyle(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 15,
@@ -383,7 +380,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                         const SizedBox(height: 12),
                         
-                        // Edit Profile Button
+                        //editbutton
                         SizedBox(
                           width: double.infinity,
                           child: OutlinedButton.icon(

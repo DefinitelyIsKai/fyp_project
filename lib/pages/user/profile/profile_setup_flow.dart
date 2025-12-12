@@ -132,7 +132,6 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
         'acceptedTerms': _acceptedTerms,
         if (tagsToSave.isNotEmpty) 'tags': tagsToSave else 'tags': FieldValue.delete(),
         'profileCompleted': true,
-        'login': true, 
       });
 
       if (!mounted) return;

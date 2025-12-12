@@ -576,7 +576,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
     if (_workTimeEnd == null) {
       return 'Work end time is required';
     }
-    //check if end time is after start time  allow overnight time equals
+    //check if end time after start time  overnight time equals
     final startMinutes = _workTimeStart!.hour * 60 + _workTimeStart!.minute;
     final endMinutes = _workTimeEnd!.hour * 60 + _workTimeEnd!.minute;
 
@@ -644,8 +644,33 @@ class _PostCreatePageState extends State<PostCreatePage> {
       setState(() {}); 
     }
 
-    
+    //verify
     if (publish) {
+      try {
+        final userDoc = await _authService.getUserDoc();
+        final userData = userDoc.data();
+        final isVerified = userData?['isVerified'] as bool? ?? false;
+        
+        if (!isVerified) {
+          if (mounted) {
+            setState(() => _saving = false);
+            DialogUtils.showWarningMessage(
+              context: context,
+              message: 'Please verify your account before creating a post. Go to your profile to complete verification.',
+            );
+          }
+          return;
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _saving = false);
+          DialogUtils.showWarningMessage(
+            context: context,
+            message: 'Failed to verify account status. Please try again.',
+          );
+        }
+        return;
+      }
       if (mounted) {
         setState(() {
           _focusedFields.add(_budgetMinController);
@@ -1096,7 +1121,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                           child: _buildTextField(
                             _budgetMinController,
                             'Min Budget*',
-                            prefixText: '\$ ',
+                            prefixText: 'RM ',
                             keyboardType: TextInputType.number,
                             showErrorBelow: true,
                             validator: (v) => InputValidators.required(v, errorMessage: 'Required'),
@@ -1107,7 +1132,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                           child: _buildTextField(
                             _budgetMaxController,
                             'Max Budget*',
-                            prefixText: '\$ ',
+                            prefixText: 'RM ',
                             keyboardType: TextInputType.number,
                             showErrorBelow: true,
                             validator: (v) {
@@ -1199,7 +1224,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                               });
                               _onFieldChanged();
                             },
-                            firstDate: DateTime.now().add(const Duration(days: 1)), // Must be at least tomorrow
+                            firstDate: DateTime.now().add(const Duration(days: 1)), //at least tomorrow
                             lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
                             required: true,
                             helperText: 'At least 1 day from today',
@@ -1453,23 +1478,44 @@ class _PostCreatePageState extends State<PostCreatePage> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: ElevatedButton(
-                        onPressed: _canPublish() ? () => _save(publish: true) : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00C8A0),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          elevation: 2,
-                          shadowColor: const Color(0xFF00C8A0).withOpacity(0.3),
-                        ),
-                        child: _saving
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                              )
-                            : const Text('Publish Post', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                      child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                        stream: FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(_authService.currentUserId)
+                            .snapshots(),
+                        builder: (context, userSnapshot) {
+                          final isVerified = userSnapshot.hasData
+                              ? (userSnapshot.data?.data()?['isVerified'] as bool? ?? false)
+                              : false;
+                          
+                          final canPublish = _canPublish() && isVerified;
+                          
+                          return ElevatedButton(
+                            onPressed: canPublish ? () => _save(publish: true) : null,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: canPublish
+                                  ? const Color(0xFF00C8A0)
+                                  : Colors.grey,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 2,
+                              shadowColor: canPublish
+                                  ? const Color(0xFF00C8A0).withOpacity(0.3)
+                                  : Colors.grey.withOpacity(0.3),
+                            ),
+                            child: _saving
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                  )
+                                : Text(
+                                    isVerified ? 'Publish Post' : 'Verify to Publish',
+                                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                                  ),
+                          );
+                        },
                       ),
                     ),
                   ],

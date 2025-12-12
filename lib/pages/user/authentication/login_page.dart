@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../../services/user/auth_service.dart';
 import '../../../services/admin/auth_service.dart' as admin_auth;
@@ -107,32 +106,11 @@ class _LoginPageState extends State<LoginPage> {
           return;
         }
         bool goToSetup = false;
-        bool profileCompleted = false;
         try {
           final completed = await _authService.isProfileCompleted();
-          profileCompleted = completed;
           goToSetup = completed == false;
         } catch (_) {
       
-        }
-        
-        //logintrue pccompletetrue
-        try {
-          final userId = credential.user?.uid;
-          if (userId != null && userId.isNotEmpty) {
-            if (profileCompleted) {
-              await FirebaseFirestore.instance.collection('users').doc(userId).update({
-                'login': true,
-              });
-              debugPrint('Login status set to true for user: $userId (profileCompleted=true)');
-            } else {
-              debugPrint('Login status NOT set to true for user: $userId (profileCompleted=false)');
-            }
-          } else {
-            debugPrint('ERROR: Cannot set login status - user ID is null or empty');
-          }
-        } catch (e) {
-          debugPrint('Error setting login status to true: $e');
         }
         
         DialogUtils.showSuccessMessage(
@@ -183,18 +161,10 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       final message = e.message ?? 'Login failed';
       debugPrint('FirebaseAuthException during login: code=${e.code}, message=$message');
-      
-      if (e.code == 'already-logged-in') {
-        DialogUtils.showWarningMessage(
-          context: context,
-          message: 'This account is already logged in on another device. Please logout from the other device first.',
-        );
-      } else {
-        DialogUtils.showWarningMessage(
-          context: context,
-          message: message,
-        );
-      }
+      DialogUtils.showWarningMessage(
+        context: context,
+        message: message,
+      );
     } catch (e) {
       if (!mounted) return;
       debugPrint('Unexpected error during login: $e');
@@ -387,7 +357,7 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  // Login Button
+                  //login
                   SizedBox(
                     height: 52,
                     child: ElevatedButton(

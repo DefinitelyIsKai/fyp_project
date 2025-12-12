@@ -642,10 +642,10 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                     Text(
                       widget.post.budgetMin != null &&
                               widget.post.budgetMax != null
-                          ? '\$${widget.post.budgetMin!.toStringAsFixed(0)} - \$${widget.post.budgetMax!.toStringAsFixed(0)}'
+                          ? 'RM ${widget.post.budgetMin!.toStringAsFixed(0)} - RM ${widget.post.budgetMax!.toStringAsFixed(0)}'
                           : widget.post.budgetMin != null
-                          ? 'From \$${widget.post.budgetMin!.toStringAsFixed(0)}'
-                          : 'Up to \$${widget.post.budgetMax!.toStringAsFixed(0)}',
+                          ? 'From RM ${widget.post.budgetMin!.toStringAsFixed(0)}'
+                          : 'Up to RM ${widget.post.budgetMax!.toStringAsFixed(0)}',
                       style: const TextStyle(
                         color: Colors.black87,
                         fontWeight: FontWeight.w600,
@@ -690,7 +690,7 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                       );
                       final hasApplied = application.postId == widget.post.id;
                       
-                      // Check if currentUserId is valid before querying Firestore
+                      //currentUserId valid 
                       final bool hasValidUserId = widget.currentUserId != null && widget.currentUserId!.isNotEmpty;
                       
                       return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
@@ -701,7 +701,6 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                                 .snapshots()
                             : Stream<DocumentSnapshot<Map<String, dynamic>>>.empty(),
                         builder: (context, userSnapshot) {
-                          // If no valid userId, default to not verified
                           final isVerified = hasValidUserId && userSnapshot.hasData
                               ? (userSnapshot.data?.data()?['isVerified'] as bool? ?? false)
                               : false;

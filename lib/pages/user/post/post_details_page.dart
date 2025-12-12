@@ -205,7 +205,7 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                 return const SizedBox.shrink();
               },
             ),
-          // recruiter post is completed
+          //recruiter post is completed
           if (_isOwner && _currentPostStatus != null && _currentPostStatus == PostStatus.completed)
             IconButton(
               icon: const Icon(Icons.flag_outlined, color: Colors.red),
@@ -491,43 +491,142 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                             totalDislikes += dislikes.length;
                           }
                           
-                          return Wrap(
-                            spacing: 16,
-                            runSpacing: 8,
-                            crossAxisAlignment: WrapCrossAlignment.center,
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
+                              Wrap(
+                                spacing: 16,
+                                runSpacing: 8,
+                                crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
-                                  Icon(Icons.remove_red_eye, size: 16, color: Colors.grey[500]),
-                                  const SizedBox(width: 4),
-                                  Text('$views views', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.remove_red_eye, size: 16, color: Colors.grey[500]),
+                                      const SizedBox(width: 4),
+                                      Text('$views views', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                                    ],
+                                  ),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.people_alt, size: 16, color: Colors.grey[500]),
+                                      const SizedBox(width: 4),
+                                      Text('${widget.post.applicants} applicants', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                                    ],
+                                  ),
                                 ],
                               ),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.people_alt, size: 16, color: Colors.grey[500]),
-                                  const SizedBox(width: 4),
-                                  Text('${widget.post.applicants} applicants', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-                                ],
-                              ),
-                              // Always show likes and dislikes if there are applications
                               if (applications.isNotEmpty) ...[
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 12,
+                                  runSpacing: 8,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
-                                    Icon(Icons.thumb_up_outlined, size: 16, color: Colors.grey[500]),
-                                    const SizedBox(width: 4),
-                                    Text('$totalLikes likes', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-                                  ],
-                                ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.thumb_down_outlined, size: 16, color: Colors.grey[500]),
-                                    const SizedBox(width: 4),
-                                    Text('$totalDislikes dislikes', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF00C8A0).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                          color: const Color(0xFF00C8A0).withOpacity(0.3),
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.thumb_up,
+                                            size: 16,
+                                            color: totalLikes > 0 ? const Color(0xFF00C8A0) : Colors.grey[500],
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            '$totalLikes',
+                                            style: TextStyle(
+                                              color: totalLikes > 0 ? const Color(0xFF00C8A0) : Colors.grey[600],
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          if (totalLikes != 1) ...[
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              'likes',
+                                              style: TextStyle(
+                                                color: totalLikes > 0 ? const Color(0xFF00C8A0) : Colors.grey[600],
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ] else ...[
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              'like',
+                                              style: TextStyle(
+                                                color: totalLikes > 0 ? const Color(0xFF00C8A0) : Colors.grey[600],
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                          color: Colors.red.withOpacity(0.3),
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.thumb_down,
+                                            size: 16,
+                                            color: totalDislikes > 0 ? Colors.red : Colors.grey[500],
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            '$totalDislikes',
+                                            style: TextStyle(
+                                              color: totalDislikes > 0 ? Colors.red : Colors.grey[600],
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          if (totalDislikes != 1) ...[
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              'dislikes',
+                                              style: TextStyle(
+                                                color: totalDislikes > 0 ? Colors.red : Colors.grey[600],
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ] else ...[
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              'dislike',
+                                              style: TextStyle(
+                                                color: totalDislikes > 0 ? Colors.red : Colors.grey[600],
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ],
@@ -1087,10 +1186,10 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
 
   static String _budgetText(Post p) {
     if (p.budgetMin != null && p.budgetMax != null) {
-      return '\$${p.budgetMin!.round()} - \$${p.budgetMax!.round()}';
+      return 'RM ${p.budgetMin!.round()} - RM ${p.budgetMax!.round()}';
     }
-    if (p.budgetMin != null) return 'From \$${p.budgetMin!.round()}';
-    if (p.budgetMax != null) return 'Up to \$${p.budgetMax!.round()}';
+    if (p.budgetMin != null) return 'From RM ${p.budgetMin!.round()}';
+    if (p.budgetMax != null) return 'Up to RM ${p.budgetMax!.round()}';
     return 'Not specified';
   }
 

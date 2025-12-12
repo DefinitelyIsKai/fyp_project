@@ -46,7 +46,7 @@ class PostUtils {
           oldPost.views != newPost.views ||
           oldPost.applicants != newPost.applicants ||
           oldPost.description != newPost.description) {
-        return true; //content change
+        return true; 
       }
     }
 
