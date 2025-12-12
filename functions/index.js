@@ -583,4 +583,174 @@ exports.autoCompleteExpiredPosts = functions
   }
 });
 
+// Generate a secure random session token
+function generateSessionToken() {
+  const crypto = require("crypto");
+  return crypto.randomBytes(32).toString("hex");
+}
+
+// User login with session token management
+exports.userLogin = functions
+    .runWith({
+      timeoutSeconds: 60,
+      memory: "256MB",
+    })
+    .https.onCall(async (data, context) => {
+      try {
+        // Verify authentication
+        if (!context.auth) {
+          throw new functions.https.HttpsError(
+              "unauthenticated",
+              "User must be authenticated to login"
+          );
+        }
+
+        const userId = context.auth.uid;
+        console.log(`userLogin: Processing login for user ${userId}`);
+
+        // Generate new session token
+        const sessionToken = generateSessionToken();
+        console.log(`userLogin: Generated session token for user ${userId}`);
+
+        // Get user document to check status
+        const userDoc = await db.collection("users").doc(userId).get();
+        if (!userDoc.exists) {
+          throw new functions.https.HttpsError(
+              "not-found",
+              "User document not found"
+          );
+        }
+
+        const userData = userDoc.data();
+        
+        // Check if user is suspended
+        if (userData.status === "Suspended" || userData.isActive === false) {
+          throw new functions.https.HttpsError(
+              "permission-denied",
+              "Account is suspended. Please contact support."
+          );
+        }
+
+        // Update session document in Firestore
+        // This will overwrite any existing session token (handles multi-device login)
+        const sessionRef = db.collection("sessions").doc(userId);
+        await sessionRef.set({
+          sessionToken: sessionToken,
+          userId: userId,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          lastActive: admin.firestore.FieldValue.serverTimestamp(),
+          isActive: true,
+        }, { merge: false }); // Use set with merge:false to overwrite
+
+        console.log(`userLogin: Session token updated in Firestore for user ${userId}`);
+
+        // Update lastLoginAt timestamp (login status is now managed by session tokens)
+        await db.collection("users").doc(userId).update({
+          lastLoginAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        return {
+          success: true,
+          sessionToken: sessionToken,
+          userId: userId,
+          message: "Login successful",
+        };
+      } catch (error) {
+        console.error("Error in userLogin:", error);
+        if (error instanceof functions.https.HttpsError) {
+          throw error;
+        }
+        throw new functions.https.HttpsError(
+            "internal",
+            "An error occurred during login",
+            error.message
+        );
+      }
+    });
+
+// Update lastActive timestamp (called when app goes to background/crashes)
+exports.updateLastActive = functions
+    .runWith({
+      timeoutSeconds: 30,
+      memory: "256MB",
+    })
+    .https.onCall(async (data, context) => {
+      try {
+        if (!context.auth) {
+          throw new functions.https.HttpsError(
+              "unauthenticated",
+              "User must be authenticated"
+          );
+        }
+
+        const userId = context.auth.uid;
+        const sessionRef = db.collection("sessions").doc(userId);
+        
+        // Update lastActive timestamp
+        await sessionRef.update({
+          lastActive: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        console.log(`updateLastActive: Updated lastActive for user ${userId}`);
+
+        return {
+          success: true,
+          message: "Last active timestamp updated",
+        };
+      } catch (error) {
+        console.error("Error in updateLastActive:", error);
+        if (error instanceof functions.https.HttpsError) {
+          throw error;
+        }
+        throw new functions.https.HttpsError(
+            "internal",
+            "An error occurred updating last active",
+            error.message
+        );
+      }
+    });
+
+// User logout - clear session
+exports.userLogout = functions
+    .runWith({
+      timeoutSeconds: 30,
+      memory: "256MB",
+    })
+    .https.onCall(async (data, context) => {
+      try {
+        if (!context.auth) {
+          throw new functions.https.HttpsError(
+              "unauthenticated",
+              "User must be authenticated"
+          );
+        }
+
+        const userId = context.auth.uid;
+        console.log(`userLogout: Processing logout for user ${userId}`);
+
+        // Delete session document
+        const sessionRef = db.collection("sessions").doc(userId);
+        await sessionRef.delete();
+
+        // Note: login status is now managed by session tokens, no need to update login field
+
+        console.log(`userLogout: Session cleared for user ${userId}`);
+
+        return {
+          success: true,
+          message: "Logout successful",
+        };
+      } catch (error) {
+        console.error("Error in userLogout:", error);
+        if (error instanceof functions.https.HttpsError) {
+          throw error;
+        }
+        throw new functions.https.HttpsError(
+            "internal",
+            "An error occurred during logout",
+            error.message
+        );
+      }
+    });
+
 

@@ -109,5 +109,104 @@ class CloudFunctionsService {
       };
     }
   }
+
+  // User login - generates session token
+  Future<Map<String, dynamic>> userLogin() async {
+    try {
+      debugPrint('CloudFunctionsService: Calling userLogin...');
+      final callable = _functions.httpsCallable('userLogin');
+      final result = await callable.call();
+      
+      debugPrint('CloudFunctionsService: userLogin result: ${result.data}');
+      
+      final data = result.data as Map<String, dynamic>? ?? {};
+      return {
+        'success': data['success'] ?? false,
+        'sessionToken': data['sessionToken'],
+        'userId': data['userId'],
+        'message': data['message'] ?? 'Unknown result',
+      };
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('Cloud Function error: ${e.code} - ${e.message}');
+      return {
+        'success': false,
+        'sessionToken': null,
+        'userId': null,
+        'errors': {'code': e.code, 'message': e.message ?? 'Unknown error'},
+        'message': 'Error calling Cloud Function: ${e.message ?? e.code}',
+      };
+    } catch (e) {
+      debugPrint('Unexpected error calling Cloud Function: $e');
+      return {
+        'success': false,
+        'sessionToken': null,
+        'userId': null,
+        'errors': {'general': e.toString()},
+        'message': 'Unexpected error: $e',
+      };
+    }
+  }
+
+  // User logout - clears session
+  Future<Map<String, dynamic>> userLogout() async {
+    try {
+      debugPrint('CloudFunctionsService: Calling userLogout...');
+      final callable = _functions.httpsCallable('userLogout');
+      final result = await callable.call();
+      
+      debugPrint('CloudFunctionsService: userLogout result: ${result.data}');
+      
+      final data = result.data as Map<String, dynamic>? ?? {};
+      return {
+        'success': data['success'] ?? false,
+        'message': data['message'] ?? 'Unknown result',
+      };
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('Cloud Function error: ${e.code} - ${e.message}');
+      return {
+        'success': false,
+        'errors': {'code': e.code, 'message': e.message ?? 'Unknown error'},
+        'message': 'Error calling Cloud Function: ${e.message ?? e.code}',
+      };
+    } catch (e) {
+      debugPrint('Unexpected error calling Cloud Function: $e');
+      return {
+        'success': false,
+        'errors': {'general': e.toString()},
+        'message': 'Unexpected error: $e',
+      };
+    }
+  }
+
+  // Update lastActive timestamp
+  Future<Map<String, dynamic>> updateLastActive() async {
+    try {
+      debugPrint('CloudFunctionsService: Calling updateLastActive...');
+      final callable = _functions.httpsCallable('updateLastActive');
+      final result = await callable.call();
+      
+      debugPrint('CloudFunctionsService: updateLastActive result: ${result.data}');
+      
+      final data = result.data as Map<String, dynamic>? ?? {};
+      return {
+        'success': data['success'] ?? false,
+        'message': data['message'] ?? 'Unknown result',
+      };
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('Cloud Function error: ${e.code} - ${e.message}');
+      return {
+        'success': false,
+        'errors': {'code': e.code, 'message': e.message ?? 'Unknown error'},
+        'message': 'Error calling Cloud Function: ${e.message ?? e.code}',
+      };
+    } catch (e) {
+      debugPrint('Unexpected error calling Cloud Function: $e');
+      return {
+        'success': false,
+        'errors': {'general': e.toString()},
+        'message': 'Unexpected error: $e',
+      };
+    }
+  }
 }
 
