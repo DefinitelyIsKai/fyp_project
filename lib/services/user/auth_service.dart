@@ -7,12 +7,22 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class AuthService extends WidgetsBindingObserver {
+class AuthService extends ChangeNotifier with WidgetsBindingObserver {
   AuthService({FirebaseAuth? auth, FirebaseFirestore? firestore})
       : _auth = auth ?? FirebaseAuth.instance,
         _firestore = firestore ?? FirebaseFirestore.instance {
     // Register as observer for app lifecycle changes
     WidgetsBinding.instance.addObserver(this);
+    
+    // Listen to auth state changes
+    _auth.authStateChanges().listen((User? user) {
+      if (user == null) {
+        // User signed out
+        _stopSessionListener();
+        _clearSessionToken();
+        notifyListeners();
+      }
+    });
   }
 
   final FirebaseAuth _auth;
@@ -24,9 +34,21 @@ class AuthService extends WidgetsBindingObserver {
   StreamSubscription<DocumentSnapshot>? _sessionListener;
   bool _isAppActive = true;
   bool _isListening = false;
+  bool _isForceLoggedOut = false;
+  String? _forceLogoutReason;
 
   // Get local session token
   String? get localSessionToken => _localSessionToken;
+  
+  // Check if user is authenticated
+  bool get isAuthenticated => _auth.currentUser != null;
+  
+  // Get current user
+  User? get currentUser => _auth.currentUser;
+  
+  // Check if force logged out
+  bool get isForceLoggedOut => _isForceLoggedOut;
+  String? get forceLogoutReason => _forceLogoutReason;
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -128,11 +150,22 @@ class AuthService extends WidgetsBindingObserver {
         }
 
         // Check for token mismatch (multi-device login detected)
-        if (_localSessionToken != null && firestoreToken != _localSessionToken) {
+        // Only check if we have a local token (avoid false positives during initial login)
+        if (_localSessionToken != null && 
+            _localSessionToken!.isNotEmpty && 
+            firestoreToken != _localSessionToken) {
           debugPrint('AuthService: Token mismatch detected! Local: ${_localSessionToken?.substring(0, 8)}..., Firestore: ${firestoreToken.substring(0, 8)}...');
           debugPrint('AuthService: Another device logged in, forcing logout');
-          _handleForceLogout();
+          _handleForceLogout(
+            reason: 'Another device has logged in to your account. You have been logged out for security.',
+          );
           return;
+        }
+        
+        // If local token matches or is null (initial setup), update it
+        if (_localSessionToken != firestoreToken) {
+          debugPrint('AuthService: Syncing local token with Firestore');
+          _saveSessionToken(firestoreToken); // Fire and forget
         }
 
         // If app is active, listener stays active and checks for token mismatch
@@ -162,8 +195,11 @@ class AuthService extends WidgetsBindingObserver {
   }
 
   // Handle force logout when token mismatch is detected
-  Future<void> _handleForceLogout() async {
+  Future<void> _handleForceLogout({String? reason}) async {
     debugPrint('AuthService: Handling force logout due to token mismatch');
+    
+    _isForceLoggedOut = true;
+    _forceLogoutReason = reason ?? 'Another device has logged in to your account. Please log in again.';
     
     _stopSessionListener();
     await _clearSessionToken();
@@ -172,9 +208,20 @@ class AuthService extends WidgetsBindingObserver {
     try {
       await _auth.signOut();
       debugPrint('AuthService: Force logout completed');
+      
+      // Notify listeners about the force logout
+      notifyListeners();
     } catch (e) {
       debugPrint('AuthService: Error during force logout: $e');
+      notifyListeners();
     }
+  }
+  
+  // Reset force logout flag (call after showing message to user)
+  void resetForceLogoutFlag() {
+    _isForceLoggedOut = false;
+    _forceLogoutReason = null;
+    notifyListeners();
   }
 
   Future<UserCredential> registerUser({
@@ -257,7 +304,25 @@ class AuthService extends WidgetsBindingObserver {
       await _saveSessionToken(sessionToken);
       debugPrint('AuthService: Session token stored locally');
 
-      // Step 4: Start real-time listener on user's session document
+      // Step 4: Verify token in Firestore before starting listener
+      // Wait a moment for Firestore to sync, then verify
+      await Future.delayed(const Duration(milliseconds: 500));
+      final sessionDoc = await _firestore.collection('sessions').doc(userId).get();
+      if (sessionDoc.exists) {
+        final firestoreToken = sessionDoc.data()?['sessionToken'] as String?;
+        if (firestoreToken != sessionToken) {
+          debugPrint('AuthService: Warning - Firestore token mismatch after login. Firestore: ${firestoreToken?.substring(0, 8)}..., Expected: ${sessionToken.substring(0, 8)}...');
+          // Wait a bit more and retry once
+          await Future.delayed(const Duration(milliseconds: 500));
+          final retryDoc = await _firestore.collection('sessions').doc(userId).get();
+          final retryToken = retryDoc.data()?['sessionToken'] as String?;
+          if (retryToken != sessionToken) {
+            throw Exception('Session token verification failed. Please try again.');
+          }
+        }
+      }
+
+      // Step 5: Start real-time listener on user's session document
       _startSessionListener(userId);
       debugPrint('AuthService: Real-time listener started');
 
@@ -302,14 +367,7 @@ class AuthService extends WidgetsBindingObserver {
         debugPrint('AuthService: Session cleared in Firestore');
       } catch (e) {
         debugPrint('AuthService: Error calling userLogout: $e');
-        // Still try to update user document directly as fallback
-        try {
-          await _firestore.collection('users').doc(userId).update({
-            'login': false,
-          });
-        } catch (e2) {
-          debugPrint('AuthService: Error updating user document: $e2');
-        }
+        // Note: Session is managed by tokens, no need to update login field
       }
     }
 
@@ -337,9 +395,11 @@ class AuthService extends WidgetsBindingObserver {
   }
 
   // Cleanup when service is disposed
+  @override
   void dispose() {
     _stopSessionListener();
     WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<void> resendVerificationEmail() async {
@@ -464,15 +524,22 @@ class AuthService extends WidgetsBindingObserver {
   String get currentUserId {
     final user = _auth.currentUser;
     if (user == null) {
-      throw StateError('No authenticated user');
+      throw StateError('No authenticated user. Please log in again.');
     }
     return user.uid;
   }
+  
+  // Safe getter for current user ID (returns null instead of throwing)
+  String? get currentUserIdOrNull => _auth.currentUser?.uid;
 
   Future<DocumentSnapshot<Map<String, dynamic>>> getUserDoc() async {
+    final userId = currentUserIdOrNull;
+    if (userId == null) {
+      throw StateError('No authenticated user. Please log in again.');
+    }
     return _firestore
         .collection('users')
-        .doc(currentUserId)
+        .doc(userId)
         .get(const GetOptions(source: Source.server));
   }
 
@@ -526,6 +593,10 @@ class AuthService extends WidgetsBindingObserver {
       }
     }
     
-    await _firestore.collection('users').doc(currentUserId).set(dataToUpdate, SetOptions(merge: true));
+    final userId = currentUserIdOrNull;
+    if (userId == null) {
+      throw StateError('No authenticated user. Please log in again.');
+    }
+    await _firestore.collection('users').doc(userId).set(dataToUpdate, SetOptions(merge: true));
   }
 }
