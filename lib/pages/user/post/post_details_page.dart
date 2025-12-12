@@ -1186,10 +1186,10 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
 
   static String _budgetText(Post p) {
     if (p.budgetMin != null && p.budgetMax != null) {
-      return '\$${p.budgetMin!.round()} - \$${p.budgetMax!.round()}';
+      return 'RM ${p.budgetMin!.round()} - RM ${p.budgetMax!.round()}';
     }
-    if (p.budgetMin != null) return 'From \$${p.budgetMin!.round()}';
-    if (p.budgetMax != null) return 'Up to \$${p.budgetMax!.round()}';
+    if (p.budgetMin != null) return 'From RM ${p.budgetMin!.round()}';
+    if (p.budgetMax != null) return 'Up to RM ${p.budgetMax!.round()}';
     return 'Not specified';
   }
 

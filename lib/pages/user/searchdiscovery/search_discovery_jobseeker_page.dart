@@ -642,10 +642,10 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                     Text(
                       widget.post.budgetMin != null &&
                               widget.post.budgetMax != null
-                          ? '\$${widget.post.budgetMin!.toStringAsFixed(0)} - \$${widget.post.budgetMax!.toStringAsFixed(0)}'
+                          ? 'RM ${widget.post.budgetMin!.toStringAsFixed(0)} - RM ${widget.post.budgetMax!.toStringAsFixed(0)}'
                           : widget.post.budgetMin != null
-                          ? 'From \$${widget.post.budgetMin!.toStringAsFixed(0)}'
-                          : 'Up to \$${widget.post.budgetMax!.toStringAsFixed(0)}',
+                          ? 'From RM ${widget.post.budgetMin!.toStringAsFixed(0)}'
+                          : 'Up to RM ${widget.post.budgetMax!.toStringAsFixed(0)}',
                       style: const TextStyle(
                         color: Colors.black87,
                         fontWeight: FontWeight.w600,

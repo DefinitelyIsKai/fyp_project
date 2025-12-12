@@ -1121,7 +1121,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                           child: _buildTextField(
                             _budgetMinController,
                             'Min Budget*',
-                            prefixText: '\$ ',
+                            prefixText: 'RM ',
                             keyboardType: TextInputType.number,
                             showErrorBelow: true,
                             validator: (v) => InputValidators.required(v, errorMessage: 'Required'),
@@ -1132,7 +1132,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                           child: _buildTextField(
                             _budgetMaxController,
                             'Max Budget*',
-                            prefixText: '\$ ',
+                            prefixText: 'RM ',
                             keyboardType: TextInputType.number,
                             showErrorBelow: true,
                             validator: (v) {
