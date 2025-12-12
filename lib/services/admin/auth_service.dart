@@ -111,7 +111,6 @@ class AuthService extends ChangeNotifier {
           'createdAt': FieldValue.serverTimestamp(),
           'isActive': true,
           'status': 'Active',
-          'isLogin': false, // New admin user starts with isLogin: false
         };
         
         if (location != null && location.isNotEmpty) {
@@ -203,7 +202,7 @@ class AuthService extends ChangeNotifier {
       if (originalUserEmail != null && originalUserPassword != null && originalUserPassword.isNotEmpty) {
         
         try {
-          final loginResult = await login(originalUserEmail, originalUserPassword, skipIsLoginCheck: true).timeout(
+          final loginResult = await login(originalUserEmail, originalUserPassword).timeout(
             const Duration(seconds: 10),
             onTimeout: () {
               debugPrint('Login timeout during session restoration');
@@ -213,8 +212,6 @@ class AuthService extends ChangeNotifier {
           
           if (loginResult.success) {
             debugPrint('Original user session restored: $originalUserEmail');
-            
-            await setLoginStatus(true);
             
             await Future.delayed(const Duration(milliseconds: 300));
             
@@ -336,7 +333,7 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<LoginResult> login(String email, String password, {bool skipIsLoginCheck = false}) async {
+  Future<LoginResult> login(String email, String password) async {
     try {
       
       UserCredential userCredential = await _auth.signInWithEmailAndPassword(
@@ -359,33 +356,6 @@ class AuthService extends ChangeNotifier {
       }
 
       final data = doc.data()!;
-      
-      if (!skipIsLoginCheck) {
-        final isLoginValue = data['isLogin'];
-        bool isLoggedIn = false;
-        if (isLoginValue is bool) {
-          isLoggedIn = isLoginValue;
-        } else if (isLoginValue == null) {
-          isLoggedIn = false;
-          debugPrint('Admin login check: isLogin field is null, treating as false');
-        } else if (isLoginValue is String) {
-          isLoggedIn = isLoginValue.toLowerCase() == 'true';
-          debugPrint('Admin login check: isLogin field is string "$isLoginValue", converted to $isLoggedIn');
-        }
-        
-        debugPrint('Admin login check: userId=$uid, isLogin field=$isLoginValue (type: ${isLoginValue.runtimeType}), isLoggedIn=$isLoggedIn');
-        
-        if (isLoggedIn == true) {
-          debugPrint('BLOCKING ADMIN LOGIN: User is already logged in on another device (isLogin=$isLoginValue)');
-          await _auth.signOut();
-          return LoginResult(
-            success: false,
-            error: 'This account is already logged in on another device. Please logout from the other device first.',
-          );
-        }
-      } else {
-        debugPrint('Admin login: Skipping isLogin check (session restoration)');
-      }
 
       if (data['isActive'] == false) {
         await _auth.signOut();
@@ -512,28 +482,9 @@ class AuthService extends ChangeNotifier {
         isActive: true,
       );
 
-// Check profileCompleted before setting login to true
-      final profileCompleted = data['profileCompleted'];
-      bool isProfileCompleted = false;
-      if (profileCompleted is bool) {
-        isProfileCompleted = profileCompleted;
-      } else if (profileCompleted is String) {
-        isProfileCompleted = profileCompleted.toLowerCase() == 'true';
-      }
-
-      final updateData = <String, dynamic>{
+      await _firestore.collection('users').doc(uid).update({
         'lastLoginAt': FieldValue.serverTimestamp(),
-      };
-      if (isProfileCompleted) {
-        updateData['login'] = true; 
-      }
-
-      await _firestore.collection('users').doc(uid).update(updateData);
-      if (isProfileCompleted) {
-        debugPrint('Admin login: Successfully set login=true for userId=$uid (profileCompleted=true)');
-      } else {
-        debugPrint('Admin login: NOT set login=true for userId=$uid (profileCompleted=$profileCompleted)');
-      }
+      });
 
       _isAuthenticated = true;
       notifyListeners();
@@ -575,19 +526,6 @@ class AuthService extends ChangeNotifier {
     try {
       final userId = _auth.currentUser?.uid;
       debugPrint('Admin logout: userId=$userId');
-      
-      if (userId != null && userId.isNotEmpty) {
-        try {
-          await _firestore.collection('users').doc(userId).update({
-            'isLogin': false, // Set isLogin status to false on logout
-          });
-          debugPrint('Admin logout: Successfully set isLogin=false for userId=$userId');
-        } catch (e) {
-          debugPrint('Error updating isLogin status during admin logout: $e');
-        }
-      } else {
-        debugPrint('Admin logout: No userId found, skipping isLogin status update');
-      }
       
       _currentAdmin = null;
       _isAuthenticated = false;

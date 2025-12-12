@@ -819,7 +819,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 Expanded(
                   child: AnalyticsTopupStatCard(
                     label: 'Total Topup Amount',
-                    value: '\$${totalTopupAmount.toStringAsFixed(2)}',
+                    value: 'RM ${totalTopupAmount.toStringAsFixed(2)}',
                     icon: Icons.account_balance_wallet,
                     color: Colors.green,
                   ),
@@ -841,7 +841,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 Expanded(
                   child: AnalyticsTopupStatCard(
                     label: 'Average Amount',
-                    value: '\$${avgTopupAmount.toStringAsFixed(2)}',
+                    value: 'RM ${avgTopupAmount.toStringAsFixed(2)}',
                     icon: Icons.calculate,
                     color: Colors.orange,
                   ),
@@ -863,7 +863,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 Expanded(
                   child: AnalyticsTopupStatCard(
                     label: 'Max Topup',
-                    value: '\$${maxTopupAmount.toStringAsFixed(2)}',
+                    value: 'RM ${maxTopupAmount.toStringAsFixed(2)}',
                     icon: Icons.arrow_upward,
                     color: Colors.teal,
                   ),
@@ -872,7 +872,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 Expanded(
                   child: AnalyticsTopupStatCard(
                     label: 'Min Topup',
-                    value: '\$${minTopupAmount.toStringAsFixed(2)}',
+                    value: 'RM ${minTopupAmount.toStringAsFixed(2)}',
                     icon: Icons.arrow_downward,
                     color: Colors.red,
                   ),

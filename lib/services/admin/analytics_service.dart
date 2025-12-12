@@ -315,64 +315,97 @@ class AnalyticsService {
   Future<Map<String, dynamic>> _getMessageAnalytics(DateTime startDate, DateTime endDate) async {
     
     try {
+      final startOfDay = DateTime(startDate.year, startDate.month, startDate.day, 0, 0, 0);
       final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+      final startTimestamp = Timestamp.fromDate(startOfDay);
+      final endTimestamp = Timestamp.fromDate(endOfDay);
       
-      final conversationsSnapshot = await _firestore.collection('conversations').get();
-      
-      int totalMessages = 0;
       int newMessages = 0;
       
-      print('Found ${conversationsSnapshot.docs.length} conversations');
+      // Get all conversations
+      final conversationsSnapshot = await _firestore.collection('conversations').get();
       
-      for (final conversationDoc in conversationsSnapshot.docs) {
-        try {
-          
-          final messagesSnapshot = await conversationDoc.reference
-              .collection('messages')
-              .get();
-          
-          final messageCount = messagesSnapshot.docs.length;
-          totalMessages += messageCount;
-          
-          print('Conversation ${conversationDoc.id} has $messageCount messages');
-          
-          for (final messageDoc in messagesSnapshot.docs) {
-            final messageData = messageDoc.data() as Map<String, dynamic>?;
-            if (messageData == null) continue;
-            
-            dynamic timestampValue = messageData['createdAt'] ?? 
-                                    messageData['timestamp'] ?? 
-                                    messageData['sentAt'] ??
-                                    messageData['time'];
-            
-            if (timestampValue != null) {
-              DateTime? messageDate;
-              
-              if (timestampValue is Timestamp) {
-                messageDate = timestampValue.toDate();
-              } else if (timestampValue is DateTime) {
-                messageDate = timestampValue;
-              } else if (timestampValue is int) {
-                messageDate = DateTime.fromMillisecondsSinceEpoch(timestampValue);
-              } else if (timestampValue is String) {
-                messageDate = DateTime.tryParse(timestampValue);
-              }
-              
-              if (messageDate != null) {
-                if (messageDate.isAfter(startDate.subtract(const Duration(seconds: 1))) &&
-                    messageDate.isBefore(endOfDay.add(const Duration(seconds: 1)))) {
-                  newMessages++;
+      // Use batch processing to limit concurrent queries
+      const batchSize = 10;
+      final conversationDocs = conversationsSnapshot.docs;
+      
+      for (int i = 0; i < conversationDocs.length; i += batchSize) {
+        final batch = conversationDocs.skip(i).take(batchSize).toList();
+        
+        // Process batch in parallel
+        final batchResults = await Future.wait(
+          batch.map((conversationDoc) async {
+            try {
+              // Try to query messages with date filter first (most efficient)
+              QuerySnapshot messagesSnapshot;
+              try {
+                messagesSnapshot = await conversationDoc.reference
+                    .collection('messages')
+                    .where('createdAt', isGreaterThanOrEqualTo: startTimestamp)
+                    .where('createdAt', isLessThanOrEqualTo: endTimestamp)
+                    .get();
+                return messagesSnapshot.docs.length;
+              } catch (e) {
+                // If createdAt query fails, try timestamp field
+                try {
+                  messagesSnapshot = await conversationDoc.reference
+                      .collection('messages')
+                      .where('timestamp', isGreaterThanOrEqualTo: startTimestamp)
+                      .where('timestamp', isLessThanOrEqualTo: endTimestamp)
+                      .get();
+                  return messagesSnapshot.docs.length;
+                } catch (e2) {
+                  // If query fails, fall back to getting all messages and filtering
+                  // This is less efficient but handles cases where date field doesn't exist or has different name
+                  final allMessagesSnapshot = await conversationDoc.reference
+                      .collection('messages')
+                      .limit(1000) // Limit to prevent excessive data loading
+                      .get();
+                  
+                  int count = 0;
+                  for (final messageDoc in allMessagesSnapshot.docs) {
+                    final messageData = messageDoc.data() as Map<String, dynamic>?;
+                    if (messageData == null) continue;
+                    
+                    dynamic timestampValue = messageData['createdAt'] ?? 
+                                            messageData['timestamp'] ?? 
+                                            messageData['sentAt'] ??
+                                            messageData['time'];
+                    
+                    if (timestampValue != null) {
+                      DateTime? messageDate;
+                      
+                      if (timestampValue is Timestamp) {
+                        messageDate = timestampValue.toDate();
+                      } else if (timestampValue is DateTime) {
+                        messageDate = timestampValue;
+                      } else if (timestampValue is int) {
+                        messageDate = DateTime.fromMillisecondsSinceEpoch(timestampValue);
+                      } else if (timestampValue is String) {
+                        messageDate = DateTime.tryParse(timestampValue);
+                      }
+                      
+                      if (messageDate != null) {
+                        if (messageDate.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
+                            messageDate.isBefore(endOfDay.add(const Duration(seconds: 1)))) {
+                          count++;
+                        }
+                      }
+                    }
+                  }
+                  return count;
                 }
               }
+            } catch (e) {
+              // Skip this conversation if there's an error
+              return 0;
             }
-          }
-        } catch (e) {
-          
-          print('Error fetching messages for conversation ${conversationDoc.id}: $e');
-        }
+          }),
+        );
+        
+        // Sum up results from this batch
+        newMessages += batchResults.fold<int>(0, (sum, count) => sum + count);
       }
-
-      print('Total messages: $totalMessages, New messages in period: $newMessages');
 
       return {
         'totalMessages': newMessages, 
