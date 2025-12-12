@@ -141,10 +141,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
         resumeData = {
           'fileName': _resumeAttachment!.fileName,
           'fileType': _resumeAttachment!.fileType,
-          //download url save if available
           if (_resumeAttachment!.downloadUrl != null && _resumeAttachment!.downloadUrl!.isNotEmpty)
             'downloadUrl': _resumeAttachment!.downloadUrl,
-          //base64 data save if available (but note: base64 is usually removed after upload to save space)
           if (_resumeAttachment!.base64Data != null && _resumeAttachment!.base64Data!.isNotEmpty)
             'base64': _resumeAttachment!.base64Data,
         };

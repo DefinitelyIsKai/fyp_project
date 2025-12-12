@@ -105,8 +105,7 @@ class MessagingService {
         return;
       }
 
-      //filter out conversations with no messages 
-      //sort in memory lastmessagetime 
+      //filter out conversations with no messages and sort in memory lastmessagetime 
       final conversations = conversationMap.values
           .where((conv) => conv.lastMessage.isNotEmpty)
           .toList();

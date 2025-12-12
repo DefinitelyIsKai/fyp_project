@@ -74,12 +74,14 @@ class UserService {
 
   Future<Map<String, dynamic>?> getVerificationRequest(String userId) async {
     try {
-      final userDoc = await _usersRef.doc(userId).get();
-      final userData = userDoc.data();
-      if (userData == null) return null;
+      final verificationDoc = await FirebaseFirestore.instance
+          .collection('verificationRequests')
+          .doc(userId)
+          .get();
       
-      final verificationData = userData['verificationRequest'] as Map<String, dynamic>?;
-      return verificationData;
+      if (!verificationDoc.exists) return null;
+      
+      return verificationDoc.data();
     } catch (e) {
       print('Error getting verification request: $e');
       return null;
@@ -97,6 +99,17 @@ class UserService {
 
       final userName = userData['fullName'] ?? 'User';
       
+      // Update verification request status in new collection
+      await FirebaseFirestore.instance
+          .collection('verificationRequests')
+          .doc(userId)
+          .update({
+        'status': 'approved',
+        'verifiedAt': FieldValue.serverTimestamp(),
+        'verifiedBy': currentAdminId,
+      });
+      
+      // Update user document with verification status
       await _usersRef.doc(userId).update({
         'verificationStatus': 'approved',
         'isVerified': true,
@@ -150,6 +163,18 @@ class UserService {
 
       final userName = userData['fullName'] ?? 'User';
       
+      // Update verification request status in new collection
+      await FirebaseFirestore.instance
+          .collection('verificationRequests')
+          .doc(userId)
+          .update({
+        'status': 'rejected',
+        'rejectedAt': FieldValue.serverTimestamp(),
+        'rejectedBy': currentAdminId,
+        'rejectionReason': rejectionReason,
+      });
+      
+      // Update user document with verification status
       await _usersRef.doc(userId).update({
         'verificationStatus': 'rejected',
         'isVerified': false,

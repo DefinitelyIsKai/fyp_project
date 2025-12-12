@@ -205,7 +205,7 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                 return const SizedBox.shrink();
               },
             ),
-          // recruiter post is completed
+          //recruiter post is completed
           if (_isOwner && _currentPostStatus != null && _currentPostStatus == PostStatus.completed)
             IconButton(
               icon: const Icon(Icons.flag_outlined, color: Colors.red),
@@ -495,7 +495,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              // First row: views and applicants
                               Wrap(
                                 spacing: 16,
                                 runSpacing: 8,
@@ -519,7 +518,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                                   ),
                                 ],
                               ),
-                              // Second row: likes and dislikes in the same row
                               if (applications.isNotEmpty) ...[
                                 const SizedBox(height: 8),
                                 Wrap(
@@ -527,7 +525,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                                   runSpacing: 8,
                                   crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
-                                    // Like display with enhanced styling
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                       decoration: BoxDecoration(
@@ -579,7 +576,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                                         ],
                                       ),
                                     ),
-                                    // Dislike display with enhanced styling
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                       decoration: BoxDecoration(

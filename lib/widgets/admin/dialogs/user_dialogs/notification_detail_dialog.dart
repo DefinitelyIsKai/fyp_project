@@ -11,7 +11,6 @@ class NotificationDetailDialog extends StatelessWidget {
   });
 
   IconData _iconFor(NotificationCategory category, {Map<String, dynamic>? metadata}) {
-    // Check for verification approved notification
     if (category == NotificationCategory.system && 
         metadata != null && 
         metadata['type'] == 'verification_approved') {
@@ -47,7 +46,6 @@ class NotificationDetailDialog extends StatelessWidget {
   }
 
   Color _getIconBackgroundColor(NotificationCategory category, {Map<String, dynamic>? metadata}) {
-    // Check for verification approved notification
     if (category == NotificationCategory.system && 
         metadata != null && 
         metadata['type'] == 'verification_approved') {
@@ -83,7 +81,6 @@ class NotificationDetailDialog extends StatelessWidget {
   }
 
   Color _getIconColor(NotificationCategory category, {Map<String, dynamic>? metadata}) {
-    // Check for verification approved notification
     if (category == NotificationCategory.system && 
         metadata != null && 
         metadata['type'] == 'verification_approved') {

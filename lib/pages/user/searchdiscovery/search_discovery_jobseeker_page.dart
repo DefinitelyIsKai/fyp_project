@@ -690,7 +690,7 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                       );
                       final hasApplied = application.postId == widget.post.id;
                       
-                      // Check if currentUserId is valid before querying Firestore
+                      //currentUserId valid 
                       final bool hasValidUserId = widget.currentUserId != null && widget.currentUserId!.isNotEmpty;
                       
                       return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
@@ -701,7 +701,6 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                                 .snapshots()
                             : Stream<DocumentSnapshot<Map<String, dynamic>>>.empty(),
                         builder: (context, userSnapshot) {
-                          // If no valid userId, default to not verified
                           final isVerified = hasValidUserId && userSnapshot.hasData
                               ? (userSnapshot.data?.data()?['isVerified'] as bool? ?? false)
                               : false;

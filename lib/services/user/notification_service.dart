@@ -96,7 +96,6 @@ class NotificationService {
 
     try {
       //compare convert datetime: firestore timestamp
-
       final Timestamp timestampCursor = Timestamp.fromDate(lastNotificationTime);
 
       debugPrint('loadMoreNotifications: Loading with cursor time: $timestampCursor, docId: $lastNotificationId, limit: $limit');

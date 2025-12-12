@@ -526,7 +526,6 @@ class _PostManagementPageState extends State<PostManagementPage> {
                                         child: const Text('View Details'),
                                       ),
                                       const SizedBox(width: 8),
-                                      // Attendance button - only show for approved applications
                                       if (app.status == ApplicationStatus.approved && post != null && !isPostDeleted)
                                         StreamBuilder(
                                           stream: _attendanceService.streamAttendanceByApplicationId(app.id),
@@ -569,7 +568,6 @@ class _PostManagementPageState extends State<PostManagementPage> {
                                           },
                                         ),
                                       const Spacer(),
-                                      // Show like/dislike buttons only if approved and completed
                                       if (app.status == ApplicationStatus.approved && 
                                           post != null && 
                                           !isPostDeleted && 
@@ -589,7 +587,6 @@ class _PostManagementPageState extends State<PostManagementPage> {
                                             return Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                // Like button
                                                 Row(
                                                   mainAxisSize: MainAxisSize.min,
                                                   children: [
@@ -631,7 +628,6 @@ class _PostManagementPageState extends State<PostManagementPage> {
                                                   ],
                                                 ),
                                                 const SizedBox(width: 8),
-                                                // Dislike button
                                                 Row(
                                                   mainAxisSize: MainAxisSize.min,
                                                   children: [
@@ -930,7 +926,7 @@ class _PostCard extends StatelessWidget {
                     ),
                     child: const Text('View'),
                   ),
-                // Check Attendance button - only show for completed posts
+                //att
                 if (!post.isDraft && post.status == PostStatus.completed)
                   OutlinedButton(
                     onPressed: onCheckAttendance,

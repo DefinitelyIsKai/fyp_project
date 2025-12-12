@@ -76,10 +76,8 @@ class _AttendancePageState extends State<AttendancePage> {
         await _loadAttendance();
       }
     } catch (e) {
-      // Silently ignore if user cancelled image selection
       final errorMessage = e.toString();
       if (errorMessage.contains('No image selected')) {
-        // User cancelled - don't show any message
         return;
       }
       if (mounted) {
@@ -114,10 +112,8 @@ class _AttendancePageState extends State<AttendancePage> {
         await _loadAttendance();
       }
     } catch (e) {
-      // Silently ignore if user cancelled image selection
       final errorMessage = e.toString();
       if (errorMessage.contains('No image selected')) {
-        // User cancelled - don't show any message
         return;
       }
       if (mounted) {
@@ -384,7 +380,6 @@ class _AttendancePageState extends State<AttendancePage> {
                         ),
                       ),
                       const SizedBox(height: 20),
-                      // Start Image Section
                       Text(
                         'Start Image',
                         style: TextStyle(
@@ -411,7 +406,6 @@ class _AttendancePageState extends State<AttendancePage> {
                         ),
                       ],
                       const SizedBox(height: 24),
-                      // End Image Section
                       Text(
                         'End Image',
                         style: TextStyle(
@@ -438,7 +432,6 @@ class _AttendancePageState extends State<AttendancePage> {
                         ),
                       ],
                       const SizedBox(height: 24),
-                      // Status Card
                       if (_attendance!.isComplete)
                         Container(
                           padding: const EdgeInsets.all(16),

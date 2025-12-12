@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 class AuthService {
   AuthService({FirebaseAuth? auth, FirebaseFirestore? firestore})
@@ -31,7 +31,6 @@ class AuthService {
       'role': 'jobseeker',
       'status': 'Active',
       'isActive': true, 
-      'login': false, 
       'phoneNumber': null,
       'location': null,
       'professionalProfile': null,
@@ -55,53 +54,6 @@ class AuthService {
       password: password,
     );
     
-    //check if user is already logged in on another device
-    if (credential.user != null) {
-      try {
-        final userId = credential.user!.uid;
-        final userDoc = await _firestore.collection('users').doc(userId).get();
-        
-        if (userDoc.exists) {
-          final userData = userDoc.data();
-          final loginValue = userData?['login'];
-          
-          bool isLoggedIn = false;
-          if (loginValue is bool) {
-            isLoggedIn = loginValue;
-          } else if (loginValue == null) {
-            isLoggedIn = false;
-            debugPrint('Login check: login field is null, treating as false');
-          } else if (loginValue is String) {
-            isLoggedIn = loginValue.toLowerCase() == 'true';
-            debugPrint('Login check: login field is string "$loginValue", converted to $isLoggedIn');
-          } else {
-            debugPrint('Login check: login field is unexpected type: ${loginValue.runtimeType}, value=$loginValue');
-          }
-          
-          debugPrint('Login check: userId=$userId, login field=$loginValue (type: ${loginValue.runtimeType}), isLoggedIn=$isLoggedIn');
-          
-          if (isLoggedIn == true) {
-            debugPrint('BLOCKING LOGIN: User is already logged in on another device (login=$loginValue)');
-            await _auth.signOut(); 
-            throw FirebaseAuthException(
-              code: 'already-logged-in',
-              message: 'This account is already logged in on another device. Please logout from the other device first.',
-            );
-          } else {
-            debugPrint('Login check: User is not logged in (login=$loginValue), allowing login');
-          }
-        } else {
-          debugPrint('Login check: User document not found for userId=$userId');
-        }
-      } on FirebaseAuthException {
-        debugPrint('Login check: Re-throwing FirebaseAuthException');
-        rethrow;
-      } catch (e) {
-        debugPrint('Warning: Could not check login status: $e');
-        debugPrint('Warning: Proceeding with login despite check failure');
-      }
-    }
-    
     if (credential.user != null) {
       await credential.user!.reload();
       final isVerified = credential.user!.emailVerified;
@@ -117,26 +69,6 @@ class AuthService {
   }
 
   Future<void> signOut() async {
-    //check user id before signing out
-    final userId = _auth.currentUser?.uid;
-    
-    debugPrint('SignOut: userId=$userId');
-    
- 
-    if (userId != null && userId.isNotEmpty) {
-      try {
-        await _firestore.collection('users').doc(userId).update({
-          'login': false, 
-        });
-        debugPrint('SignOut: Successfully set login=false for userId=$userId');
-      } catch (e) {
-        debugPrint('Error updating login status during signOut: $e');
-      }
-    } else {
-      debugPrint('SignOut: No userId found, skipping login status update');
-    }
-    
-    //ssign out firebase Auth
     await _auth.signOut();
     debugPrint('SignOut: Firebase Auth signOut completed');
   }
@@ -294,26 +226,6 @@ class AuthService {
       return raw.toLowerCase() == 'true';
     }
     return false;
-  }
-
-  //set login status 
-  Future<void> setLoginStatus(bool isLoggedIn) async {
-    try {
-      final userId = currentUserId;
-      if (userId.isEmpty) {
-        debugPrint('setLoginStatus: ERROR - currentUserId is empty!');
-        throw Exception('Cannot set login status: user ID is empty');
-      }
-      debugPrint('setLoginStatus: userId=$userId, isLoggedIn=$isLoggedIn');
-      await _firestore.collection('users').doc(userId).update({
-        'login': isLoggedIn,
-      });
-      debugPrint('setLoginStatus: Successfully updated login status to $isLoggedIn for user $userId');
-    } catch (e) {
-     
-      debugPrint('Error setting login status: $e');
-      rethrow;
-    }
   }
 
   Future<void> updateUserProfile(Map<String, dynamic> data) async {
