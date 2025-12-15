@@ -322,21 +322,17 @@ class AnalyticsService {
       
       int newMessages = 0;
       
-      // Get all conversations
       final conversationsSnapshot = await _firestore.collection('conversations').get();
       
-      // Use batch processing to limit concurrent queries
       const batchSize = 10;
       final conversationDocs = conversationsSnapshot.docs;
       
       for (int i = 0; i < conversationDocs.length; i += batchSize) {
         final batch = conversationDocs.skip(i).take(batchSize).toList();
         
-        // Process batch in parallel
         final batchResults = await Future.wait(
           batch.map((conversationDoc) async {
             try {
-              // Try to query messages with date filter first (most efficient)
               QuerySnapshot messagesSnapshot;
               try {
                 messagesSnapshot = await conversationDoc.reference
@@ -346,7 +342,6 @@ class AnalyticsService {
                     .get();
                 return messagesSnapshot.docs.length;
               } catch (e) {
-                // If createdAt query fails, try timestamp field
                 try {
                   messagesSnapshot = await conversationDoc.reference
                       .collection('messages')
@@ -355,11 +350,9 @@ class AnalyticsService {
                       .get();
                   return messagesSnapshot.docs.length;
                 } catch (e2) {
-                  // If query fails, fall back to getting all messages and filtering
-                  // This is less efficient but handles cases where date field doesn't exist or has different name
                   final allMessagesSnapshot = await conversationDoc.reference
                       .collection('messages')
-                      .limit(1000) // Limit to prevent excessive data loading
+                      .limit(1000)
                       .get();
                   
                   int count = 0;
@@ -397,13 +390,11 @@ class AnalyticsService {
                 }
               }
             } catch (e) {
-              // Skip this conversation if there's an error
               return 0;
             }
           }),
         );
         
-        // Sum up results from this batch
         newMessages += batchResults.fold<int>(0, (sum, count) => sum + count);
       }
 

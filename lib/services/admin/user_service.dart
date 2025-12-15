@@ -99,7 +99,6 @@ class UserService {
 
       final userName = userData['fullName'] ?? 'User';
       
-      // Update verification request status in new collection
       await FirebaseFirestore.instance
           .collection('verificationRequests')
           .doc(userId)
@@ -109,7 +108,6 @@ class UserService {
         'verifiedBy': currentAdminId,
       });
       
-      // Update user document with verification status
       await _usersRef.doc(userId).update({
         'verificationStatus': 'approved',
         'isVerified': true,
@@ -163,7 +161,6 @@ class UserService {
 
       final userName = userData['fullName'] ?? 'User';
       
-      // Update verification request status in new collection
       await FirebaseFirestore.instance
           .collection('verificationRequests')
           .doc(userId)
@@ -174,7 +171,6 @@ class UserService {
         'rejectionReason': rejectionReason,
       });
       
-      // Update user document with verification status
       await _usersRef.doc(userId).update({
         'verificationStatus': 'rejected',
         'isVerified': false,
