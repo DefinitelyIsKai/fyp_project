@@ -104,17 +104,14 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
     final currentRole = currentAdmin.role.toLowerCase();
     final targetRole = _user.role.toLowerCase();
     
-    // Manager can edit their own profile and other managers
     if (currentRole == 'manager') {
       return true;
     }
     
-    // Staff and HR cannot edit managers
     if ((currentRole == 'staff' || currentRole == 'hr') && targetRole == 'manager') {
       return false;
     }
     
-    // Staff and HR cannot edit their own profile
     if ((currentRole == 'staff' || currentRole == 'hr') && currentAdmin.id == _user.id) {
       return false;
     }
@@ -130,12 +127,10 @@ class _UserDetailPageState extends State<UserDetailPage> with SingleTickerProvid
     
     final currentRole = currentAdmin.role.toLowerCase();
     
-    // Only managers can access account management
     if (currentRole != 'manager') {
       return false;
     }
     
-    // Managers cannot manage their own account (cannot delete/suspend themselves)
     if (currentAdmin.id == _user.id) {
       return false;
     }

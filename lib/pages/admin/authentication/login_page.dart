@@ -306,7 +306,7 @@ class _LoginPageState extends State<LoginPage> {
         
         print('Verification SUCCESS - Navigating to dashboard');
         
-        // Set isLogin to true only after successful face verification
+
         await authService.setLoginStatus(true);
         
         _logLoginSuccess(
@@ -317,7 +317,6 @@ class _LoginPageState extends State<LoginPage> {
 
         _clearLoginResources();
 
-        // Run cloud functions after successful login
         _runCloudFunctionsAfterLogin();
 
         if (mounted) {
@@ -420,9 +419,7 @@ class _LoginPageState extends State<LoginPage> {
               adminName: currentUser.name,
             );
           } else {
-            
-            // If no current user but login succeeded, set isLogin to true
-            // This handles edge case where verification is skipped
+
             await authService.setLoginStatus(true);
             
             if (mounted) {
@@ -508,8 +505,7 @@ class _LoginPageState extends State<LoginPage> {
             }
           }
         } else {
-          // If no current user but login succeeded, set isLogin to true
-          // This handles edge case where verification is skipped
+
           await authService.setLoginStatus(true);
           
           if (mounted) {
@@ -585,7 +581,6 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   void _runCloudFunctionsAfterLogin() {
-    // Run cloud functions in background after successful login
     _cloudFunctionsService.autoApprovePendingPosts().then((result) {
       debugPrint('Login: Auto-approve result: ${result['success']}, approved: ${result['approvedCount']}');
       if (result['success'] == false) {
@@ -831,7 +826,6 @@ class _LoginPageState extends State<LoginPage> {
         final authService = Provider.of<AuthService>(context, listen: false);
         final currentUser = authService.currentAdmin;
         
-        // Set isLogin to true only after successful OTP verification
         await authService.setLoginStatus(true);
         
         _logLoginSuccess(
@@ -849,7 +843,6 @@ class _LoginPageState extends State<LoginPage> {
           _isVerifyingOtp = false;
         });
 
-        // Run cloud functions after successful login
         _runCloudFunctionsAfterLogin();
 
         if (mounted) {
