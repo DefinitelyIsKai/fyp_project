@@ -127,7 +127,6 @@ class _MatchesTabState extends State<_MatchesTab> {
   final MatchingService _matchingService = MatchingService();
   bool _recomputing = false;
   
-//refresh 
   Future<void> _refreshData() async {
     setState(() {
       
@@ -217,7 +216,6 @@ class _MatchesTabState extends State<_MatchesTab> {
 
         return Column(
           children: [
-            //refresh button jobseekers
             if (!widget.isRecruiter)
               Padding(
                 padding: const EdgeInsets.all(16),

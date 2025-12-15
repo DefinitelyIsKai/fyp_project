@@ -327,9 +327,7 @@ class _PostManagementPageState extends State<PostManagementPage> {
     for (int i = 0; i < a.length; i++) {
       final postA = a[i];
       final postB = b[i];
-      //check id
       if (postA.id != postB.id) return false;
-      //check fiels
       if (postA.status != postB.status ||
           postA.isDraft != postB.isDraft ||
           postA.views != postB.views ||
@@ -926,7 +924,6 @@ class _PostCard extends StatelessWidget {
                     ),
                     child: const Text('View'),
                   ),
-                //att
                 if (!post.isDraft && post.status == PostStatus.completed)
                   OutlinedButton(
                     onPressed: onCheckAttendance,

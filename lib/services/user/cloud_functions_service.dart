@@ -13,7 +13,6 @@ class CloudFunctionsService {
       
       debugPrint('Cloud Function result: ${result.data}');
       
-      //parse  result
       final data = result.data as Map<String, dynamic>? ?? {};
       return {
         'success': data['success'] ?? false,

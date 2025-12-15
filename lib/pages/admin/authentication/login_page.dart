@@ -306,6 +306,9 @@ class _LoginPageState extends State<LoginPage> {
         
         print('Verification SUCCESS - Navigating to dashboard');
         
+
+        await authService.setLoginStatus(true);
+        
         _logLoginSuccess(
           email: email,
           userId: currentUser?.id,
@@ -314,7 +317,6 @@ class _LoginPageState extends State<LoginPage> {
 
         _clearLoginResources();
 
-        // Run cloud functions after successful login
         _runCloudFunctionsAfterLogin();
 
         if (mounted) {
@@ -417,6 +419,8 @@ class _LoginPageState extends State<LoginPage> {
               adminName: currentUser.name,
             );
           } else {
+
+            await authService.setLoginStatus(true);
             
             if (mounted) {
               Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
@@ -501,6 +505,8 @@ class _LoginPageState extends State<LoginPage> {
             }
           }
         } else {
+
+          await authService.setLoginStatus(true);
           
           if (mounted) {
             Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
@@ -575,7 +581,6 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   void _runCloudFunctionsAfterLogin() {
-    // Run cloud functions in background after successful login
     _cloudFunctionsService.autoApprovePendingPosts().then((result) {
       debugPrint('Login: Auto-approve result: ${result['success']}, approved: ${result['approvedCount']}');
       if (result['success'] == false) {
@@ -821,6 +826,8 @@ class _LoginPageState extends State<LoginPage> {
         final authService = Provider.of<AuthService>(context, listen: false);
         final currentUser = authService.currentAdmin;
         
+        await authService.setLoginStatus(true);
+        
         _logLoginSuccess(
           email: _pendingEmail!,
           userId: currentUser?.id,
@@ -836,7 +843,6 @@ class _LoginPageState extends State<LoginPage> {
           _isVerifyingOtp = false;
         });
 
-        // Run cloud functions after successful login
         _runCloudFunctionsAfterLogin();
 
         if (mounted) {

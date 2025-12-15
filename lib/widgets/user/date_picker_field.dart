@@ -60,7 +60,6 @@ class DatePickerField extends StatelessWidget {
         const SizedBox(height: 8),
         InkWell(
           onTap: () async {
-            //ensure initial date no before firstdate
             final DateTime initialDate;
             if (selectedDate != null && !selectedDate!.isBefore(firstDate)) {
               initialDate = selectedDate!;

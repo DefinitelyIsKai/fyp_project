@@ -8,9 +8,6 @@ class EmailService {
   static const String _senderEmail = 'lowbryan022@gmail.com'; 
   static const String _senderPassword = 'jcvsitkyjscsoyho'; 
   
- 
-
-  //approved
   Future<void> sendBookingApprovalEmail({
     required String recipientEmail,
     required String recipientName,
@@ -24,7 +21,7 @@ class EmailService {
       final smtpServer = SmtpServer(
         _smtpHost,
         port: _smtpPort,
-        ssl: false, //STARTTLS
+        ssl: false, 
         allowInsecure: false,
         username: _senderEmail,
         password: _senderPassword,
@@ -201,17 +198,14 @@ class EmailService {
     required String jobTitle,
   }) async {
     try {
-      //SMTP configuration
       final smtpServer = SmtpServer(
         _smtpHost,
         port: _smtpPort,
-        ssl: false, //STARTTLS
+        ssl: false, 
         allowInsecure: false,
         username: _senderEmail,
         password: _senderPassword,
       );
-
-      //create  message
       final message = Message()
         ..from = Address(_senderEmail, 'JobSeek Team')
         ..recipients.add(recipientEmail)

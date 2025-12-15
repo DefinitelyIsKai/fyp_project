@@ -10,7 +10,6 @@ class LocationViewerPage extends StatefulWidget {
   State<LocationViewerPage> createState() => _LocationViewerPageState();
 }
 
-//homepage usesage
 
 class _LocationViewerPageState extends State<LocationViewerPage> {
   GoogleMapController? _mapController;
@@ -33,7 +32,6 @@ class _LocationViewerPageState extends State<LocationViewerPage> {
 
   Future<void> _fetchGPSLocation() async {
     try {
-      //check location services 
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         if (!mounted) return;
@@ -45,7 +43,6 @@ class _LocationViewerPageState extends State<LocationViewerPage> {
         return;
       }
 
-      // check location permissions
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
@@ -62,12 +59,10 @@ class _LocationViewerPageState extends State<LocationViewerPage> {
         return;
       }
 
-      //current position
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      //convert coordinates to address
       String locationLabel;
       try {
         final placemarks = await placemarkFromCoordinates(
@@ -78,7 +73,6 @@ class _LocationViewerPageState extends State<LocationViewerPage> {
           final place = placemarks.first;
           final parts = <String>[];
           
-          //add street address 
           if ((place.street ?? '').isNotEmpty) {
             parts.add(place.street!);
           } else if ((place.subThoroughfare ?? '').isNotEmpty || 
@@ -95,30 +89,24 @@ class _LocationViewerPageState extends State<LocationViewerPage> {
             }
           }
           
-          //sub-locality
           if ((place.subLocality ?? '').isNotEmpty) {
             parts.add(place.subLocality!);
           }
-          //city
           if ((place.locality ?? '').isNotEmpty) {
             parts.add(place.locality!);
           }
-          //postal code
           if ((place.postalCode ?? '').isNotEmpty) {
             parts.add(place.postalCode!);
           }
-          //state
           if ((place.administrativeArea ?? '').isNotEmpty) {
             parts.add(place.administrativeArea!);
           }
-          //country
           if ((place.country ?? '').isNotEmpty) {
             parts.add(place.country!);
           }
           
           locationLabel = parts.where((p) => p.trim().isNotEmpty).join(', ');
           
-          //use formatted address
           if (locationLabel.isEmpty && (place.name ?? '').isNotEmpty) {
             locationLabel = place.name!;
           }
@@ -127,7 +115,6 @@ class _LocationViewerPageState extends State<LocationViewerPage> {
               '${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}';
         }
       } catch (_) {
-        //used coordinates if geocoding fails
         locationLabel =
             '${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}';
       }

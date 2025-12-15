@@ -29,7 +29,6 @@ class EmptyState extends StatelessWidget {
        iconColor = Colors.grey,
        iconSize = 80.0;
 
-  //no matches/applications
   const EmptyState.noMatches({
     super.key,
     required bool isRecruiter,

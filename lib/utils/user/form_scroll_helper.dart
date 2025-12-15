@@ -6,7 +6,6 @@ class FormValidationHelper {
     final formState = formKey.currentState;
     if (formState == null) return false;
     
-    // validate the form
     final isValid = formState.validate();
     
     if (!isValid) {
@@ -82,8 +81,7 @@ class FormValidationHelper {
           if (renderBox != null) {
             final position = renderBox.localToGlobal(Offset.zero);
             final scrollPosition = scrollController.position;
-            
-            //offset
+
             final targetOffset = scrollPosition.pixels + position.dy - 100; 
             
             scrollController.animateTo(

@@ -126,7 +126,6 @@ class _DashboardPageState extends State<DashboardPage> {
     }
     setState(() => _isLoading = true);
     try {
-      // Cloud functions are now called after login, not when dashboard loads
       
       final users = await _dashboardService.getActiveUsersCount();
       final authService = Provider.of<AuthService>(context, listen: false);

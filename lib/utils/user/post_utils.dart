@@ -32,12 +32,10 @@ class PostUtils {
     if (oldPosts.length != newPosts.length) return true;
     final oldPostsMap = {for (var p in oldPosts) p.id: p};
 
-    //check content
     for (final newPost in newPosts) {
       final oldPost = oldPostsMap[newPost.id];
-      if (oldPost == null) return true; //new
+      if (oldPost == null) return true;
 
-      //compare field
       if (oldPost.title != newPost.title ||
           oldPost.status != newPost.status ||
           oldPost.budgetMin != newPost.budgetMin ||

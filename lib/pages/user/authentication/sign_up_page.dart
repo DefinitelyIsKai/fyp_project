@@ -46,14 +46,11 @@ class _SignUpPageState extends State<SignUpPage> {
           );
           return;
         } else {
-          //not verified resend 
           try {
             final credential = await _authService.signIn(
               email: _emailController.text,
               password: _passwordController.text,
             );
-            
-            //still not 
             await credential.user?.reload();
             if (!(credential.user?.emailVerified ?? false)) {
               await _authService.resendVerificationEmail();

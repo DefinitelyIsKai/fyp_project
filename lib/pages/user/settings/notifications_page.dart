@@ -448,7 +448,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   IconData _iconFor(NotificationCategory category, {Map<String, dynamic>? metadata}) {
-    // Check for verification approved notification
     if (category == NotificationCategory.system && 
         metadata != null && 
         metadata['type'] == 'verification_approved') {
@@ -484,7 +483,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   Color _getIconBackgroundColor(NotificationCategory category, {Map<String, dynamic>? metadata}) {
-    // Check for verification approved notification
     if (category == NotificationCategory.system && 
         metadata != null && 
         metadata['type'] == 'verification_approved') {
@@ -520,7 +518,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   Color _getIconColor(NotificationCategory category, {Map<String, dynamic>? metadata}) {
-    // Check for verification approved notification
     if (category == NotificationCategory.system && 
         metadata != null && 
         metadata['type'] == 'verification_approved') {

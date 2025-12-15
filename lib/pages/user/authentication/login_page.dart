@@ -48,13 +48,11 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       if (_loginMode == LoginMode.user) {
-        //user
         final credential = await _authService.signIn(
           email: _emailController.text,
           password: _passwordController.text,
         );
         if (!mounted) return;
-        //block email 
         await credential.user?.reload();
         if (!(credential.user?.emailVerified ?? false)) {
           if (mounted) {
@@ -123,7 +121,6 @@ class _LoginPageState extends State<LoginPage> {
           MaterialPageRoute(builder: (_) => goToSetup ? const ProfileSetupFlow() : const HomePage()),
         );
       } else {
-        //admin
         admin_auth.AuthService adminAuthService;
         try {
           adminAuthService = Provider.of<admin_auth.AuthService>(context, listen: false);
@@ -357,7 +354,6 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  //login
                   SizedBox(
                     height: 52,
                     child: ElevatedButton(
@@ -390,7 +386,6 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   if (_loginMode == LoginMode.user) ...[
                     const SizedBox(height: 24),
-                    //signup
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -423,7 +418,6 @@ class _LoginPageState extends State<LoginPage> {
                     Divider(thickness: 1, color: Colors.grey[300]),
                     const SizedBox(height: 16),
 
-                    //admin
                     Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [

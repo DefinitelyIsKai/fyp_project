@@ -18,7 +18,6 @@ class CreditWalletPage extends StatefulWidget {
   State<CreditWalletPage> createState() => _CreditWalletPageState();
 }
 
-//parsing
 int _parseInt(dynamic value) {
   if (value == null) return 0;
   if (value is int) return value;
@@ -33,18 +32,17 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
   WalletTxnType? _selectedFilter;
   List<Map<String, dynamic>> _pendingPayments = [];
   
-  //agination
   final PageController _pageController = PageController();
   final ValueNotifier<int> _currentPageNotifier = ValueNotifier<int>(0);
   List<List<_UnifiedTransaction>> _pages = [];
-  List<List<_UnifiedTransaction>> _filteredPages = []; //cache
+  List<List<_UnifiedTransaction>> _filteredPages = [];
   int _currentPage = 0;
   bool _isLoadingMore = false;
   bool _hasMore = true;
   List<_UnifiedTransaction> _allTransactions = [];
   WalletTxnType? _lastFilter; 
   static const int _itemsPerPage = 10;
-  static const int _initialStreamLimit = 50; //load50
+  static const int _initialStreamLimit = 50;
   
   Stream<List<_UnifiedTransaction>>? _cachedUnifiedStream;
   
@@ -78,7 +76,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
     });
   }
 
-  //transactions cancelled payments 
   Stream<List<_UnifiedTransaction>> _getUnifiedTransactionsStream() {
     if (_cachedUnifiedStream != null) {
       return _cachedUnifiedStream!;
@@ -119,7 +116,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
           ));
         }
 
-        //date sorting
         unified.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
         if (!controller.isClosed) {
@@ -152,7 +148,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
       },
     );
     
-    //clean
     controller.onCancel = () {
       transactionsSubscription.cancel();
       cancelledSubscription.cancel();
@@ -191,7 +186,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
         ));
       }
 
-      //cancelled payments
       final allCancelled = await _walletService.loadInitialCancelledPayments(limit: 1000);
       final existingIds = _allTransactions
           .where((t) => t.isCancelled)
@@ -230,11 +224,9 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
         return;
       }
 
-      //new transactions and re-sort
       _allTransactions.addAll(unified);
       _allTransactions.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-      //pages
       final pages = <List<_UnifiedTransaction>>[];
       for (int i = 0; i < _allTransactions.length; i += _itemsPerPage) {
         final end = (i + _itemsPerPage < _allTransactions.length) 
@@ -243,7 +235,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
         pages.add(_allTransactions.sublist(i, end));
       }
 
-      //recalculate filtered new data
       final filteredTransactions = _selectedFilter == null
           ? _allTransactions
           : _allTransactions.where((t) {
@@ -293,7 +284,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
     if (!mounted) return;
     try {
       await _walletService.checkAndCreditPendingPayments();
-      //refresh pending payment
       await _refreshPendingPayments();
     } catch (e) {
       print('Error checking pending payments: $e');
@@ -302,7 +292,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
 
   Future<void> _refreshPendingPayments() async {
     try {
-      //get pending payments 
       final pendingPayments = await _walletService.getPendingPayments();
       if (mounted) {
         setState(() {
@@ -363,7 +352,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
       
       if (!mounted) return;
       
-      //close 
       Navigator.of(context).pop();
       
       await _refreshPendingPayments();
@@ -502,7 +490,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                //pending paym
                 StreamBuilder<List<Map<String, dynamic>>>(
                   stream: _walletService.streamPendingPayments(),
                   builder: (context, snap) {
@@ -510,7 +497,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
               
               if (snap.hasData) {
                 pendingPayments = snap.data ?? [];
-                //cached data
                 _pendingPayments = pendingPayments;
               } else if (snap.hasError) {
                 print('Error loading pending payments from stream: ${snap.error}');
@@ -972,7 +958,6 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
                   ),
                 ),
 
-                //filter
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Row(
@@ -1001,11 +986,9 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
             ),
           ),
           
-          //trans
           SliverToBoxAdapter(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                //available height dynamic screen size
                 final mediaQuery = MediaQuery.of(context);
                 final screenHeight = mediaQuery.size.height;
                 final screenWidth = mediaQuery.size.width;
@@ -1014,13 +997,11 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
                 
                 final cardHeight = _isCardShrunk ? 200 : 400;
                 final appBarHeight = 56; 
-                final otherElementsHeight = 100; //margim
+                final otherElementsHeight = 100;
                 final safeAreaHeight = padding.top + padding.bottom;
                 
-                //available height 
                 final calculatedHeight = screenHeight - cardHeight - appBarHeight - otherElementsHeight - safeAreaHeight;
                 
-                //minimum height percentage minimum   
                 final minHeight = isLandscape 
                     ? (screenHeight * 0.3).clamp(200.0, double.infinity)
                     : (screenHeight * 0.25).clamp(300.0, double.infinity);
@@ -1178,11 +1159,9 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
                   final bool isCredit = t.type == WalletTxnType.credit;
                   final dateStr = DateUtilsHelper.DateUtils.formatRelativeDate(t.createdAt);
                   
-                  //held credits 
                   final bool isOnHold = t.description.contains('(On Hold)');
                   final bool isReleased = t.description.contains('(Released)');
                   
-                  //color determin
                   Color iconColor;
                   Color backgroundColor;
                   IconData iconData;
@@ -1378,11 +1357,9 @@ class _CreditWalletPageState extends State<CreditWalletPage> with WidgetsBinding
               : label == 'Added' 
                   ? WalletTxnType.credit 
                   : WalletTxnType.debit;
-          //reset
           _currentPage = 0;
           _currentPageNotifier.value = 0;
         });
-        //first page
         if (_pageController.hasClients) {
           _pageController.jumpToPage(0);
         }

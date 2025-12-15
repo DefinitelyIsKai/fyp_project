@@ -7,7 +7,7 @@ class ReportService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AuthService _authService = AuthService();
 
-  //jobseeker report
+  
   Future<void> reportPost({
     required String postId,
     required String reason,
@@ -17,7 +17,6 @@ class ReportService {
       final userDoc = await _authService.getUserDoc();
       final reporterId = userDoc.id;
 
-      //find recruiter
       final postDoc = await _firestore.collection('posts').doc(postId).get();
       if (!postDoc.exists) {
         throw Exception('Post not found');
@@ -26,7 +25,6 @@ class ReportService {
       final postData = postDoc.data()!;
       final recruiterId = postData['ownerId'] as String;
 
-      //check reported
       final existingReport = await _firestore
           .collection('reports')
           .where('reporterId', isEqualTo: reporterId)
@@ -58,7 +56,6 @@ class ReportService {
     }
   }
 
-  //recruiter report 
   Future<void> reportJobseeker({
     required String jobseekerId,
     required String postId,
@@ -69,7 +66,6 @@ class ReportService {
       final userDoc = await _authService.getUserDoc();
       final reporterId = userDoc.id;
 
-      //vverify the post belonging
       final postDoc = await _firestore.collection('posts').doc(postId).get();
       if (!postDoc.exists) {
         throw Exception('Post not found');
@@ -121,7 +117,6 @@ class ReportService {
     }
   }
 
-  //check recruiter reported jobseekr
   Future<bool> hasReportedJobseeker(String jobseekerId, String postId) async {
     try {
       final userDoc = await _authService.getUserDoc();
@@ -164,7 +159,6 @@ class ReportService {
           .where('type', isEqualTo: type)
           .get();
 
-      //filter  categories in memory
       final categories = snapshot.docs
           .map((doc) {
             try {

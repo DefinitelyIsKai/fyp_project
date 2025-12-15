@@ -375,7 +375,6 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   }
 
   Future<void> _sendMessage() async {
-    //prevent duplicate sending
     if (_isSending || _messageController.text.trim().isEmpty) return;
 
     final currentUserId = _authService.currentUserId;
@@ -417,7 +416,6 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         }
       });
     } catch (e) {
-      //restore message content
       _messageController.text = messageContent;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -65,7 +65,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
   }
 
   void _onSlotsLoaded() {
-    //clearloading state
     if (mounted && _isLoadingSlots) {
       setState(() {
         _isLoadingSlots = false;
@@ -77,7 +76,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     return DateTime(date.year, date.month, date.day);
   }
 
-  //pos event end date has passed
   bool _isEventEndDatePassed(Post? post) {
     if (post == null || post.eventEndDate == null) {
       return false; 
@@ -109,13 +107,10 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     return _normalizeDate(slot.date);
   }
 
-  //month date range
   ({DateTime start, DateTime end}) _getMonthRange(DateTime month) {
     return (start: DateTime(month.year, month.month, 1), end: DateTime(month.year, month.month + 1, 0));
   }
 
-
-  //process slots and prepare calendar data
   ({Set<DateTime> allDates, Set<DateTime> availableDates, Set<DateTime> bookedDates}) _processSlots(
     List<AvailabilitySlot> slots,
   ) {
@@ -126,7 +121,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     );
   }
 
-  //prepare pending dates and exclude from available
   ({Set<DateTime> pendingDates, Set<DateTime> availableDatesExcludingPending}) _preparePendingDates(
     List<AvailabilitySlot> slots,
     Set<String> pendingSlotIds,
@@ -143,12 +137,10 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
 
   @override
   Widget build(BuildContext context) {
-    //recruiter list
     if (_selectedRecruiterId == null) {
       return _buildRecruiterList();
     }
 
-    //applicantlist
     if (_selectedApplication == null) {
       return PopScope(
         canPop: false,
@@ -163,7 +155,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
       );
     }
 
-    //show calendar
     return PopScope(
       canPop: false,
         onPopInvoked: (didPop) {
@@ -304,7 +295,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                       ),
                     ),
 
-                    //real-time updates
                     Container(
                       padding: const EdgeInsets.all(16),
                       color: Colors.white,
@@ -330,7 +320,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                           final userId = _authService.currentUserId;
                           final slots = snapshot.data ?? [];
 
-                          //filter booked slots
                           final applicationId = _selectedApplication?.id;
                           final filteredSlots = applicationId != null
                               ? slots.where((slot) {
@@ -344,10 +333,8 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                                 }).toList()
                               : slots;
 
-                          //filter slots post event date range 
                           final postId = _selectedApplication?.postId;
                           if (postId == null) {
-                            //show all slots
                             final processed = _processSlots(filteredSlots);
                             final monthRange = _getMonthRange(_currentMonth);
                             return StreamBuilder<Set<DateTime>>(
@@ -404,7 +391,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
 
                          
                               final dateFilteredSlots = filteredSlots.where((slot) {
-                                //checking slot
                                 if (post != null && post.eventEndDate != null) {
                                   final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
                                   final eventEndDateOnly = DateTime(
@@ -537,7 +523,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
           ),
         ),
 
-        //recruiter list
         Expanded(
           child: StreamBuilder<List<Application>>(
             stream: _applicationService.streamMyApplications(),
@@ -789,7 +774,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
           ),
         ),
 
-//application list
         Expanded(
           child: StreamBuilder<List<Application>>(
             stream: _applicationService.streamMyApplications(),
@@ -911,7 +895,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
                             onTap: () async {
                               setState(() {
                                 _selectedApplication = application;
-                                //recruiter name cache 
                                 _recruiterNameCache[application.recruiterId] = fullName;
                               });
                             },
@@ -1105,7 +1088,7 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
       emitIfReady();
     }
 
-    //clean
+   
     controller.onCancel = () {
       for (final subscription in subscriptions) {
         subscription.cancel();
@@ -1115,7 +1098,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
     return controller.stream;
   }
 
-  //load selected application 
   Future<Map<String, dynamic>> _loadApplicationDisplayData(Application application) async {
     String? fullName = _recruiterNameCache[application.recruiterId];
     if (fullName == null) {
@@ -1131,7 +1113,6 @@ class _JobseekerBookingPageState extends State<JobseekerBookingPage> {
       }
     }
 
-    //job title cache
     String? jobTitle;
     if (_postCache.containsKey(application.postId)) {
       jobTitle = _postCache[application.postId]?.title;

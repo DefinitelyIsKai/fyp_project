@@ -14,13 +14,13 @@ class MessagingService {
   final ApplicationService _applicationService = ApplicationService();
   final NotificationService _notificationService = NotificationService();
 
-  //conversation id from two user  
+
   String _generateConversationId(String userId1, String userId2) {
     final ids = [userId1, userId2]..sort();
     return '${ids[0]}_${ids[1]}';
   }
 
-  //create conversation
+
   Future<String> getOrCreateConversation({
     required String otherUserId,
     String? matchId,
@@ -29,7 +29,6 @@ class MessagingService {
     final conversationId = _generateConversationId(currentUserId, otherUserId);
 
    
-    // not overwrite existing lastMessage data 
     final currentUserDoc = await _authService.getUserDoc();
     final otherUserDoc = await _firestore
         .collection('users')
@@ -44,13 +43,10 @@ class MessagingService {
         currentUserDoc.data()?['role'] as String? ?? 'jobseeker';
     final otherUserRole = otherUserDoc.data()?['role'] as String? ?? 'jobseeker';
 
-    //conversation exists with proper structure
     final conversationRef = _firestore.collection('conversations').doc(conversationId);
     
-    //check  conversation  exists
     final existing = await conversationRef.get();
     if (!existing.exists) {
-      //create conversation
       await conversationRef.set({
         'participant1Id': currentUserId,
         'participant2Id': otherUserId,
@@ -67,7 +63,6 @@ class MessagingService {
         'lastMessageTime': FieldValue.serverTimestamp(),
       });
     } else {
-      //update latest names
       await conversationRef.set({
         'participant1Id': currentUserId,
         'participant2Id': otherUserId,
@@ -88,7 +83,6 @@ class MessagingService {
 
  
   Stream<List<Conversation>> streamConversations() {
-    //check user authenticated
     if (_auth.currentUser == null) {
       return Stream.value(<Conversation>[]);
     }
@@ -105,7 +99,6 @@ class MessagingService {
         return;
       }
 
-      //filter out conversations with no messages and sort in memory lastmessagetime 
       final conversations = conversationMap.values
           .where((conv) => conv.lastMessage.isNotEmpty)
           .toList();
@@ -118,13 +111,11 @@ class MessagingService {
       }
     }
 
-    //conversations participant1
     final stream1 = _firestore
         .collection('conversations')
         .where('participant1Id', isEqualTo: userId)
         .snapshots();
 
-    //conversations participant2
     final stream2 = _firestore
         .collection('conversations')
         .where('participant2Id', isEqualTo: userId)
@@ -134,7 +125,6 @@ class MessagingService {
       (snapshot1) {
         if (_auth.currentUser == null || controller.isClosed) return;
 
-        //pdate conversations first query
         for (final doc in snapshot1.docs) {
           try {
             final conversation = Conversation.fromFirestore(doc);
@@ -157,7 +147,6 @@ class MessagingService {
       (snapshot2) {
         if (_auth.currentUser == null || controller.isClosed) return;
 
-        //update second query
         for (final doc in snapshot2.docs) {
           try {
             final conversation = Conversation.fromFirestore(doc);
@@ -176,7 +165,6 @@ class MessagingService {
       },
     );
 
-    //clean up 
     controller.onCancel = () async {
       await sub1?.cancel();
       await sub2?.cancel();
@@ -186,7 +174,7 @@ class MessagingService {
     return controller.stream;
   }
 
-  //message for a conversation
+
   Stream<List<Message>> streamMessages(String conversationId) async* {
  
     if (_auth.currentUser == null) {
@@ -195,7 +183,6 @@ class MessagingService {
     }
 
     try {
-      //check conversation exists 
       final conversationDoc = await _firestore
           .collection('conversations')
           .doc(conversationId)
@@ -209,7 +196,6 @@ class MessagingService {
       final conversationData = conversationDoc.data();
       final userId = _authService.currentUserId;
       
-      //check participant
       if (conversationData?['participant1Id'] != userId &&
           conversationData?['participant2Id'] != userId) {
         yield <Message>[];
@@ -298,14 +284,13 @@ class MessagingService {
       timestamp: DateTime.now(),
     );
 
-    //addmessage  
+    
     await _firestore
         .collection('conversations')
         .doc(conversationId)
         .collection('messages')
         .add(message.toFirestore());
 
-    //update last message
     await _firestore.collection('conversations').doc(conversationId).update({
       'lastMessage': content,
       'lastMessageTime': Timestamp.fromDate(DateTime.now()),
@@ -318,7 +303,7 @@ class MessagingService {
     );
   }
 
-  //mark  read
+
   Future<void> markMessagesAsRead(String conversationId) async {
     final userId = _authService.currentUserId;
     final messagesSnapshot = await _firestore

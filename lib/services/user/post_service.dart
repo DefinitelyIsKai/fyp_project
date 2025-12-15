@@ -45,7 +45,6 @@ class PostService {
               .map((d) => _fromDoc(d))
               .where((post) {
                 if (post.status == PostStatus.deleted) return false;
-                //exclude rejected posts 
                 if (!includeRejected && post.status == PostStatus.rejected) return false;
                 return true;
               })
@@ -152,7 +151,6 @@ class PostService {
       final data = doc.data();
       if (data == null) return null;
       final post = _fromDoc(doc);
-      //null post deleted or rejected 
       if (post.status == PostStatus.deleted || post.status == PostStatus.rejected) return null;
       return post;
     } catch (e) {
@@ -174,7 +172,6 @@ class PostService {
     }
   }
 
-  //stream a single post by ID for real-time updates 
   Stream<Post?> streamPostById(String postId) {
     return _col.doc(postId).snapshots().map((doc) {
       if (!doc.exists) return null;
@@ -197,8 +194,7 @@ class PostService {
     if (currentUser == null) {
       throw Exception('User must be logged in to create a post. Please sign in and try again.');
     }
-    
-    //post id if available or new one
+
     final postId = post.id.isNotEmpty ? post.id : _col.doc().id;
     final doc = _col.doc(postId);
     
@@ -241,7 +237,6 @@ class PostService {
 
     data['approvedApplicants'] = 0;
 
-    //200 credits need publishing nodrat
     if (!post.isDraft) {
       try {
         await _walletService.holdPostCreationCredits(postId: doc.id, feeCredits: 200);
@@ -285,7 +280,6 @@ class PostService {
     final PostStatus newStatus = post.status;
     final String ownerId = existingData['ownerId'] as String? ?? '';
 
-    //200 publishing when draft post 
     if (wasDraft && !post.isDraft) {
       post = Post(
         id: post.id,
@@ -322,7 +316,6 @@ class PostService {
 
  
     if (!post.isDraft && oldStatus != newStatus) {
-      //educt credits
       if (oldStatus == PostStatus.pending && newStatus == PostStatus.active) {
         try {
           final success = await WalletService.deductPostCreationCreditsForUser(
@@ -335,7 +328,6 @@ class PostService {
             if (post.event.isNotEmpty) {
               await _categoryService.incrementJobCount(post.event);
             }
-            //noti recruiter 
             if (ownerId.isNotEmpty) {
               try {
                 await _notificationService.notifyWalletDebit(
@@ -353,7 +345,6 @@ class PostService {
           debugPrint('Error deducting post creation credits: $e');
         }
       }
-      //status changed from pending to rejected release credits
       else if (oldStatus == PostStatus.pending && newStatus == PostStatus.rejected) {
         try {
           final success = await WalletService.releasePostCreationCreditsForUser(
@@ -363,7 +354,7 @@ class PostService {
             feeCredits: 200,
           );
           if (success && ownerId.isNotEmpty) {
-            //noti refund
+
             try {
               await _notificationService.notifyWalletCredit(
                 userId: ownerId,
@@ -383,11 +374,9 @@ class PostService {
 
     final data = post.toMap();
     
-    //publish from draft, update createdAt
     if (wasDraft && !post.isDraft) {
       data['createdAt'] = FieldValue.serverTimestamp();
     } else {
-      //nochange createdAt
       data.remove('createdAt');
     }
     
@@ -401,7 +390,6 @@ class PostService {
   }
 
   Future<void> delete(String id) async {
-    //get post details before marking as deleted 
     Post? post;
     String postTitle = 'your post';
     String? ownerId;
@@ -420,7 +408,6 @@ class PostService {
       debugPrint('Error fetching post $id for deletion: $e');
     }
 
-    //notify recruiter about deletion
     if (ownerId != null && ownerId.isNotEmpty) {
       try {
         await _notificationService.notifyPostDeletedToRecruiter(
@@ -432,7 +419,6 @@ class PostService {
       }
     }
     
-    //rrelease held credits  post  pending 
     if (ownerId != null && 
         ownerId.isNotEmpty && 
         post != null && 
@@ -446,7 +432,6 @@ class PostService {
           feeCredits: 200,
         );
         if (success) {
-          //noti refund
           try {
             await _notificationService.notifyWalletCredit(
               userId: ownerId,
@@ -493,8 +478,7 @@ class PostService {
         .snapshots()
         .map((snap) {
           var posts = snap.docs.map((d) => _fromDoc(d)).toList();
-
-          //budget filter in memory 
+ 
           if (minBudget != null && maxBudget != null) {
             posts = posts.where((post) {
               if (post.budgetMin == null && post.budgetMax == null) return false;

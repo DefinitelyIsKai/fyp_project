@@ -214,16 +214,11 @@ exports.autoApprovePendingPosts = functions
             continue;
           }
 
-          // Convert to UTC+8 timezone for date comparison
-          // Firestore Timestamp.toDate() returns a Date in UTC
-          // We need to get the date in UTC+8 timezone
-          const utc8Offset = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
+          const utc8Offset = 8 * 60 * 60 * 1000;
           
-          // Convert UTC time to UTC+8 by adding 8 hours, then get the date components
           const startDateUTC8 = new Date(startDate.getTime() + utc8Offset);
           const nowUTC8 = new Date(now.getTime() + utc8Offset);
           
-          // Extract date only (year, month, day) - these are already in UTC+8 representation
           const startDateOnly = new Date(
               Date.UTC(
                   startDateUTC8.getUTCFullYear(),
@@ -240,7 +235,6 @@ exports.autoApprovePendingPosts = functions
               )
           );
 
-          // Calculate 2 days before eventStartDate
           const twoDaysBeforeEvent = new Date(startDateOnly);
           twoDaysBeforeEvent.setUTCDate(startDateOnly.getUTCDate() - 2);
           
@@ -256,8 +250,6 @@ exports.autoApprovePendingPosts = functions
           console.log(`  - current date (UTC+8): ${nowOnly.toISOString()}`);
           console.log(`  - condition check: ${nowOnly >= twoDaysBeforeEvent} && ${nowOnly < startDateOnly} = ${nowOnly >= twoDaysBeforeEvent && nowOnly < startDateOnly}`);
 
-          // Check if current date is >= 2 days before eventStartDate
-          // Allow approval if current date >= 2 days before eventStartDate (even if event already started)
           if (nowOnly >= twoDaysBeforeEvent) {
             console.log(`autoApprovePendingPosts: Post ${doc.id} eligible for approval`);
             if (nowOnly >= startDateOnly) {

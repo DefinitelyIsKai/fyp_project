@@ -70,7 +70,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
   final GlobalKey<FormFieldState<String>> _minAgeKey = GlobalKey<FormFieldState<String>>();
   final GlobalKey<FormFieldState<String>> _maxAgeKey = GlobalKey<FormFieldState<String>>();
   final GlobalKey<FormFieldState<String>> _quotaKey = GlobalKey<FormFieldState<String>>();
-  //tracking
   final Set<TextEditingController> _focusedFields = {};
   bool _genderFieldTouched = false;
   bool _workTimeStartTouched = false;
@@ -111,7 +110,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
       _selectedEvent = p.event.isEmpty ? null : p.event;
       _eventStartDate = p.eventStartDate;
       _eventEndDate = p.eventEndDate;
-      //time parsing
       if (p.workTimeStart != null) {
         final parts = p.workTimeStart!.split(':');
         if (parts.length == 2) {
@@ -182,7 +180,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
         .listen(
           (Post? updatedPost) {
             if (!mounted || updatedPost == null) return;
-            //store new data
             _latestPostFromFirestore = updatedPost;
             if (!_isUserEditing && !_saving) {
               _syncWithFirestoreData(updatedPost);
@@ -349,7 +346,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
     
     _hasExternalUpdate = false;
     
-    //refrsh when changed
     if (needsRebuild && mounted) {
       setState(() {});
     }
@@ -362,7 +358,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
       if (data != null && data['attachments'] != null) {
         final attachments = data['attachments'] as List?;
         if (attachments != null && attachments.isNotEmpty) {
-          //extract base64 strings
           final List<String> base64Strings = [];
           for (final a in attachments) {
             if (a is Map) {
@@ -474,7 +469,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
   }
 
   String? _validateRequiredFieldsForPublish() {
-    //title and desc
     final formState = _formKey.currentState;
     if (formState == null || !formState.validate()) {
       String missingFields = '';
@@ -510,7 +504,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
     if (_eventEndDate == null) {
       return 'Event end date is required';
     }
-    //prevent event start date from now day
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final eventStartDateOnly = DateTime(_eventStartDate!.year, _eventStartDate!.month, _eventStartDate!.day);
@@ -576,7 +569,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
     if (_workTimeEnd == null) {
       return 'Work end time is required';
     }
-    //check if end time after start time  overnight time equals
     final startMinutes = _workTimeStart!.hour * 60 + _workTimeStart!.minute;
     final endMinutes = _workTimeEnd!.hour * 60 + _workTimeEnd!.minute;
 
@@ -637,14 +629,12 @@ class _PostCreatePageState extends State<PostCreatePage> {
   }
 
   Future<void> _save({required bool publish}) async {
-    //prevent multi action
     if (_saving) return;
     _saving = true;
     if (mounted) {
       setState(() {}); 
     }
 
-    //verify
     if (publish) {
       try {
         final userDoc = await _authService.getUserDoc();
@@ -707,7 +697,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
         return;
       }
     } else {
-      //disable drafting for published posts
       if (widget.existing != null &&
           !widget.existing!.isDraft &&
           (widget.existing!.status == PostStatus.active || widget.existing!.status == PostStatus.pending)) {
@@ -739,7 +728,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
         if (mounted) setState(() => _saving = false);
         return;
       }
-//draft title
       if (_titleController.text.trim().isEmpty) {
         if (mounted) {
           setState(() => _saving = false);
@@ -832,7 +820,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
           maxSizeMatch = RegExp(r'maximum.*?(\d+) bytes').firstMatch(errorString);
         }
 
-        //extract large numbers
         if (sizeMatch == null || maxSizeMatch == null) {
           final allLargeNumbers = RegExp(r'\d{6,}').allMatches(errorString).toList();
           if (allLargeNumbers.isNotEmpty) {
@@ -850,7 +837,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
             errorMessage = _buildGenericSizeErrorMessage();
           }
         } else {
-          //pasing size
           try {
             String actualSizeStr = sizeMatch.groupCount > 0 && sizeMatch.group(1) != null
                 ? sizeMatch.group(1)!.replaceAll(',', '').trim()
@@ -866,7 +852,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
 
             errorMessage = _buildSizeErrorMessage(actualSize, maxSize, exceededSize);
           } catch (_) {
-            //alternative to extarct large numbers
             final allLargeNumbers = RegExp(r'\d{6,}').allMatches(errorString).toList();
             if (allLargeNumbers.isNotEmpty) {
               final numbers = allLargeNumbers.map((m) => int.parse(m.group(0)!)).toList()
@@ -893,7 +878,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
     }
   }
 
-  //format bytes to readable string
   String _formatBytes(int bytes) {
     if (bytes >= 1024 * 1024) {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
@@ -902,7 +886,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
     }
   }
 
-  //size error message
   String _buildSizeErrorMessage(int actualSize, int maxSize, int exceededSize) {
     final actualSizeReadable = _formatBytes(actualSize);
     final maxSizeReadable = _formatBytes(maxSize);
@@ -919,7 +902,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
         'Recommended total size: less than $recommendedMaxReadable.';
   }
 
-  //size error message
   String _buildGenericSizeErrorMessage() {
     return 'Image Size exceeds the limit!\n\n'
         'Document size exceeds the 1MB limit.\n\n'
@@ -945,7 +927,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
         (widget.existing!.status == PostStatus.active || widget.existing!.status == PostStatus.pending);
   }
 
-  //scrolls to the first field when draft
   void _scrollToFirstField() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_titleFieldKey.currentContext != null && _scrollController.hasClients) {
@@ -1091,7 +1072,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
               ),
               const SizedBox(height: 16),
 
-              //budget  location
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -1177,7 +1157,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
               ),
               const SizedBox(height: 16),
 
-              //job details
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -1224,7 +1203,7 @@ class _PostCreatePageState extends State<PostCreatePage> {
                               });
                               _onFieldChanged();
                             },
-                            firstDate: DateTime.now().add(const Duration(days: 1)), //at least tomorrow
+                            firstDate: DateTime.now().add(const Duration(days: 1)),
                             lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
                             required: true,
                             helperText: 'At least 1 day from today',
@@ -1307,7 +1286,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
               ),
               const SizedBox(height: 16),
 
-              //candidate
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -1829,7 +1807,6 @@ class _PostCreatePageState extends State<PostCreatePage> {
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
               ),
-              //show error when focused
               if (field.hasError && _focusedFields.contains(controller)) ...[
                 const SizedBox(height: 4),
                 Padding(
@@ -2106,7 +2083,6 @@ class _TagSelectionStreamBuilderState extends State<_TagSelectionStreamBuilder> 
           _cachedData = {};
         }
         
-        //existing tags when data first loads 
         if (widget.existing != null && 
             widget.existing!.tags.isNotEmpty && 
             tagCategoriesWithTags.isNotEmpty &&

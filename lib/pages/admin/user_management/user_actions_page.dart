@@ -60,14 +60,12 @@ class _UserActionsPageState extends State<UserActionsPage> with SingleTickerProv
         _searchQuery = query;
         
         if (_tabController.index == 0) {
-          // Suspended users tab
           _filteredSuspendedUsers = _suspendedUsers.where((user) {
             if (query.isEmpty) return true;
             return user.fullName.toLowerCase().contains(query) ||
                 user.email.toLowerCase().contains(query);
           }).toList();
         } else {
-          // Verification tab
           _filteredPendingVerificationUsers = _pendingVerificationUsers.where((user) {
             if (query.isEmpty) return true;
             return user.fullName.toLowerCase().contains(query) ||
@@ -1098,7 +1096,6 @@ class _UserActionsPageState extends State<UserActionsPage> with SingleTickerProv
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -1125,7 +1122,6 @@ class _UserActionsPageState extends State<UserActionsPage> with SingleTickerProv
                   ],
                 ),
               ),
-              // Content
               Flexible(
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(
@@ -1259,7 +1255,6 @@ class _UserActionsPageState extends State<UserActionsPage> with SingleTickerProv
                   ),
                 ),
               ),
-              // Footer buttons
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(

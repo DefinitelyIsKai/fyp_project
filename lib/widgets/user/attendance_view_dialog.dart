@@ -124,7 +124,6 @@ class _AttendanceViewDialogState extends State<AttendanceViewDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header with theme color
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -180,7 +179,6 @@ class _AttendanceViewDialogState extends State<AttendanceViewDialog> {
               ),
             ),
             const Divider(height: 1, thickness: 1),
-            // Content
             Flexible(
               child: Padding(
                 padding: const EdgeInsets.all(20),
@@ -305,7 +303,6 @@ class _AttendanceViewDialogState extends State<AttendanceViewDialog> {
                                   ],
                                 ),
                                 const SizedBox(height: 16),
-                                // Start Image
                                 Text(
                                   'Start Image',
                                   style: TextStyle(
@@ -330,7 +327,6 @@ class _AttendanceViewDialogState extends State<AttendanceViewDialog> {
                                   ),
                                 ],
                                 const SizedBox(height: 16),
-                                // End Image
                                 Text(
                                   'End Image',
                                   style: TextStyle(

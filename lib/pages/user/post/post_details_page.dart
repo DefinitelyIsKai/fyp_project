@@ -178,7 +178,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
         actions: [
-          //report button post is active or completed
           if (_userRole == 'jobseeker' && !_isOwner && _currentPostStatus != null && (_currentPostStatus == PostStatus.completed || _currentPostStatus == PostStatus.active))
             FutureBuilder<bool>(
               future: Future.wait([
@@ -205,7 +204,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                 return const SizedBox.shrink();
               },
             ),
-          //recruiter post is completed
           if (_isOwner && _currentPostStatus != null && _currentPostStatus == PostStatus.completed)
             IconButton(
               icon: const Icon(Icons.flag_outlined, color: Colors.red),
@@ -671,7 +669,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
               ),
             ),
             
-            //desc
             Container(
               width: double.infinity,
               margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -729,7 +726,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
             ),
             const SizedBox(height: 16),
             
-            //location
             Container(
               width: double.infinity,
               margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -773,7 +769,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
               ),
             ),
             const SizedBox(height: 16),
-            //skill
             Container(
               width: double.infinity,
               margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -877,7 +872,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
               ),
             ],
             
-            //rejection reason 
             if (currentPost.status == PostStatus.rejected && _rejectionReason != null && _rejectionReason!.isNotEmpty) ...[
               const SizedBox(height: 20),
               Container(
@@ -1603,7 +1597,6 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
   }
 
   Future<void> _handleApply(BuildContext context) async {
-    //no multiple apply
     if (_isApplying || !mounted) return;
     
     if (widget.post.eventStartDate != null) {

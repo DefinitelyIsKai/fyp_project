@@ -49,7 +49,6 @@ class _SearchDiscoveryRecruiterPageState
 
   @override
   List<Post> filterPostsForUser(List<Post> posts) {
-    //recruiter owned post
     if (_currentUserId != null) {
       return posts.where((post) => post.ownerId == _currentUserId).toList();
     }
@@ -104,7 +103,6 @@ class _SearchDiscoveryRecruiterPageState
             builder: (context, snapshot) {
               var posts = snapshot.data ?? [];
               posts = filterPostsForUser(posts);
-              //distance filter
               posts = filterPostsByDistance(posts);
 
               return Padding(

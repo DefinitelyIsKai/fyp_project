@@ -64,11 +64,10 @@ class MatchingService {
         cancelOnError: false, 
       );
       
-      //listener
+     
       refreshSubscription = _refreshController.stream.listen((_) async {
         if (!combinedStream.isClosed) {
           try {
-            //manual refresh
             final postsSnapshot = await _firestore
                 .collection('posts')
                 .where('isDraft', isEqualTo: false)
@@ -97,7 +96,7 @@ class MatchingService {
             debugPrint('Error getting initial posts (likely during logout): $error');
           });
       
-      //clean up
+      
       combinedStream.onCancel = () {
         postsSubscription?.cancel();
         refreshSubscription?.cancel();
@@ -108,8 +107,7 @@ class MatchingService {
         try {
           final userData = userDoc.data();
           if (userData == null) return <ComputedMatch>[];
-          
-          //computefor jobseeker
+
           final role = userData['role'] as String? ?? 'jobseeker';
           if (role != 'jobseeker') return <ComputedMatch>[];
 

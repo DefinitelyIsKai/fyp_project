@@ -320,7 +320,6 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                         const SizedBox(height: 16),
                         
-                        //veributton
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
@@ -380,7 +379,6 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                         const SizedBox(height: 12),
                         
-                        //editbutton
                         SizedBox(
                           width: double.infinity,
                           child: OutlinedButton.icon(
@@ -775,7 +773,6 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _handlePhotoUpdate() async {
-    //check photo exists
     final currentDoc = await _authService.getUserDoc();
     final currentData = currentDoc.data();
     final Map<String, dynamic>? currentImageData = (currentData?['image'] as Map<String, dynamic>?);
@@ -868,13 +865,11 @@ class _ProfilePageState extends State<ProfilePage> {
     
     if (source == null) return;
     
-    //remove 
     if (source == 'remove') {
       await _removeProfilePhoto();
       return;
     }
     
-    //upload 
     if (!mounted) return;
     setState(() => _uploadingPhoto = true);
     
@@ -898,7 +893,6 @@ class _ProfilePageState extends State<ProfilePage> {
       if (!mounted) return;
       setState(() => _uploadingPhoto = false);
       
-      //extract error 
       String errorMessage = 'Failed to upload profile photo';
       if (e is Exception) {
         final errorStr = e.toString();

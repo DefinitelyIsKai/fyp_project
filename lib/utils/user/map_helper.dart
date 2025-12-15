@@ -6,13 +6,8 @@ import 'package:geolocator/geolocator.dart';
 import 'dialog_utils.dart';
 
 class MapHelper {
-  //center location
   static const LatLng defaultCenter = LatLng(2.7456, 101.7072);
-  
-  //zom level
   static const double defaultZoom = 5.0;
-  
-  //bounds for a list of positions
   static LatLngBounds calculateBounds(List<LatLng> positions) {
     if (positions.isEmpty) {
       return LatLngBounds(
@@ -38,8 +33,7 @@ class MapHelper {
       northeast: LatLng(maxLat, maxLng),
     );
   }
-  
-  //initial camera position with markers
+
   static CameraPosition getInitialCameraPosition(List<LatLng> positions) {
     if (positions.isEmpty) {
       return const CameraPosition(
@@ -75,7 +69,6 @@ class MapHelper {
     );
   }
 
-  //count distance between two coordinates 
   static double calculateDistance(LatLng point1, LatLng point2) {
     return Geolocator.distanceBetween(
           point1.latitude,
@@ -86,7 +79,6 @@ class MapHelper {
         1000; 
   }
 
-  //dot marker 
   static Future<BitmapDescriptor> createDotMarker(
     Color color, {
     int size = 96,
@@ -96,13 +88,11 @@ class MapHelper {
     final ui.Paint paint = ui.Paint()..color = color;
     final double radius = size / 2.0;
 
-    //glow
     final ui.Paint glow = ui.Paint()
       ..color = color.withOpacity(0.25)
       ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 6);
     canvas.drawCircle(ui.Offset(radius, radius), radius * 0.9, glow);
 
-    //dot
     canvas.drawCircle(ui.Offset(radius, radius), radius * 0.55, paint);
 
     final ui.Image image = await recorder.endRecording().toImage(size, size);

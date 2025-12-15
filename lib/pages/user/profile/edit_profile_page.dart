@@ -135,7 +135,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
     try {
       final tagsToSave = sanitizeTagSelection(_selectedTags);
       
-      //save 
       Map<String, dynamic>? resumeData;
       if (_resumeAttachment != null) {
         resumeData = {
@@ -166,7 +165,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
         'profileCompleted': true,
       };
       if (resumeData != null) {
-        //save url
         payload['resume'] = resumeData;
       } else {
         payload['resume'] = FieldValue.delete();
@@ -206,7 +204,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _uploadingResume = false);
-      //exception extractions
       String errorMessage = 'Failed to upload resume';
       if (e is Exception) {
         errorMessage = e.toString().replaceFirst('Exception: ', '');
@@ -362,7 +359,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
                       const SizedBox(height: 20),
 
-                      //personal imfo
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -438,7 +434,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
                       const SizedBox(height: 20),
 
-                      //professional diplay
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -504,7 +499,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
                       const SizedBox(height: 20),
 
-                      //tags 
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -562,7 +556,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
                       const SizedBox(height: 20),
 
-                      //resume 
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(

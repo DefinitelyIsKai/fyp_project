@@ -75,7 +75,6 @@ class TagService {
             .map((doc) => Tag.fromFirestore(doc))
             .toList();
 
-        //group tag categoryId
         final Map<TagCategory, List<Tag>> result = {};
         for (final category in categories) {
           final categoryTags = allTags
@@ -85,7 +84,6 @@ class TagService {
           result[category] = categoryTags;
         }
 
-        //sort by title
         final sortedEntries = result.entries.toList()
           ..sort((a, b) => a.key.title.compareTo(b.key.title));
 
