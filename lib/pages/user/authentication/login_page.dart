@@ -59,47 +59,38 @@ class _LoginPageState extends State<LoginPage> {
             setState(() => _isLoading = false);
           }
           if (mounted) {
-            showDialog(
+            final confirmed = await DialogUtils.showConfirmationDialog(
               context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Email Not Verified'),
-                content: const Text(
-                  'Please verify your email before logging in. Would you like to resend the verification email?',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      Navigator.of(context).pop();
-                      try {
-                        await _authService.resendVerificationEmail();
-                        if (mounted) {
-                          DialogUtils.showSuccessMessage(
-                            context: context,
-                            message: 'Verification email sent. Please check your inbox.',
-                          );
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(builder: (_) => const EmailVerificationLoadingPage()),
-                          );
-                        }
-                      } catch (e) {
-                        if (mounted) {
-                          DialogUtils.showWarningMessage(
-                            context: context,
-                            message: 'Failed to resend verification email: $e',
-                          );
-                        }
-                      }
-                    },
-                    child: const Text('Resend Email'),
-                  ),
-                ],
-              ),
+              title: 'Email Not Verified',
+              message: 'Please verify your email before logging in. Would you like to resend the verification email?',
+              icon: Icons.email_outlined,
+              iconColor: const Color(0xFF00C8A0),
+              confirmText: 'Resend Email',
+              cancelText: 'Cancel',
             );
+            
+            if (confirmed == true) {
+              try {
+                await _authService.resendVerificationEmail();
+                if (mounted) {
+                  DialogUtils.showSuccessMessage(
+                    context: context,
+                    message: 'Verification email sent. Please check your inbox.',
+                  );
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (_) => const EmailVerificationLoadingPage()),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  DialogUtils.showWarningMessage(
+                    context: context,
+                    message: 'Failed to resend verification email: $e',
+                  );
+                }
+              }
+            }
           }
           return;
         }
