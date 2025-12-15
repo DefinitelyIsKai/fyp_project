@@ -14,6 +14,7 @@ import '../../../utils/user/dialog_utils.dart';
 import '../../../utils/user/button_styles.dart';
 import '../../../widgets/admin/dialogs/user_dialogs/report_post_dialog.dart';
 import '../../../widgets/admin/dialogs/user_dialogs/report_jobseeker_list_dialog.dart';
+import '../profile/verification_page.dart';
 
 class PostDetailsPage extends StatefulWidget {
   const PostDetailsPage({super.key, required this.post});
@@ -233,103 +234,129 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
                     final bool hasApplied = application != null;
                     final Application? currentApplication = application;
                     
+                    final String? currentUserId = _authService.currentUserId;
+                    final bool hasValidUserId = currentUserId != null && currentUserId.isNotEmpty;
+                    
                     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                      stream: FirebaseFirestore.instance
-                          .collection('posts')
-                          .doc(widget.post.id)
-                          .snapshots()
-                          .handleError((error) {
-                           
-                            debugPrint('Error in post stream (likely during logout): $error');
-                          }),
-                      builder: (context, postSnapshot) {
-                        Post currentPost = widget.post;
-                        int approvedCount = 0;
+                      stream: hasValidUserId
+                          ? FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(currentUserId)
+                              .snapshots()
+                          : Stream<DocumentSnapshot<Map<String, dynamic>>>.empty(),
+                      builder: (context, userSnapshot) {
+                        final isVerified = hasValidUserId && userSnapshot.hasData
+                            ? (userSnapshot.data?.data()?['isVerified'] as bool? ?? false)
+                            : false;
                         
-                        if (postSnapshot.hasData) {
-                          final data = postSnapshot.data!.data();
-                          if (data != null) {
-                            int? _parseInt(dynamic value) {
-                              if (value == null) return null;
-                              if (value is int) return value;
-                              if (value is double) return value.toInt();
-                              if (value is num) return value.toInt();
-                              if (value is String) return int.tryParse(value);
-                              return null;
+                        return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                          stream: FirebaseFirestore.instance
+                              .collection('posts')
+                              .doc(widget.post.id)
+                              .snapshots()
+                              .handleError((error) {
+                               
+                                debugPrint('Error in post stream (likely during logout): $error');
+                              }),
+                          builder: (context, postSnapshot) {
+                            Post currentPost = widget.post;
+                            int approvedCount = 0;
+                            
+                            if (postSnapshot.hasData) {
+                              final data = postSnapshot.data!.data();
+                              if (data != null) {
+                                int? _parseInt(dynamic value) {
+                                  if (value == null) return null;
+                                  if (value is int) return value;
+                                  if (value is double) return value.toInt();
+                                  if (value is num) return value.toInt();
+                                  if (value is String) return int.tryParse(value);
+                                  return null;
+                                }
+                                approvedCount = _parseInt(data['approvedApplicants']) ?? 0;
+                                try {
+                                  currentPost = Post.fromMap({...data, 'id': widget.post.id});
+                                } catch (e) {
+                                  currentPost = widget.post;
+                                }
+                              }
                             }
-                            approvedCount = _parseInt(data['approvedApplicants']) ?? 0;
-                            try {
-                              currentPost = Post.fromMap({...data, 'id': widget.post.id});
-                            } catch (e) {
-                              currentPost = widget.post;
+                            
+                            final applicantQuota = currentPost.applicantQuota;
+                            final isQuotaReached = applicantQuota != null && approvedCount >= applicantQuota;
+                            
+                            bool isEventStartingSoon = false;
+                            if (currentPost.eventStartDate != null) {
+                              final now = DateTime.now();
+                              final today = DateTime(now.year, now.month, now.day);
+                              final eventStartDate = currentPost.eventStartDate!;
+                              final eventStartDateOnly = DateTime(
+                                eventStartDate.year,
+                                eventStartDate.month,
+                                eventStartDate.day,
+                              );
+                              isEventStartingSoon = eventStartDateOnly.isAtSameMomentAs(today) || eventStartDateOnly.isBefore(today);
                             }
-                          }
-                        }
-                        
-                        final applicantQuota = currentPost.applicantQuota;
-                        final isQuotaReached = applicantQuota != null && approvedCount >= applicantQuota;
-                        
-                        bool isEventStartingSoon = false;
-                        if (currentPost.eventStartDate != null) {
-                          final now = DateTime.now();
-                          final today = DateTime(now.year, now.month, now.day);
-                          final eventStartDate = currentPost.eventStartDate!;
-                          final eventStartDateOnly = DateTime(
-                            eventStartDate.year,
-                            eventStartDate.month,
-                            eventStartDate.day,
-                          );
-                          isEventStartingSoon = eventStartDateOnly.isAtSameMomentAs(today) || eventStartDateOnly.isBefore(today);
-                        }
-                        
-                        final bool isDisabled = hasApplied || 
-                                              currentPost.status == PostStatus.completed || 
-                                              currentPost.status == PostStatus.pending ||
-                                              isQuotaReached ||
-                                              isEventStartingSoon;
-                        
-                        String buttonText;
-                        if (_isApplying) {
-                          buttonText = 'Applying...';
-                        } else if (hasApplied && currentApplication != null) {
-                          switch (currentApplication.status) {
-                            case ApplicationStatus.pending:
-                              buttonText = 'Application Pending';
-                              break;
-                            case ApplicationStatus.approved:
-                              buttonText = 'Application Approved';
-                              break;
-                            case ApplicationStatus.rejected:
-                              buttonText = 'Application Rejected';
-                              break;
-                            case ApplicationStatus.deleted:
-                              buttonText = 'Application Submitted';
-                              break;
-                          }
-                        } else if (currentPost.status == PostStatus.completed) {
-                          buttonText = 'Job Completed';
-                        } else if (currentPost.status == PostStatus.pending) {
-                          buttonText = 'Pending Review';
-                        } else if (isQuotaReached) {
-                          buttonText = 'Quota Full';
-                        } else if (isEventStartingSoon) {
-                          buttonText = 'Event Starts';
-                        } else {
-                          buttonText = 'Apply Now - 100 points';
-                        }
-                        return SizedBox(
-                          height: 54,
-                          child: ElevatedButton(
-                            onPressed: (isDisabled || _isApplying)? null : () => _handleApply(context),
-                            style: isDisabled ? ButtonStyles.disabled(): ButtonStyles.primaryElevated(),
-                            child: Text(
-                              buttonText,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
+                            
+                            final bool isDisabledForApply = hasApplied || 
+                                                  currentPost.status == PostStatus.completed || 
+                                                  currentPost.status == PostStatus.pending ||
+                                                  isQuotaReached ||
+                                                  isEventStartingSoon;
+                            
+                            String buttonText;
+                            if (_isApplying) {
+                              buttonText = 'Applying...';
+                            } else if (hasApplied && currentApplication != null) {
+                              switch (currentApplication.status) {
+                                case ApplicationStatus.pending:
+                                  buttonText = 'Application Pending';
+                                  break;
+                                case ApplicationStatus.approved:
+                                  buttonText = 'Application Approved';
+                                  break;
+                                case ApplicationStatus.rejected:
+                                  buttonText = 'Application Rejected';
+                                  break;
+                                case ApplicationStatus.deleted:
+                                  buttonText = 'Application Submitted';
+                                  break;
+                              }
+                            } else if (!isVerified) {
+                              buttonText = 'Verify to Apply';
+                            } else if (currentPost.status == PostStatus.completed) {
+                              buttonText = 'Job Completed';
+                            } else if (currentPost.status == PostStatus.pending) {
+                              buttonText = 'Pending Review';
+                            } else if (isQuotaReached) {
+                              buttonText = 'Quota Full';
+                            } else if (isEventStartingSoon) {
+                              buttonText = 'Event Starts';
+                            } else {
+                              buttonText = 'Apply Now - 100 points';
+                            }
+                            
+                            final bool isButtonDisabled = isDisabledForApply || !isVerified;
+                            
+                            return SizedBox(
+                              height: 54,
+                              child: ElevatedButton(
+                                onPressed: (isDisabledForApply || _isApplying)
+                                    ? null
+                                    : () => !isVerified
+                                        ? _handleVerifyToApply(context)
+                                        : _handleApply(context),
+                                style: isButtonDisabled ? ButtonStyles.disabled(): ButtonStyles.primaryElevated(),
+                                child: Text(
+                                  buttonText,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
+                            );
+                          },
                         );
                       },
                     );
@@ -1594,6 +1621,30 @@ class _PostDetailsPageState extends State<PostDetailsPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _handleVerifyToApply(BuildContext context) async {
+    final confirmed = await DialogUtils.showConfirmationDialog(
+      context: context,
+      title: 'Account Verification Required',
+      message: 'You need to verify your account before applying for jobs. Would you like to go to the verification page?',
+      icon: Icons.verified_user_outlined,
+      iconColor: const Color(0xFF00C8A0),
+      confirmText: 'Go to Verification',
+      cancelText: 'Cancel',
+    );
+    
+    if (confirmed == true && mounted) {
+      final changed = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const VerificationPage(),
+        ),
+      );
+      if (mounted && changed == true) {
+        setState(() {});
+      }
+    }
   }
 
   Future<void> _handleApply(BuildContext context) async {
