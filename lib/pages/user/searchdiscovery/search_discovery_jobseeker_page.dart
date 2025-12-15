@@ -121,7 +121,6 @@ class _SearchDiscoveryJobseekerPageState
                         color: Colors.black,
                       ),
                     ),
-                    //toggle
                     Container(
                       decoration: BoxDecoration(
                         color: Colors.grey[100],
@@ -675,7 +674,6 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                   StreamBuilder<List<Application>>(
                     stream: widget.applicationService.streamMyApplications(),
                     builder: (context, applicationsSnapshot) {
-                      //application of post
                       final applications = applicationsSnapshot.data ?? [];
                       final application = applications.firstWhere(
                         (app) => app.postId == widget.post.id,
@@ -690,7 +688,6 @@ class _JobseekerPostCardState extends State<_JobseekerPostCard> {
                       );
                       final hasApplied = application.postId == widget.post.id;
                       
-                      //currentUserId valid 
                       final bool hasValidUserId = widget.currentUserId != null && widget.currentUserId!.isNotEmpty;
                       
                       return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(

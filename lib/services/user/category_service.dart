@@ -27,7 +27,6 @@ class CategoryService {
           .map((doc) => Category.fromFirestore(doc))
           .toList();
       
-      //sort alphabe
       categories.sort((a, b) => a.name.compareTo(b.name));
       
       return categories;

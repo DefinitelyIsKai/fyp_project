@@ -99,7 +99,6 @@ class AvailabilityService {
   }
 
   Future<void> toggleAvailabilitySlot(String slotId, bool isAvailable) async {
-    //check  slot is booked 
     final slotDoc = await _firestore.collection('availability_slots').doc(slotId).get();
     if (!slotDoc.exists) {
       throw Exception('Slot not found');
@@ -189,7 +188,6 @@ class AvailabilityService {
     final hasBookedJobseeker = bookedBy != null && bookedBy.isNotEmpty;
     final pendingRequestsCount = requestingJobseekerIds.length;
 
-    //noticejobseekers  pending 
     if (requestingJobseekerIds.isNotEmpty) {
       await _notificationService.notifySlotDeletedToRequestingJobseekers(
         jobseekerIds: requestingJobseekerIds,
@@ -198,7 +196,6 @@ class AvailabilityService {
       );
     }
 
-    //email and app
     if (bookedBy != null && bookedBy.isNotEmpty) {
       await _notificationService.notifySlotDeletedToBookedJobseeker(
         jobseekerId: bookedBy,
@@ -226,7 +223,6 @@ class AvailabilityService {
     );
   }
 
-  //available slot jobseeker
   Stream<List<AvailabilitySlot>> streamAvailableSlotsForRecruiter(
     String recruiterId,
   ) async* {
@@ -251,7 +247,6 @@ class AvailabilityService {
         });
   }
 
-  //available slots recruiters 
   Stream<List<AvailabilitySlot>> streamAvailableSlotsForRecruiters(
     Set<String> recruiterIds, {
     DateTime? startDate,
@@ -338,11 +333,9 @@ class AvailabilityService {
             }).whereType<AvailabilitySlot>().toList();
             
             final slots = allSlots.where((slot) {
-              //filter recruiterId
               if (!recruiterIds.contains(slot.recruiterId)) {
                 return false;
               }
-              //filter by date range
               final slotDateOnly = DateTime(slot.date.year, slot.date.month, slot.date.day);
               final startDateOnly = DateTime(start.year, start.month, start.day);
               final endDateOnly = DateTime(end.year, end.month, end.day);
@@ -396,7 +389,6 @@ class AvailabilityService {
     return dates;
   }
 
-  //booked dates 
   Future<Set<DateTime>> getBookedDatesForJobseeker(
     String jobseekerId, {
     DateTime? startDate,
@@ -407,7 +399,6 @@ class AvailabilityService {
     final start = startDate ?? now;
     final end = endDate ?? DateTime(now.year, now.month + 1, 0);
 
-    //query only by bookedBy 
     final snapshot = await _firestore
         .collection('availability_slots')
         .where('bookedBy', isEqualTo: jobseekerId)
@@ -416,9 +407,7 @@ class AvailabilityService {
     final dates = <DateTime>{};
     for (final doc in snapshot.docs) {
       final slot = AvailabilitySlot.fromFirestore(doc);
-      //filter  matchId
       if (matchId != null && slot.matchId != matchId) continue;
-      //date range in memory
       if (slot.date.isBefore(start) || slot.date.isAfter(end)) continue;
       dates.add(DateTime(slot.date.year, slot.date.month, slot.date.day));
     }
@@ -444,9 +433,7 @@ class AvailabilityService {
           for (final doc in snapshot.docs) {
             try {
               final slot = AvailabilitySlot.fromFirestore(doc);
-              //filter matchid
               if (matchId != null && slot.matchId != matchId) continue;
-              //date range in memory
               if (slot.date.isBefore(start) || slot.date.isAfter(end)) continue;
               dates.add(DateTime(slot.date.year, slot.date.month, slot.date.day));
             } catch (e) {
@@ -487,7 +474,6 @@ class AvailabilityService {
     required String jobseekerId,
     required String recruiterId,
   }) async {
-    //check pending reques slot
     final existingRequest = await _firestore
         .collection('booking_requests')
         .where('slotId', isEqualTo: slotId)
@@ -500,7 +486,6 @@ class AvailabilityService {
       throw Exception('You already have a pending request for this slot');
     }
 
-    //check  slot  booked
     final slotDoc = await _firestore.collection('availability_slots').doc(slotId).get();
     if (!slotDoc.exists) {
       throw Exception('Slot not found');
@@ -510,17 +495,14 @@ class AvailabilityService {
       throw Exception('This slot is already booked');
     }
 
-    //check post completed
     String? postId;
     try {
-      //matchid is application id
       final applicationDoc = await _firestore.collection('applications').doc(matchId).get();
       if (applicationDoc.exists) {
         final appData = applicationDoc.data();
         postId = appData?['postId'] as String?;
       }
 
-      //check post status 
       if (postId != null) {
         final postDoc = await _firestore.collection('posts').doc(postId).get();
         if (postDoc.exists) {
@@ -540,9 +522,6 @@ class AvailabilityService {
 
     final slot = AvailabilitySlot.fromFirestore(slotDoc);
     final slotTimeDisplay = _formatSlotTimeDisplay(slot);
-
-    //one approves others rejected
-
     final request = BookingRequest(
       id: '',
       slotId: slotId,
@@ -791,7 +770,6 @@ class AvailabilityService {
       String jobTitle = 'the job position';
       if (slot.matchId != null && slot.matchId!.isNotEmpty) {
         try {
-          //find postid in applicat
           final applicationDoc = await _firestore.collection('applications').doc(slot.matchId).get();
           if (applicationDoc.exists) {
             final appData = applicationDoc.data();
@@ -843,7 +821,6 @@ class AvailabilityService {
       slotTimeDisplay: slotTimeDisplay,
     );
 
-    //SMTP
     try {
       
       final jobseekerEmail = await _getUserEmail(jobseekerId);

@@ -25,18 +25,18 @@ class DateUtils {
     }
   }
 
-  //YYYY-MM-DD
+
   static String formatDateString(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
-  //MMM d, yyyy
+
   static String formatDate(DateTime date) {
     final month = _getMonthAbbreviation(date.month);
     return '${month} ${date.day.toString().padLeft(2, '0')}, ${date.year}';
   }
 
-  //AM/PM
+
   static String formatTime(DateTime date) {
     final hour = date.hour == 0 ? 12 : (date.hour > 12 ? date.hour - 12 : date.hour);
     final minute = date.minute.toString().padLeft(2, '0');

@@ -489,7 +489,6 @@ class _VerificationPageState extends State<VerificationPage> {
 
   Future<Uint8List> _compressImageForVerification(Uint8List imageBytes, {int targetBase64Size = 280 * 1024}) async {
     try {
-      //decode 
       img.Image? image = img.decodeImage(imageBytes);
       if (image == null) return imageBytes;
 
@@ -554,7 +553,7 @@ class _VerificationPageState extends State<VerificationPage> {
       String? icBase64 = _icImageBase64;
       String? selfieBase64 = _selfieImageBase64;
     
-      const int targetBase64Size = 280 * 1024; //280kb
+      const int targetBase64Size = 280 * 1024;
       
 
       if (icBase64 != null && icBase64.length > targetBase64Size && icBytes != null) {
@@ -594,7 +593,7 @@ class _VerificationPageState extends State<VerificationPage> {
       
       final estimatedSize = base64Size + totalOverhead;
       
-      const int maxDocumentSize = 950 * 1024; //950kb
+      const int maxDocumentSize = 950 * 1024;
       if (estimatedSize > maxDocumentSize) {
         if (icBytes != null) {
           icBytes = await _compressImageForVerification(icBytes, targetBase64Size: 250 * 1024);
@@ -605,7 +604,6 @@ class _VerificationPageState extends State<VerificationPage> {
           selfieBase64 = base64Encode(selfieBytes);
         }
         
-        //recalculate
         final newBase64Size = icBase64.length + selfieBase64.length;
         final newEstimatedSize = newBase64Size + totalOverhead;
         

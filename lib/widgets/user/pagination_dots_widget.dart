@@ -24,8 +24,7 @@ class PaginationDotsWidget extends StatelessWidget {
     
 
     List<Widget> dots = [];
-    
-    //first page
+
     dots.add(_buildDot(currentPage == 0));
     dots.add(const SizedBox(width: 4));
     
@@ -37,7 +36,7 @@ class PaginationDotsWidget extends StatelessWidget {
       if (totalPages > 4) {
         dots.add(_buildEllipsis());
         dots.add(const SizedBox(width: 4));
-        dots.add(_buildDot(currentPage == totalPages - 1)); //last page
+        dots.add(_buildDot(currentPage == totalPages - 1));
       }
     } else if (currentPage >= totalPages - 3) {
       if (totalPages > 4) {

@@ -5,10 +5,7 @@ import 'package:fyp_project/pages/admin/dashboard/dashboard_page.dart';
 import 'package:fyp_project/pages/user/authentication/login_page.dart' as user_login;
 
 class AppRoutes {
-  // User routes
   static const String userLogin = '/user-login';
-  
-  // Admin routes
   static const String adminLogin = '/admin-login';
   static const String adminForgotPassword = '/admin-forgot-password';
   static const String dashboard = '/dashboard';
@@ -18,7 +15,7 @@ class AppRoutes {
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
       case userLogin:
-      case login: // Default route now points to user login
+      case login: 
         return MaterialPageRoute(builder: (_) => const user_login.LoginPage());
       case adminLogin:
         return MaterialPageRoute(builder: (_) => const admin_login.LoginPage());

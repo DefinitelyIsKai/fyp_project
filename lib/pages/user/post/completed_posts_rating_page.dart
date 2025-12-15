@@ -21,7 +21,6 @@ class _CompletedPostsRatingPageState extends State<CompletedPostsRatingPage> {
   final ReviewService _reviewService = ReviewService();
   final AuthService _authService = AuthService();
   
-  //cache user 
   final Map<String, String> _userNameCache = {};
   final Map<String, bool> _hasRatingCache = {};
 
@@ -245,7 +244,6 @@ class _CompletedPostCardState extends State<_CompletedPostCard> {
                 }
 
                 final applications = snapshot.data ?? <Application>[];
-                //approved applications rating
                 final approvedApplications = applications
                     .where((app) => app.status == ApplicationStatus.approved)
                     .toList();
@@ -409,7 +407,6 @@ class _ApplicantRatingCardState extends State<_ApplicantRatingCard> {
             builder: (context, snapshot) {
               final hasRating = snapshot.data ?? false;
               
-              //update cache
               final cacheKey = '${widget.post.id}_${widget.application.jobseekerId}';
               widget.hasRatingCache[cacheKey] = hasRating;
               

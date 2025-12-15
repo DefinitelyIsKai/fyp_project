@@ -73,7 +73,6 @@ class DialogUtils {
     );
   }
 
-  //gren
   static void showSuccessMessage({
     required BuildContext context,
     required String message,
@@ -87,7 +86,6 @@ class DialogUtils {
     );
   }
 
-  //red
   static void showWarningMessage({
     required BuildContext context,
     required String message,
@@ -101,7 +99,7 @@ class DialogUtils {
     );
   }
 
-  //blue
+
   static void showInfoMessage({
     required BuildContext context,
     required String message,
@@ -115,7 +113,6 @@ class DialogUtils {
     );
   }
 
-//lougout
   static Future<void> showLogoutConfirmation({
     required BuildContext context,
     AuthService? authService,
@@ -135,8 +132,7 @@ class DialogUtils {
       if (context.mounted) {
         Navigator.of(context).pushReplacementNamed(AppRoutes.userLogin);
       }
-      
-      //delay streams 
+
       Future.delayed(const Duration(milliseconds: 100), () async {
         try {
           await service.signOut();

@@ -50,17 +50,14 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
     await Future.delayed(const Duration(milliseconds: 100));
   }
 
-  //normalize date
   static DateTime _normalizeDate(DateTime date) {
     return DateTime(date.year, date.month, date.day);
   }
 
-  //extract date from slot
   static DateTime _slotDate(AvailabilitySlot slot) {
     return _normalizeDate(slot.date);
   }
 
-  //get month date range
   ({DateTime start, DateTime end}) _getMonthRange(DateTime month) {
     return (
       start: DateTime(month.year, month.month, 1),
@@ -68,7 +65,6 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
     );
   }
 
-  //get day date range
   ({DateTime start, DateTime end}) _getDayRange(DateTime date) {
     return (
       start: DateTime(date.year, date.month, date.day),
@@ -76,7 +72,6 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
     );
   }
 
-  //process slots and prepare calendar data
   ({
     Set<DateTime> allDates,
     Set<DateTime> availableDates,
@@ -93,7 +88,6 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
     );
   }
 
-  //prepare pending dates and exclude from available
   ({Set<DateTime> pendingDates, Set<DateTime> availableDatesExcludingPending})
   _preparePendingDates(
     List<AvailabilitySlot> slots,
@@ -194,7 +188,6 @@ class _RecruiterBookingPageState extends State<RecruiterBookingPage> {
           ),
         ),
 
-        //refresh
         Expanded(
           child: RefreshIndicator(
             onRefresh: _refreshData,

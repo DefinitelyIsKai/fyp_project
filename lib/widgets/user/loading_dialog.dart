@@ -10,7 +10,6 @@ class LoadingDialog extends StatelessWidget {
     this.color,
   });
 
-  //load
   static void show({
     required BuildContext context,
     String? message,
@@ -23,7 +22,6 @@ class LoadingDialog extends StatelessWidget {
     );
   }
 
-  //close
   static void hide(BuildContext context) {
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();

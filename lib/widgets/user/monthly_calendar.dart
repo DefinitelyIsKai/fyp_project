@@ -49,7 +49,6 @@ class MonthlyCalendar extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        //calendar grid
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Column(
@@ -90,7 +89,6 @@ class MonthlyCalendar extends StatelessWidget {
       return const SizedBox(height: 48);
     }
 
-    //normalize date
     final date = DateTime(firstDayOfMonth.year, firstDayOfMonth.month, dayNumber);
 
     final isSelected =
@@ -167,7 +165,6 @@ class MonthlyCalendar extends StatelessWidget {
     }
 
     if (indicatorColors.length == 1) {
-      //single indicator
       cornerIndicators.add(
         Positioned(
           top: 1,
@@ -185,7 +182,6 @@ class MonthlyCalendar extends StatelessWidget {
         ),
       );
     } else if (indicatorColors.length > 1) {
-      //mult indicators
       double startRight = 1;
       for (int i = 0; i < indicatorColors.length; i++) {
         cornerIndicators.add(

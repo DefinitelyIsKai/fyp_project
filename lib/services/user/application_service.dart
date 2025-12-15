@@ -32,7 +32,7 @@ class ApplicationService {
       throw StateError('POST_COMPLETED');
     }
 
-    //chekc application exists
+
     final existing = await _col
         .where('postId', isEqualTo: postId)
         .where('jobseekerId', isEqualTo: jobseekerId)
@@ -58,7 +58,6 @@ class ApplicationService {
 
     final docRef = await _col.add(application.toFirestore());
 
-    //up applicants count
     await _firestore.collection('posts').doc(postId).update({
       'applicants': FieldValue.increment(1),
     });
@@ -78,7 +77,6 @@ class ApplicationService {
     return docRef.id;
   }
 
-  //applications for a post recruiter 
   Stream<List<Application>> streamPostApplications(String postId) {
     final recruiterId = _authService.currentUserId;
     checkAndAutoRejectApplications();
@@ -91,7 +89,6 @@ class ApplicationService {
           final applications = snapshot.docs
               .map((doc) => Application.fromFirestore(doc))
               .toList();
-          //sort new
           applications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           return applications;
         })
@@ -132,7 +129,6 @@ class ApplicationService {
     }
   }
 
-  //applications jobseeker 
   Stream<List<Application>> streamMyApplications() {
     final jobseekerId = _authService.currentUserId;
     checkAndAutoRejectApplications();
@@ -151,8 +147,6 @@ class ApplicationService {
     });
   }
 
-
-  //deducts held credits approved releases whne rejected ones
   Future<void> _processHeldCreditsForApplications(String jobseekerId) async {
     try {
       final walletService = WalletService();
@@ -169,7 +163,6 @@ class ApplicationService {
 
         if (postId.isEmpty) continue;
 
-        //skip processed
         if (creditsProcessed) continue;
 
         try {
@@ -181,12 +174,10 @@ class ApplicationService {
               feeCredits: 100,
             );
           } else if (status == 'rejected') {
-            //release 
             processed = await walletService.releaseHeldCredits(
               postId: postId,
               feeCredits: 100,
             );
-            //no credits then processed
             if (!processed) {
               processed =
                   true; 
@@ -236,7 +227,6 @@ class ApplicationService {
     return result.docs.isNotEmpty;
   }
 
-  //application current user
   Future<Application?> getApplicationForPost(String postId) async {
     final jobseekerId = _authService.currentUserId;
     final result = await _col
@@ -366,7 +356,6 @@ class ApplicationService {
       );
     }
 
-    //deduct heldcredits
     if (jobseekerId.isNotEmpty && currentStatus == 'pending') {
       try {
         final success = await WalletService.deductHeldCreditsForUser(
@@ -445,7 +434,6 @@ class ApplicationService {
       });
     }
 
-    //release 
     if (jobseekerId.isNotEmpty && currentStatus == 'pending') {
       try {
         final success = await WalletService.releaseHeldCreditsForUser(
@@ -674,7 +662,6 @@ class ApplicationService {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
 
-      //pending applications for current user posts  recruiter
       final recruiterId = _authService.currentUserId;
       final pendingApplications = await _col
           .where('status', isEqualTo: 'pending')
@@ -727,7 +714,6 @@ class ApplicationService {
             eventStartDate.day,
           );
 
-          //auto-reject event starts today or has already passed
           if (eventStartDateOnly.isAtSameMomentAs(today) || eventStartDateOnly.isBefore(today)) {
             for (final appDoc in applications) {
               final appData = appDoc.data() as Map<String, dynamic>?;
@@ -735,7 +721,6 @@ class ApplicationService {
 
               final currentStatus = appData['status'] as String? ?? 'pending';
 
-              //reject  pending 
               if (currentStatus == 'pending') {
                 batch.update(appDoc.reference, {
                   'status': 'rejected',
@@ -743,7 +728,6 @@ class ApplicationService {
                 });
                 rejectedCount++;
 
-                //send notification 
                 final jobseekerId = appData['jobseekerId'] as String? ?? '';
                 final postTitle = postData['title'] as String? ?? 'your post';
                 if (jobseekerId.isNotEmpty) {
@@ -822,7 +806,6 @@ class ApplicationService {
         eventStartDate.day,
       );
 
-      //auto-reject if event starts today/ already passed
       if (eventStartDateOnly.isAtSameMomentAs(today) || eventStartDateOnly.isBefore(today)) {
         await appDoc.reference.update({
           'status': 'rejected',

@@ -55,7 +55,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
 
   @override
   Widget build(BuildContext context) {
-    //approved applications
     return FutureBuilder<List<Application>>(
       future: widget.applicationService.streamMyApplications().first,
       builder: (context, snapshot) {
@@ -69,7 +68,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
 
         final applications = snapshot.data ?? [];
         
-        //approved recruiterid applications
         final approvedApplications = applications.where((app) => app.status == ApplicationStatus.approved).toList();
         
         final approvedRecruiterIdsSet = approvedApplications
@@ -85,7 +83,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
             approvedRecruiterIds = {};
           }
         } else {
-          //all 
           approvedRecruiterIds = approvedRecruiterIdsSet;
         }
 
@@ -176,7 +173,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
 
             final slots = snapshot.data ?? [];
 
-            //show owneed slots
             if (widget.selectedRecruiterId != null) {
               var recruiterSlots = slots
                   .where((slot) => slot.recruiterId == widget.selectedRecruiterId!)
@@ -195,7 +191,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
               }
               
               if (applicationToUse != null) {
-                //check  requested slots and post status
                 final jobseekerId = widget.authService.currentUserId;
                 final application = applicationToUse!;
                 final applicationId = application.id;
@@ -248,11 +243,9 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                       );
                     } 
 
-                    //check slot  unavailable 
                     final unavailableSlots = <String>{};
                     for (int i = 0; i < dateFilteredSlots.length; i++) {
                       final slot = dateFilteredSlots[i];
-                      //mark subsequent slots as unavailable when slot is booked oter
                       if (slot.bookedBy != null && 
                           !(slot.bookedBy == jobseekerId && slot.matchId == applicationId)) {
                         for (int j = i + 1; j < dateFilteredSlots.length; j++) {
@@ -517,7 +510,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
               }
             }
 
-            //group slots by recruiter 
             final jobseekerId = widget.authService.currentUserId;
             final applicationId = widget.selectedApplication?.id;
             
@@ -529,7 +521,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
             return StreamBuilder<Post?>(
               stream: widget.postService.streamPostById(widget.selectedApplication!.postId),
               builder: (context, postSnapshot) {
-                //loading 
                 if (postSnapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: CircularProgressIndicator(
@@ -614,7 +605,6 @@ class _JobseekerSlotsListState extends State<JobseekerSlotsList> {
                                    if (slot.isAvailable && slot.bookedBy == null) {
                                      return true; 
                                    }
-                                   //requested slot
                                    return true;
                                  })
                                  .map((slot) {

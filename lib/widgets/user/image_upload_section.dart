@@ -55,7 +55,6 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
      
       final cleanBase64 = base64String.trim().replaceAll(RegExp(r'\s+'), '');
       
-      //decode
       final bytes = base64Decode(cleanBase64);
       
       return Image.memory(
@@ -98,7 +97,6 @@ class _ImageUploadSectionState extends State<ImageUploadSection> {
 
   Widget _buildDataUriImage(String dataUri) {
     try {
-      //extract base64 part from data URL
       final base64String = dataUri.split(',').length > 1 
           ? dataUri.split(',')[1] 
           : dataUri;

@@ -21,7 +21,7 @@ class StorageService {
 
   String get _uid => _auth.currentUser?.uid ?? 'anonymous';
 
-  //convert resume file Base64 
+ 
   Future<ResumeAttachment?> pickAndUploadResume() async {
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -34,7 +34,6 @@ class StorageService {
 
       final file = result.files.single;
       
-      //handle web file.bytes mobile file.path 
       Uint8List bytes;
       if (file.bytes != null) {
         bytes = file.bytes!;
@@ -78,7 +77,7 @@ class StorageService {
       }
       
       final base64String = base64Encode(bytes);
-      const int estimatedMetadataSize = 200; // bytes
+      const int estimatedMetadataSize = 200; 
       final int estimatedTotalSize = base64String.length + estimatedMetadataSize;
       
       const int maxDocumentSize = 1000 * 1024; 
@@ -123,7 +122,6 @@ class StorageService {
 
       final resumeData = Map<String, dynamic>.from(attachment.toMap());
       
-      //validate fields not empty
       if (resumeData['fileName'] == null || (resumeData['fileName'] as String).isEmpty) {
         throw Exception('Invalid file name');
       }
@@ -134,7 +132,6 @@ class StorageService {
         throw Exception('Invalid base64 data');
       }
       
-      //add timestamp
       final uploadedAt = DateTime.now().toIso8601String();
       resumeData['uploadedAt'] = uploadedAt;
 
@@ -147,7 +144,6 @@ class StorageService {
         }
       }
 
-      //calculate actual size
       final actualBase64Length = (resumeData['base64'] as String).length;
       final estimatedFirestoreSize = actualBase64Length + 
           (resumeData['fileName'] as String).length +
@@ -166,27 +162,23 @@ class StorageService {
             'Please select a smaller file (recommended: under 650KB original size).');
       }
 
-      //clean up existing
+    
       Map<String, dynamic>? existingData;
       try {
         final userDoc = await _firestore.collection('users').doc(_uid).get();
         if (userDoc.exists) {
           existingData = userDoc.data();
           if (existingData != null) {
-            //clean up
             if (existingData['resume'] is Map) {
               final existingResume = Map<String, dynamic>.from(existingData['resume'] as Map);
               if (existingResume.containsKey('base64')) {
                 existingResume.remove('base64');
-                //keep resume downloadUrl
                 if (existingResume.containsKey('downloadUrl') && existingResume['downloadUrl'] != null) {
                   await _firestore.collection('users').doc(_uid).update({
                     'resume': existingResume,
                   });
-                  //update reflect the change
                   existingData['resume'] = existingResume;
                 } else {
-                  //remove resume when npo downloadUrl
                   await _firestore.collection('users').doc(_uid).update({
                     'resume': FieldValue.delete(),
                   });
@@ -208,10 +200,8 @@ class StorageService {
         existingSize = _estimateDocumentSize(tempData);
       }
       
-      //calculate size new resume data
       final newResumeSize = _estimateDocumentSize({'resume': resumeData});
       
-      //totalestimated size
       final totalEstimatedSize = existingSize + newResumeSize;
       const int maxDocSize = 1024 * 1024; 
       
@@ -261,7 +251,6 @@ class StorageService {
       img.Image? image = img.decodeImage(imageBytes);
       if (image == null) return imageBytes;
 
-      //calculate new dimensions
       int width = image.width;
       int height = image.height;
       
@@ -275,7 +264,6 @@ class StorageService {
           width = (maxHeight * aspectRatio).round();
         }
         
-        //resize 
         image = img.copyResize(image, width: width, height: height);
       }
 
@@ -354,8 +342,6 @@ class StorageService {
         }
 
         final ImagePicker picker = ImagePicker();
-        //camera30% quality 
-        //gallery40% quality 
         final XFile? x = fromCamera
             ? await picker.pickImage(source: ImageSource.camera, imageQuality: 30)
             : await picker.pickImage(source: ImageSource.gallery, imageQuality: 40);
@@ -652,10 +638,10 @@ class StorageService {
   int _estimateValueSize(dynamic value) {
     if (value == null) return 0;
     if (value is String) return value.length;
-    if (value is int) return 8; // 8 bytes int64
-    if (value is double) return 8; // 8 bytes  double
-    if (value is bool) return 1; // 1 byte  boolean
-    if (value is DateTime) return 8; // 8 bytes  timestamp
+    if (value is int) return 8; 
+    if (value is double) return 8; 
+    if (value is bool) return 1; 
+    if (value is DateTime) return 8; 
     if (value is List) {
       int listSize = 0;
       for (final item in value) {

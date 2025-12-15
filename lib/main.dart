@@ -25,8 +25,8 @@ class JobSeekApp extends StatelessWidget {
           primarySwatch: Colors.blue,
           useMaterial3: true,
         ),
-        debugShowCheckedModeBanner: false, // Remove DEBUG banner
-        initialRoute: AppRoutes.userLogin, // Default to user login page
+        debugShowCheckedModeBanner: false, 
+        initialRoute: AppRoutes.userLogin, 
         onGenerateRoute: AppRoutes.generateRoute,
       ),
     );

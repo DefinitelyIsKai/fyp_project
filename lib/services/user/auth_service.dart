@@ -229,11 +229,9 @@ class AuthService {
   }
 
   Future<void> updateUserProfile(Map<String, dynamic> data) async {
-    //prevent overwriting 
     final dataToUpdate = Map<String, dynamic>.from(data);
     dataToUpdate.remove('createdAt');
-    
-    //clean up
+
     if (dataToUpdate['resume'] is Map) {
       final resumeData = Map<String, dynamic>.from(dataToUpdate['resume'] as Map);
       resumeData.remove('base64');

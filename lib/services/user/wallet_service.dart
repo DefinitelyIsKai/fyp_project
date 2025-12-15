@@ -61,7 +61,6 @@ class WalletService {
   }
 
 
-  //ordered createdAt descending
   Stream<List<WalletTransaction>> streamTransactions({int limit = 50}) {
     return _txnCol
         .orderBy('createdAt', descending: true)
@@ -153,7 +152,6 @@ class WalletService {
             return <String, dynamic>{...data, 'id': d.id};
           }).toList();
 
-          //sort by createdAt 
           payments.sort((a, b) {
             final aTime = TimestampUtils.parseTimestamp(a['createdAt']);
             final bTime = TimestampUtils.parseTimestamp(b['createdAt']);
@@ -230,7 +228,6 @@ class WalletService {
       final data = paymentDoc.data()!;
       final uid = data['uid'] as String? ?? '';
 
-      //verifyuser
       if (uid != _uid) {
         throw StateError('Payment belongs to different user');
       }
@@ -310,7 +307,6 @@ class WalletService {
 
       tx.update(_walletDoc, {'heldCredits': heldCredits + feeCredits, 'updatedAt': FieldValue.serverTimestamp()});
 
-      //crete transaction 
       tx.set(txnRef, {
         'id': txnRef.id,
         'userId': _uid,
@@ -334,7 +330,6 @@ class WalletService {
     }
   }
 
-  //release heldcredit when application rejected
   Future<bool> releaseHeldCredits({required String postId, int feeCredits = 100}) async {
     if (feeCredits <= 0) throw ArgumentError('feeCredits must be > 0');
     await _ensureWallet();
@@ -621,7 +616,6 @@ class WalletService {
     }
   }
 
-  //kept for backward compatibility but now uses hold
   Future<void> chargeApplication({required String postId, int feeCredits = 100}) async {
     await holdApplicationCredits(postId: postId, feeCredits: feeCredits);
   }
@@ -682,7 +676,6 @@ class WalletService {
     }
   }
 
-  // post creation heldCredits when rejected
   static Future<bool> releasePostCreationCreditsForUser({
     required FirebaseFirestore firestore,
     required String userId,
@@ -826,7 +819,6 @@ class WalletService {
         final int currentBalance = _parseIntFromFirestore(walletData['balance']);
         final int currentHeldCredits = _parseIntFromFirestore(walletData['heldCredits']);
 
-        //ensure heldCredits sufficient
         if (currentHeldCredits < feeCredits) {
           print('Warning: heldCredits ($currentHeldCredits) is less than feeCredits ($feeCredits). This may indicate duplicate processing.');
         }
@@ -848,7 +840,6 @@ class WalletService {
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        //cretae new transaction record
         final newTxnRef = txnCol.doc();
         final description = postTitle.isNotEmpty
             ? 'Post creation fee - $postTitle'
@@ -864,7 +855,6 @@ class WalletService {
           'createdAt': FieldValue.serverTimestamp(),
           'referenceId': postId,
           if (onHoldTxnId != null) 'parentTxnId': onHoldTxnId, 
-          //link original onhold transaction
         });
       });
 
@@ -909,7 +899,6 @@ class WalletService {
     return Uri.parse(url);
   }
 
-  //check pending payments 
   Future<void> checkAndCreditPendingPayments() async {
     try {
       final pendingPayments = await _firestore
@@ -970,7 +959,6 @@ class WalletService {
         if (processingStartedAt != null) {
           final now = Timestamp.now();
           final duration = now.seconds - processingStartedAt.seconds;
-          //5 minute retyr
           if (duration > 300) {
             print('Payment stuck in processing for ${duration}s, allowing retry');
             shouldProcess = true;
@@ -985,7 +973,6 @@ class WalletService {
         throw StateError('PAYMENT_INVALID_STATUS: $status');
       }
       
-      //prevent duplicate processing
       if (shouldProcess) {
         tx.update(paymentDocRef, {
           'status': 'processing',
@@ -995,7 +982,6 @@ class WalletService {
     });
     
     try {
-      //get payment data again
       final paymentDoc = await paymentDocRef.get();
       final data = paymentDoc.data()!;
       final credits = _parseIntFromFirestore(data['credits']);
@@ -1026,8 +1012,6 @@ class WalletService {
   }
 
   
-
-  //verify Stripe session with Cloudflare and credit wallet
   Future<void> creditFromStripeSession({required String sessionId, required int credits}) async {
     final verification = await _verifyStripeSession(sessionId);
     if (!verification.paid) {
@@ -1046,7 +1030,6 @@ class WalletService {
       );
     }
 
-    //prevent duplicate credits
     final existingTxn = await _txnCol
         .where('referenceId', isEqualTo: sessionId)
         .where('type', isEqualTo: 'credit')
@@ -1058,7 +1041,6 @@ class WalletService {
       return;
     }
 
-    //credit the wallet sessionId reference
     try {
       await credit(amount: amountToCredit, description: 'Top-up payment', referenceId: sessionId);
 

@@ -158,7 +158,6 @@ class ReputationPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      //jobseeker
                       if (role != 'recruiter')
                         Container(
                           padding: const EdgeInsets.all(20),
@@ -423,7 +422,6 @@ class ReputationPage extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              //rating
               Row(
                 children: List.generate(5, (index) {
                   return Icon(
@@ -444,7 +442,6 @@ class ReputationPage extends StatelessWidget {
               ),
             ],
           ),
-          //eiter jobseek or recruiter
           const SizedBox(height: 8),
           FutureBuilder<DocumentSnapshot>(
             future: FirebaseFirestore.instance

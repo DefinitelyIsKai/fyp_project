@@ -23,7 +23,7 @@ class NotificationService {
     return uid;
   }
 
-  //lload notifications once
+
   Future<List<AppNotification>> loadInitialNotifications({int limit = 10}) async {
     if (_auth.currentUser == null) {
       debugPrint('No authenticated user for loading notifications');
@@ -46,7 +46,6 @@ class NotificationService {
       
       debugPrint('Loaded ${notifications.length} notifications (requested limit: $limit)');
       
-      //check limit
       if (notifications.length > limit) {
         debugPrint('WARNING: Received ${notifications.length} notifications but limit was $limit. Truncating.');
         return notifications.sublist(0, limit);
@@ -83,7 +82,6 @@ class NotificationService {
     });
   }
 
-  //pagination
   Future<List<AppNotification>> loadMoreNotifications({
     required DateTime lastNotificationTime,
     String? lastNotificationId,
@@ -95,7 +93,6 @@ class NotificationService {
     }
 
     try {
-      //compare convert datetime: firestore timestamp
       final Timestamp timestampCursor = Timestamp.fromDate(lastNotificationTime);
 
       debugPrint('loadMoreNotifications: Loading with cursor time: $timestampCursor, docId: $lastNotificationId, limit: $limit');
@@ -122,7 +119,6 @@ class NotificationService {
         }
       }
 
-      //pagination timestamp 
       debugPrint('loadMoreNotifications: Using simple query with timestamp only');
       final snapshot = await _col
           .where('userId', isEqualTo: _uid)

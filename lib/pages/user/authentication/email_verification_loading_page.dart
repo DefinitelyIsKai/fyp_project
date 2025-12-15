@@ -76,7 +76,6 @@ class _EmailVerificationLoadingPageState extends State<EmailVerificationLoadingP
         context: context,
         message: 'Verification email resent. Please check your inbox.',
       );
-      //resend 1min
       if (mounted) {
         setState(() {
           _resendCooldown = 60;
@@ -89,7 +88,6 @@ class _EmailVerificationLoadingPageState extends State<EmailVerificationLoadingP
       
       if (e.code == 'too-many-requests') {
         errorMessage = 'Too many requests. Please wait a few minutes before trying again.';
-        //5min delay
         if (mounted) {
           setState(() {
             _resendCooldown = 300;
@@ -192,7 +190,6 @@ class _EmailVerificationLoadingPageState extends State<EmailVerificationLoadingP
                   ),
                 ),
                 const SizedBox(height: 40),
-                // Loading Indicator
                 const CircularProgressIndicator(
                   color: Color(0xFF00C8A0),
                 ),

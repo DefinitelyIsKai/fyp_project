@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 class TimestampUtils {
-  //pparses firestore timestamp to DateTime
   static DateTime parseTimestamp(dynamic value) {
     if (value == null) return DateTime.now();
     if (value is DateTime) return value;

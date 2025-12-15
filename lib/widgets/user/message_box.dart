@@ -11,7 +11,6 @@ class MessageBox extends StatelessWidget {
 
   final String message;
   final MessageBoxType type;
-  //3 second
   final Duration duration;
   final Color? backgroundColor;
   final Color? textColor;
@@ -98,7 +97,6 @@ class MessageBox extends StatelessWidget {
   }
 }
 
-//position top
 class _MessageBoxOverlay extends StatefulWidget {
   final String message;
   final MessageBoxType type;
@@ -152,7 +150,6 @@ class _MessageBoxOverlayState extends State<_MessageBoxOverlay>
 
     _controller.forward();
 
-    //autodismiss overlay
     Future.delayed(widget.duration, () {
       if (mounted) {
         _controller.reverse().then((_) {
