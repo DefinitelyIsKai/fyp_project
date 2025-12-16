@@ -171,8 +171,6 @@ class RewardService {
     try {
       final postIds = <String>[];
       
-      // Query only by status to avoid index requirements, then filter by date on client side
-      // This approach doesn't require any composite indexes
       final snapshot = await _postsRef
           .where('status', isEqualTo: 'completed')
           .limit(2000)
@@ -185,7 +183,6 @@ class RewardService {
         final updatedAt = (data['updatedAt'] as Timestamp?)?.toDate();
         final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
         
-        // Prefer completedAt if available, otherwise use updatedAt or createdAt
         final checkDate = completedAt ?? updatedAt ?? createdAt;
         
         if (checkDate != null &&
