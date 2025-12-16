@@ -169,29 +169,80 @@ class RewardService {
 
   Future<List<String>> _getCompletedPostIds(DateTime monthStart, DateTime monthEnd) async {
     try {
-      final snapshot = await _postsRef
-          .where('status', isEqualTo: 'completed')
-          .limit(200)
-          .get()
-          .timeout(const Duration(seconds: 5));
-
+      final monthStartTimestamp = Timestamp.fromDate(monthStart);
+      
       final postIds = <String>[];
-      for (int i = 0; i < snapshot.docs.length; i++) {
-        final doc = snapshot.docs[i];
-        final data = doc.data();
-        final completedAt = (data['completedAt'] as Timestamp?)?.toDate();
-        final updatedAt = (data['updatedAt'] as Timestamp?)?.toDate();
-        final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+      
+      // Query completed posts with completedAt >= monthStart, then filter by monthEnd on client side
+      // Firestore only allows one range query per query, so we use >= and filter <= in code
+      try {
+        final snapshot = await _postsRef
+            .where('status', isEqualTo: 'completed')
+            .where('completedAt', isGreaterThanOrEqualTo: monthStartTimestamp)
+            .orderBy('completedAt')
+            .limit(1000)
+            .get()
+            .timeout(const Duration(seconds: 10));
         
-        final checkDate = completedAt ?? updatedAt ?? createdAt;
-        if (checkDate != null &&
-            checkDate.isAfter(monthStart.subtract(const Duration(seconds: 1))) &&
-            checkDate.isBefore(monthEnd.add(const Duration(seconds: 1)))) {
-          postIds.add(doc.id);
+        for (final doc in snapshot.docs) {
+          final data = doc.data();
+          final completedAt = (data['completedAt'] as Timestamp?)?.toDate();
+          if (completedAt != null &&
+              completedAt.isBefore(monthEnd.add(const Duration(seconds: 1)))) {
+            postIds.add(doc.id);
+          }
+        }
+      } catch (e) {
+        // If query with orderBy fails (likely missing composite index), try without orderBy
+        try {
+          final snapshot = await _postsRef
+              .where('status', isEqualTo: 'completed')
+              .where('completedAt', isGreaterThanOrEqualTo: monthStartTimestamp)
+              .limit(1000)
+              .get()
+              .timeout(const Duration(seconds: 10));
+          
+          for (final doc in snapshot.docs) {
+            final data = doc.data();
+            final completedAt = (data['completedAt'] as Timestamp?)?.toDate();
+            if (completedAt != null &&
+                completedAt.isBefore(monthEnd.add(const Duration(seconds: 1)))) {
+              postIds.add(doc.id);
+            }
+          }
+        } catch (e2) {
+          // Final fallback: query all completed posts and filter by date on client side
+          print('Query with completedAt range failed, using full scan fallback: $e2');
+          try {
+            final snapshot = await _postsRef
+                .where('status', isEqualTo: 'completed')
+                .orderBy('completedAt', descending: true)
+                .limit(1000)
+                .get()
+                .timeout(const Duration(seconds: 10));
+            
+            for (final doc in snapshot.docs) {
+              final data = doc.data();
+              final completedAt = (data['completedAt'] as Timestamp?)?.toDate();
+              final updatedAt = (data['updatedAt'] as Timestamp?)?.toDate();
+              final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+              
+              final checkDate = completedAt ?? updatedAt ?? createdAt;
+              if (checkDate != null &&
+                  checkDate.isAfter(monthStart.subtract(const Duration(seconds: 1))) &&
+                  checkDate.isBefore(monthEnd.add(const Duration(seconds: 1)))) {
+                postIds.add(doc.id);
+              }
+            }
+          } catch (e3) {
+            print('All query methods failed: $e3');
+          }
         }
       }
+      
       return postIds;
     } catch (e) {
+      print('Error in _getCompletedPostIds: $e');
       return [];
     }
   }
