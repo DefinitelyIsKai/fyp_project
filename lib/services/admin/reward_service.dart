@@ -182,7 +182,7 @@ class RewardService {
         final completedAt = (data['completedAt'] as Timestamp?)?.toDate();
         final updatedAt = (data['updatedAt'] as Timestamp?)?.toDate();
         final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
-        
+          
         final checkDate = completedAt ?? updatedAt ?? createdAt;
         
         if (checkDate != null &&
